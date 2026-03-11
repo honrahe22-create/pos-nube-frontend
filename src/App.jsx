@@ -74,10 +74,11 @@ export default function App() {
   };
 
   const obtenerInstitucionActivaId = () => {
-    if (institucionSeleccionadaId) return Number(institucionSeleccionadaId);
-    const { usuarioGuardado } = getAuthData();
-    return usuarioGuardado?.institucion_id ? Number(usuarioGuardado.institucion_id) : null;
-  };
+  const { usuarioGuardado } = getAuthData();
+  return usuarioGuardado?.institucion_id
+    ? Number(usuarioGuardado.institucion_id)
+    : null;
+};
 
   const institucionActivaId = obtenerInstitucionActivaId();
 
@@ -751,13 +752,13 @@ export default function App() {
     }
   }, [usuario]);
 
-  useEffect(() => {
-    if (usuario && !institucionSeleccionadaId && usuario.institucion_id) {
-      const id = Number(usuario.institucion_id);
-      setInstitucionSeleccionadaId(id);
-      localStorage.setItem("institucionSeleccionadaId", String(id));
-    }
-  }, [usuario, institucionSeleccionadaId]);
+ useEffect(() => {
+  if (usuario && usuario.institucion_id) {
+    const id = Number(usuario.institucion_id);
+    setInstitucionSeleccionadaId(id);
+    localStorage.setItem("institucionSeleccionadaId", String(id));
+  }
+}, [usuario]);
 
   useEffect(() => {
     if (usuario) {
