@@ -2,6 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 
 const API_URL = "https://pos-nube-backend.onrender.com";
 
+const INSTITUCIONES = [
+  { id: 1, nombre: "Colegio Marista" },
+  { id: 2, nombre: "Colegio Pensionado Universitario" },
+  { id: 3, nombre: "FEUE" },
+  { id: 4, nombre: "Club Los Cipreses" },
+];
+
 export default function App() {
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
@@ -16,12 +23,18 @@ export default function App() {
   const [vista, setVista] = useState("dashboard");
   const [resumen, setResumen] = useState(null);
 
+  const [institucionSeleccionadaId, setInstitucionSeleccionadaId] = useState(() => {
+    const guardada = localStorage.getItem("institucionSeleccionadaId");
+    return guardada ? Number(guardada) : null;
+  });
+
   const [productos, setProductos] = useState([]);
   const [productoForm, setProductoForm] = useState({
     nombre: "",
     descripcion: "",
     precio: "",
     stock: "",
+    stock_minimo: "",
     categoria: "",
   });
 
@@ -35,13 +48,44 @@ export default function App() {
     saldo: "",
   });
   const [editandoAlumnoId, setEditandoAlumnoId] = useState(null);
-  const [filtroAlumnos, setFiltroAlumnos] = useState("activos");
+  const [filtroAlumnos, setFiltroAlumnos] = useState("todos");
+
+  const [inventarioFiltro, setInventarioFiltro] = useState("todos");
+  const [inventarioBusqueda, setInventarioBusqueda] = useState("");
+  const [inventarioForm, setInventarioForm] = useState({
+    producto_id: "",
+    tipo: "ENTRADA",
+    cantidad: "",
+    motivo: "",
+  });
+
+  const [cuentaForm, setCuentaForm] = useState({
+    correo: "",
+    password_actual: "",
+    nueva_password: "",
+    confirmar_password: "",
+  });
+  const [guardandoCuenta, setGuardandoCuenta] = useState(false);
 
   const getAuthData = () => {
     const token = localStorage.getItem("token");
     const usuarioGuardado = JSON.parse(localStorage.getItem("usuario") || "null");
     return { token, usuarioGuardado };
   };
+
+  const obtenerInstitucionActivaId = () => {
+    if (institucionSeleccionadaId) return Number(institucionSeleccionadaId);
+    const { usuarioGuardado } = getAuthData();
+    return usuarioGuardado?.institucion_id ? Number(usuarioGuardado.institucion_id) : null;
+  };
+
+  const institucionActivaId = obtenerInstitucionActivaId();
+
+  const institucionActiva = useMemo(() => {
+    return (
+      INSTITUCIONES.find((i) => Number(i.id) === Number(institucionActivaId)) || null
+    );
+  }, [institucionActivaId]);
 
   const obtenerCedulaAlumno = (alumno) => {
     return (
@@ -61,6 +105,81 @@ export default function App() {
     }
     return alumnos.filter((a) => a.activo !== false);
   }, [alumnos, filtroAlumnos]);
+
+  const productosInventario = useMemo(() => {
+    const texto = inventarioBusqueda.trim().toLowerCase();
+    let lista = [...productos];
+
+    if (texto) {
+      lista = lista.filter((p) => {
+        const nombre = (p.nombre || "").toLowerCase();
+        const categoria = (p.categoria || "").toLowerCase();
+        return nombre.includes(texto) || categoria.includes(texto);
+      });
+    }
+
+    if (inventarioFiltro === "bajo") {
+      lista = lista.filter((p) => {
+        const stock = Number(p.stock || 0);
+        const stockMinimo = Number(p.stock_minimo || 0);
+        return stock > 0 && stock <= stockMinimo;
+      });
+    }
+
+    if (inventarioFiltro === "agotado") {
+      lista = lista.filter((p) => Number(p.stock || 0) <= 0);
+    }
+
+    if (inventarioFiltro === "normal") {
+      lista = lista.filter((p) => {
+        const stock = Number(p.stock || 0);
+        const stockMinimo = Number(p.stock_minimo || 0);
+        return stock > stockMinimo;
+      });
+    }
+
+    return lista;
+  }, [productos, inventarioBusqueda, inventarioFiltro]);
+
+  const inventarioResumen = useMemo(() => {
+    const totalProductos = productos.length;
+
+    const agotados = productos.filter((p) => Number(p.stock || 0) <= 0).length;
+
+    const bajos = productos.filter((p) => {
+      const stock = Number(p.stock || 0);
+      const stockMinimo = Number(p.stock_minimo || 0);
+      return stock > 0 && stock <= stockMinimo;
+    }).length;
+
+    const valorInventario = productos.reduce((acc, p) => {
+      const stock = Number(p.stock || 0);
+      const precio = Number(p.precio || 0);
+      return acc + stock * precio;
+    }, 0);
+
+    return {
+      totalProductos,
+      agotados,
+      bajos,
+      valorInventario,
+    };
+  }, [productos]);
+
+  const obtenerEstadoStock = (producto) => {
+    const stock = Number(producto.stock || 0);
+    const stockMinimo = Number(producto.stock_minimo || 0);
+
+    if (stock <= 0) {
+      return { texto: "Agotado", estilo: styles.badgeAgotado };
+    }
+
+    if (stock <= stockMinimo) {
+      return { texto: "Stock bajo", estilo: styles.badgeBajo };
+    }
+
+    return { texto: "Normal", estilo: styles.badgeNormal };
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -84,6 +203,20 @@ export default function App() {
       localStorage.setItem("token", data.token);
       localStorage.setItem("usuario", JSON.stringify(data.usuario));
       setUsuario(data.usuario);
+
+      if (!localStorage.getItem("institucionSeleccionadaId")) {
+        const institucionIdLogin = Number(data.usuario?.institucion_id || 0);
+        if (institucionIdLogin) {
+          localStorage.setItem("institucionSeleccionadaId", String(institucionIdLogin));
+          setInstitucionSeleccionadaId(institucionIdLogin);
+        }
+      }
+
+      setCuentaForm((prev) => ({
+        ...prev,
+        correo: data.usuario?.correo || "",
+      }));
+
       setVista("dashboard");
       setMensaje("");
     } catch (error) {
@@ -96,12 +229,13 @@ export default function App() {
 
   const cargarResumen = async () => {
     try {
-      const { token, usuarioGuardado } = getAuthData();
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
 
-      if (!token || !usuarioGuardado?.institucion_id) return;
+      if (!token || !institucionId) return;
 
       const res = await fetch(
-        `${API_URL}/api/reportes/ventas-resumen?institucion_id=${usuarioGuardado.institucion_id}`,
+        `${API_URL}/api/reportes/ventas-resumen?institucion_id=${institucionId}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -111,20 +245,24 @@ export default function App() {
 
       if (res.ok) {
         setResumen(data);
+      } else {
+        setResumen(null);
       }
     } catch (error) {
       console.error("Error cargando resumen:", error);
+      setResumen(null);
     }
   };
 
   const cargarProductos = async () => {
     try {
-      const { token, usuarioGuardado } = getAuthData();
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
 
-      if (!token || !usuarioGuardado?.institucion_id) return;
+      if (!token || !institucionId) return;
 
       const res = await fetch(
-        `${API_URL}/api/productos?institucion_id=${usuarioGuardado.institucion_id}`,
+        `${API_URL}/api/productos?institucion_id=${institucionId}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -134,9 +272,12 @@ export default function App() {
 
       if (res.ok) {
         setProductos(Array.isArray(data) ? data : []);
+      } else {
+        setProductos([]);
       }
     } catch (error) {
       console.error("Error cargando productos:", error);
+      setProductos([]);
     }
   };
 
@@ -144,10 +285,11 @@ export default function App() {
     e.preventDefault();
 
     try {
-      const { token, usuarioGuardado } = getAuthData();
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
 
-      if (!token || !usuarioGuardado?.institucion_id) {
-        alert("Sesión no válida");
+      if (!token || !institucionId) {
+        alert("Sesión o institución no válida");
         return;
       }
 
@@ -158,11 +300,12 @@ export default function App() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          institucion_id: usuarioGuardado.institucion_id,
+          institucion_id: institucionId,
           nombre: productoForm.nombre,
           descripcion: productoForm.descripcion,
           precio: Number(productoForm.precio || 0),
           stock: Number(productoForm.stock || 0),
+          stock_minimo: Number(productoForm.stock_minimo || 0),
           categoria: productoForm.categoria,
         }),
       });
@@ -179,6 +322,7 @@ export default function App() {
         descripcion: "",
         precio: "",
         stock: "",
+        stock_minimo: "",
         categoria: "",
       });
 
@@ -190,14 +334,116 @@ export default function App() {
     }
   };
 
+  const aplicarMovimientoInventario = async (e) => {
+    e.preventDefault();
+
+    try {
+      const token = localStorage.getItem("token");
+
+      if (!token) {
+        alert("Sesión no válida");
+        return;
+      }
+
+      if (!inventarioForm.producto_id || inventarioForm.cantidad === "") {
+        alert("Debes seleccionar un producto y una cantidad");
+        return;
+      }
+
+      const producto = productos.find(
+        (p) => String(p.id) === String(inventarioForm.producto_id)
+      );
+
+      if (!producto) {
+        alert("Producto no encontrado");
+        return;
+      }
+
+      const cantidad = Number(inventarioForm.cantidad || 0);
+      const stockActual = Number(producto.stock || 0);
+
+      if (Number.isNaN(cantidad) || cantidad < 0) {
+        alert("La cantidad no es válida");
+        return;
+      }
+
+      let nuevoStock = stockActual;
+
+      if (inventarioForm.tipo === "ENTRADA") {
+        if (cantidad <= 0) {
+          alert("La cantidad debe ser mayor a 0");
+          return;
+        }
+        nuevoStock = stockActual + cantidad;
+      }
+
+      if (inventarioForm.tipo === "SALIDA") {
+        if (cantidad <= 0) {
+          alert("La cantidad debe ser mayor a 0");
+          return;
+        }
+        nuevoStock = stockActual - cantidad;
+
+        if (nuevoStock < 0) {
+          alert("No puedes dejar el stock en negativo");
+          return;
+        }
+      }
+
+      if (inventarioForm.tipo === "AJUSTE") {
+        nuevoStock = cantidad;
+      }
+
+      const payload = {
+        nombre: producto.nombre,
+        descripcion: producto.descripcion,
+        precio: Number(producto.precio || 0),
+        stock: nuevoStock,
+        stock_minimo: Number(producto.stock_minimo || 0),
+        categoria: producto.categoria || "",
+        activo: producto.activo,
+      };
+
+      const res = await fetch(`${API_URL}/api/productos/${producto.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.message || "Error actualizando inventario");
+        return;
+      }
+
+      setInventarioForm({
+        producto_id: "",
+        tipo: "ENTRADA",
+        cantidad: "",
+        motivo: "",
+      });
+
+      await cargarProductos();
+      alert("Inventario actualizado correctamente");
+    } catch (error) {
+      console.error("Error actualizando inventario:", error);
+      alert("No se pudo actualizar el inventario");
+    }
+  };
+
   const cargarAlumnos = async () => {
     try {
-      const { token, usuarioGuardado } = getAuthData();
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
 
-      if (!token || !usuarioGuardado?.institucion_id) return;
+      if (!token || !institucionId) return;
 
       const res = await fetch(
-        `${API_URL}/api/alumnos?institucion_id=${usuarioGuardado.institucion_id}`,
+        `${API_URL}/api/alumnos?institucion_id=${institucionId}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -208,10 +454,11 @@ export default function App() {
       if (res.ok) {
         setAlumnos(Array.isArray(data) ? data : []);
       } else {
-        console.error("Respuesta alumnos:", data);
+        setAlumnos([]);
       }
     } catch (error) {
       console.error("Error cargando alumnos:", error);
+      setAlumnos([]);
     }
   };
 
@@ -231,15 +478,16 @@ export default function App() {
     e.preventDefault();
 
     try {
-      const { token, usuarioGuardado } = getAuthData();
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
 
-      if (!token || !usuarioGuardado?.institucion_id) {
-        alert("Sesión no válida");
+      if (!token || !institucionId) {
+        alert("Sesión o institución no válida");
         return;
       }
 
       const payload = {
-        institucion_id: usuarioGuardado.institucion_id,
+        institucion_id: institucionId,
         cedula: alumnoForm.cedula,
         nombres: alumnoForm.nombres,
         apellidos: alumnoForm.apellidos,
@@ -266,7 +514,7 @@ export default function App() {
 
       limpiarFormularioAlumno();
       await cargarAlumnos();
-      setFiltroAlumnos("activos");
+      setFiltroAlumnos("todos");
       alert("Alumno creado correctamente");
     } catch (error) {
       console.error("Error creando alumno:", error);
@@ -278,15 +526,16 @@ export default function App() {
     e.preventDefault();
 
     try {
-      const { token, usuarioGuardado } = getAuthData();
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
 
-      if (!token || !usuarioGuardado?.institucion_id || !editandoAlumnoId) {
+      if (!token || !institucionId || !editandoAlumnoId) {
         alert("No se puede actualizar el alumno");
         return;
       }
 
       const payload = {
-        institucion_id: usuarioGuardado.institucion_id,
+        institucion_id: institucionId,
         cedula: alumnoForm.cedula,
         nombres: alumnoForm.nombres,
         apellidos: alumnoForm.apellidos,
@@ -341,7 +590,7 @@ export default function App() {
     if (!confirmado) return;
 
     try {
-      const { token } = getAuthData();
+      const token = localStorage.getItem("token");
 
       if (!token) {
         alert("Sesión no válida");
@@ -367,7 +616,6 @@ export default function App() {
       }
 
       await cargarAlumnos();
-      setFiltroAlumnos("activos");
       alert("Alumno eliminado correctamente");
     } catch (error) {
       console.error("Error eliminando alumno:", error);
@@ -383,15 +631,16 @@ export default function App() {
     if (!confirmado) return;
 
     try {
-      const { token, usuarioGuardado } = getAuthData();
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
 
-      if (!token || !usuarioGuardado?.institucion_id) {
+      if (!token || !institucionId) {
         alert("Sesión no válida");
         return;
       }
 
       const payload = {
-        institucion_id: usuarioGuardado.institucion_id,
+        institucion_id: institucionId,
         cedula: obtenerCedulaAlumno(alumno),
         nombres: alumno.nombres,
         apellidos: alumno.apellidos,
@@ -419,7 +668,6 @@ export default function App() {
       }
 
       await cargarAlumnos();
-      setFiltroAlumnos("activos");
       alert("Alumno restaurado correctamente");
     } catch (error) {
       console.error("Error restaurando alumno:", error);
@@ -427,28 +675,118 @@ export default function App() {
     }
   };
 
+  const guardarCuentaInstitucion = async (e) => {
+    e.preventDefault();
+
+    try {
+      const token = localStorage.getItem("token");
+
+      if (!token) {
+        alert("Sesión no válida");
+        return;
+      }
+
+      if (!institucionSeleccionadaId) {
+        alert("Debes seleccionar una institución");
+        return;
+      }
+
+      setGuardandoCuenta(true);
+
+      const payload = {
+        correo: cuentaForm.correo,
+        password_actual: cuentaForm.password_actual,
+        nueva_password: cuentaForm.nueva_password,
+        confirmar_password: cuentaForm.confirmar_password,
+      };
+
+      const res = await fetch(`${API_URL}/api/auth/me`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.message || "Error actualizando cuenta");
+        return;
+      }
+
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("usuario", JSON.stringify(data.usuario));
+      localStorage.setItem("institucionSeleccionadaId", String(institucionSeleccionadaId));
+
+      setUsuario(data.usuario);
+      setCuentaForm((prev) => ({
+        ...prev,
+        correo: data.usuario?.correo || "",
+        password_actual: "",
+        nueva_password: "",
+        confirmar_password: "",
+      }));
+
+      await cargarResumen();
+      await cargarProductos();
+      await cargarAlumnos();
+
+      alert("Cuenta e institución actualizadas correctamente");
+    } catch (error) {
+      console.error("Error actualizando cuenta:", error);
+      alert("No se pudo actualizar la cuenta");
+    } finally {
+      setGuardandoCuenta(false);
+    }
+  };
+
   useEffect(() => {
     if (usuario) {
-      cargarResumen();
-      cargarProductos();
+      setCuentaForm((prev) => ({
+        ...prev,
+        correo: usuario.correo || "",
+      }));
     }
   }, [usuario]);
 
   useEffect(() => {
+    if (usuario && !institucionSeleccionadaId && usuario.institucion_id) {
+      const id = Number(usuario.institucion_id);
+      setInstitucionSeleccionadaId(id);
+      localStorage.setItem("institucionSeleccionadaId", String(id));
+    }
+  }, [usuario, institucionSeleccionadaId]);
+
+  useEffect(() => {
+    if (usuario) {
+      cargarResumen();
+      cargarProductos();
+      cargarAlumnos();
+    }
+  }, [usuario, institucionSeleccionadaId]);
+
+  useEffect(() => {
     if (!usuario) return;
 
-    if (vista === "productos") {
+    if (vista === "productos" || vista === "inventario") {
       cargarProductos();
     }
 
     if (vista === "alumnos") {
       cargarAlumnos();
     }
-  }, [vista, usuario]);
+
+    if (vista === "dashboard") {
+      cargarResumen();
+    }
+  }, [vista]);
 
   const cerrarSesion = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("usuario");
+    localStorage.removeItem("institucionSeleccionadaId");
     setUsuario(null);
     setResumen(null);
     setProductos([]);
@@ -457,13 +795,14 @@ export default function App() {
     setPassword("");
     setMensaje("");
     setVista("dashboard");
+    setInstitucionSeleccionadaId(null);
     limpiarFormularioAlumno();
   };
 
   if (!usuario) {
     return (
       <div style={styles.page}>
-        <div style={styles.card}>
+        <div style={styles.loginCard}>
           <h1 style={styles.title}>POS NUBE</h1>
           <p style={styles.subtitle}>Iniciar sesión</p>
 
@@ -498,35 +837,57 @@ export default function App() {
   }
 
   return (
-    <div style={styles.dashboardPage}>
+    <div style={styles.appShell}>
       <aside style={styles.sidebar}>
-        <h2 style={styles.logo}>POS NUBE</h2>
+        <div>
+          <h2 style={styles.logo}>POS NUBE</h2>
 
-        <button
-          style={vista === "dashboard" ? styles.menuButtonActive : styles.menuButton}
-          onClick={() => setVista("dashboard")}
-        >
-          Dashboard
-        </button>
+          <div style={styles.institucionBadge}>
+            <span style={styles.institucionLabel}>Institución</span>
+            <strong style={styles.institucionName}>
+              {institucionActiva?.nombre || "Sin seleccionar"}
+            </strong>
+          </div>
 
-        <button
-          style={vista === "productos" ? styles.menuButtonActive : styles.menuButton}
-          onClick={() => setVista("productos")}
-        >
-          Productos
-        </button>
+          <button
+            style={vista === "dashboard" ? styles.menuButtonActive : styles.menuButton}
+            onClick={() => setVista("dashboard")}
+          >
+            Dashboard
+          </button>
 
-        <button
-          style={vista === "alumnos" ? styles.menuButtonActive : styles.menuButton}
-          onClick={() => setVista("alumnos")}
-        >
-          Alumnos
-        </button>
+          <button
+            style={vista === "productos" ? styles.menuButtonActive : styles.menuButton}
+            onClick={() => setVista("productos")}
+          >
+            Productos
+          </button>
 
-        <button style={styles.menuButtonDisabled}>Inventario</button>
-        <button style={styles.menuButtonDisabled}>Recargas</button>
-        <button style={styles.menuButtonDisabled}>Ventas</button>
-        <button style={styles.menuButtonDisabled}>Reportes</button>
+          <button
+            style={vista === "alumnos" ? styles.menuButtonActive : styles.menuButton}
+            onClick={() => setVista("alumnos")}
+          >
+            Alumnos
+          </button>
+
+          <button
+            style={vista === "inventario" ? styles.menuButtonActive : styles.menuButton}
+            onClick={() => setVista("inventario")}
+          >
+            Inventario
+          </button>
+
+          <button style={styles.menuButtonDisabled}>Recargas</button>
+          <button style={styles.menuButtonDisabled}>Ventas</button>
+          <button style={styles.menuButtonDisabled}>Reportes</button>
+
+          <button
+            style={vista === "cuenta" ? styles.menuButtonActive : styles.menuButton}
+            onClick={() => setVista("cuenta")}
+          >
+            Cuenta Institución
+          </button>
+        </div>
 
         <button onClick={cerrarSesion} style={styles.logoutButton}>
           Cerrar sesión
@@ -536,8 +897,12 @@ export default function App() {
       <main style={styles.main}>
         {vista === "dashboard" && (
           <>
-            <h1 style={styles.dashboardTitle}>Bienvenido, {usuario.nombre}</h1>
-            <p style={styles.dashboardSubtitle}>Resumen general del sistema</p>
+            <div style={styles.pageHeader}>
+              <div>
+                <h1 style={styles.dashboardTitle}>Bienvenido, {usuario.nombre}</h1>
+                <p style={styles.dashboardSubtitle}>Resumen general del sistema</p>
+              </div>
+            </div>
 
             <div style={styles.grid}>
               <div style={styles.box}>
@@ -570,7 +935,7 @@ export default function App() {
 
         {vista === "productos" && (
           <>
-            <div style={styles.sectionHeader}>
+            <div style={styles.pageHeader}>
               <div>
                 <h1 style={styles.dashboardTitle}>Productos</h1>
                 <p style={styles.dashboardSubtitle}>
@@ -583,7 +948,7 @@ export default function App() {
               </button>
             </div>
 
-            <div style={styles.productsLayout}>
+            <div style={styles.twoColumn}>
               <div style={styles.box}>
                 <h3>Nuevo producto</h3>
 
@@ -626,13 +991,26 @@ export default function App() {
 
                   <input
                     type="number"
-                    placeholder="Stock"
+                    placeholder="Stock inicial"
                     value={productoForm.stock}
                     onChange={(e) =>
                       setProductoForm({ ...productoForm, stock: e.target.value })
                     }
                     style={styles.input}
                     required
+                  />
+
+                  <input
+                    type="number"
+                    placeholder="Stock mínimo"
+                    value={productoForm.stock_minimo}
+                    onChange={(e) =>
+                      setProductoForm({
+                        ...productoForm,
+                        stock_minimo: e.target.value,
+                      })
+                    }
+                    style={styles.input}
                   />
 
                   <input
@@ -664,6 +1042,7 @@ export default function App() {
                           <th style={styles.th}>Nombre</th>
                           <th style={styles.th}>Precio</th>
                           <th style={styles.th}>Stock</th>
+                          <th style={styles.th}>Stock mínimo</th>
                           <th style={styles.th}>Categoría</th>
                           <th style={styles.th}>Activo</th>
                         </tr>
@@ -672,8 +1051,9 @@ export default function App() {
                         {productos.map((p) => (
                           <tr key={p.id}>
                             <td style={styles.td}>{p.nombre}</td>
-                            <td style={styles.td}>${p.precio}</td>
-                            <td style={styles.td}>{p.stock}</td>
+                            <td style={styles.td}>${Number(p.precio || 0).toFixed(2)}</td>
+                            <td style={styles.td}>{Number(p.stock || 0)}</td>
+                            <td style={styles.td}>{Number(p.stock_minimo || 0)}</td>
                             <td style={styles.td}>{p.categoria || "-"}</td>
                             <td style={styles.td}>{p.activo ? "Sí" : "No"}</td>
                           </tr>
@@ -689,7 +1069,7 @@ export default function App() {
 
         {vista === "alumnos" && (
           <>
-            <div style={styles.sectionHeader}>
+            <div style={styles.pageHeader}>
               <div>
                 <h1 style={styles.dashboardTitle}>Alumnos</h1>
                 <p style={styles.dashboardSubtitle}>
@@ -703,9 +1083,9 @@ export default function App() {
                   onChange={(e) => setFiltroAlumnos(e.target.value)}
                   style={styles.select}
                 >
+                  <option value="todos">Todos</option>
                   <option value="activos">Activos</option>
                   <option value="inactivos">Inactivos</option>
-                  <option value="todos">Todos</option>
                 </select>
 
                 <button style={styles.refreshButton} onClick={cargarAlumnos}>
@@ -714,7 +1094,7 @@ export default function App() {
               </div>
             </div>
 
-            <div style={styles.productsLayout}>
+            <div style={styles.twoColumn}>
               <div style={styles.box}>
                 <h3>{editandoAlumnoId ? "Editar alumno" : "Nuevo alumno"}</h3>
 
@@ -863,8 +1243,8 @@ export default function App() {
                                       : styles.disabledIconButton
                                   }
                                   onClick={() => activo && iniciarEdicionAlumno(a)}
-                                  title="Editar alumno"
                                   disabled={!activo}
+                                  title="Editar alumno"
                                 >
                                   ✏️
                                 </button>
@@ -878,8 +1258,8 @@ export default function App() {
                                       : styles.disabledIconButton
                                   }
                                   onClick={() => activo && eliminarAlumno(a)}
-                                  title="Eliminar alumno"
                                   disabled={!activo}
+                                  title="Eliminar alumno"
                                 >
                                   🗑️
                                 </button>
@@ -893,8 +1273,8 @@ export default function App() {
                                       : styles.disabledIconButton
                                   }
                                   onClick={() => !activo && restaurarAlumno(a)}
-                                  title="Restaurar alumno"
                                   disabled={activo}
+                                  title="Restaurar alumno"
                                 >
                                   ↩️
                                 </button>
@@ -910,6 +1290,325 @@ export default function App() {
             </div>
           </>
         )}
+
+        {vista === "inventario" && (
+          <>
+            <div style={styles.pageHeader}>
+              <div>
+                <h1 style={styles.dashboardTitle}>Inventario</h1>
+                <p style={styles.dashboardSubtitle}>
+                  Control diario de stock de productos
+                </p>
+              </div>
+
+              <button style={styles.refreshButton} onClick={cargarProductos}>
+                Refrescar
+              </button>
+            </div>
+
+            <div style={styles.grid}>
+              <div style={styles.box}>
+                <h3>Total productos</h3>
+                <p>{inventarioResumen.totalProductos}</p>
+              </div>
+
+              <div style={styles.box}>
+                <h3>Stock bajo</h3>
+                <p>{inventarioResumen.bajos}</p>
+              </div>
+
+              <div style={styles.box}>
+                <h3>Agotados</h3>
+                <p>{inventarioResumen.agotados}</p>
+              </div>
+
+              <div style={styles.box}>
+                <h3>Valor inventario</h3>
+                <p>${inventarioResumen.valorInventario.toFixed(2)}</p>
+              </div>
+            </div>
+
+            <div style={{ height: 20 }} />
+
+            <div style={styles.twoColumn}>
+              <div style={styles.box}>
+                <h3>Movimiento de inventario</h3>
+
+                <form onSubmit={aplicarMovimientoInventario} style={styles.form}>
+                  <select
+                    value={inventarioForm.producto_id}
+                    onChange={(e) =>
+                      setInventarioForm({
+                        ...inventarioForm,
+                        producto_id: e.target.value,
+                      })
+                    }
+                    style={styles.input}
+                    required
+                  >
+                    <option value="">Seleccione un producto</option>
+                    {productos.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nombre}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={inventarioForm.tipo}
+                    onChange={(e) =>
+                      setInventarioForm({
+                        ...inventarioForm,
+                        tipo: e.target.value,
+                      })
+                    }
+                    style={styles.input}
+                    required
+                  >
+                    <option value="ENTRADA">Entrada</option>
+                    <option value="SALIDA">Salida</option>
+                    <option value="AJUSTE">Ajuste</option>
+                  </select>
+
+                  <input
+                    type="number"
+                    placeholder={
+                      inventarioForm.tipo === "AJUSTE"
+                        ? "Nuevo stock total"
+                        : "Cantidad"
+                    }
+                    value={inventarioForm.cantidad}
+                    onChange={(e) =>
+                      setInventarioForm({
+                        ...inventarioForm,
+                        cantidad: e.target.value,
+                      })
+                    }
+                    style={styles.input}
+                    required
+                  />
+
+                  <input
+                    type="text"
+                    placeholder="Motivo"
+                    value={inventarioForm.motivo}
+                    onChange={(e) =>
+                      setInventarioForm({
+                        ...inventarioForm,
+                        motivo: e.target.value,
+                      })
+                    }
+                    style={styles.input}
+                  />
+
+                  <button type="submit" style={styles.button}>
+                    Aplicar movimiento
+                  </button>
+                </form>
+              </div>
+
+              <div style={styles.box}>
+                <div style={styles.pageHeaderSmall}>
+                  <div>
+                    <h3 style={{ margin: 0 }}>Stock actual</h3>
+                  </div>
+
+                  <div style={styles.headerActions}>
+                    <input
+                      type="text"
+                      placeholder="Buscar producto"
+                      value={inventarioBusqueda}
+                      onChange={(e) => setInventarioBusqueda(e.target.value)}
+                      style={styles.searchInput}
+                    />
+
+                    <select
+                      value={inventarioFiltro}
+                      onChange={(e) => setInventarioFiltro(e.target.value)}
+                      style={styles.select}
+                    >
+                      <option value="todos">Todos</option>
+                      <option value="normal">Normal</option>
+                      <option value="bajo">Stock bajo</option>
+                      <option value="agotado">Agotado</option>
+                    </select>
+                  </div>
+                </div>
+
+                {productosInventario.length === 0 ? (
+                  <p>No hay productos para este filtro.</p>
+                ) : (
+                  <div style={styles.tableWrap}>
+                    <table style={styles.table}>
+                      <thead>
+                        <tr>
+                          <th style={styles.th}>Producto</th>
+                          <th style={styles.th}>Categoría</th>
+                          <th style={styles.th}>Precio</th>
+                          <th style={styles.th}>Stock</th>
+                          <th style={styles.th}>Stock mínimo</th>
+                          <th style={styles.th}>Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {productosInventario.map((p) => {
+                          const estado = obtenerEstadoStock(p);
+
+                          return (
+                            <tr key={p.id}>
+                              <td style={styles.td}>{p.nombre}</td>
+                              <td style={styles.td}>{p.categoria || "-"}</td>
+                              <td style={styles.td}>
+                                ${Number(p.precio || 0).toFixed(2)}
+                              </td>
+                              <td style={styles.td}>{Number(p.stock || 0)}</td>
+                              <td style={styles.td}>{Number(p.stock_minimo || 0)}</td>
+                              <td style={styles.td}>
+                                <span style={estado.estilo}>{estado.texto}</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+
+        {vista === "cuenta" && (
+          <>
+            <div style={styles.pageHeader}>
+              <div>
+                <h1 style={styles.dashboardTitle}>Cuenta Institución</h1>
+                <p style={styles.dashboardSubtitle}>
+                  Selecciona la institución y cambia el acceso del cliente
+                </p>
+              </div>
+            </div>
+
+            <div style={styles.accountLayout}>
+              <div style={styles.box}>
+                <h3>Institución activa</h3>
+
+                <div style={styles.form}>
+                  <label style={styles.label}>Institución</label>
+                  <select
+                    value={institucionSeleccionadaId || ""}
+                    onChange={(e) => {
+                      const nuevoId = Number(e.target.value);
+                      setInstitucionSeleccionadaId(nuevoId);
+                      localStorage.setItem("institucionSeleccionadaId", String(nuevoId));
+                    }}
+                    style={styles.input}
+                  >
+                    <option value="">Seleccione una institución</option>
+                    {INSTITUCIONES.map((inst) => (
+                      <option key={inst.id} value={inst.id}>
+                        {inst.nombre}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div style={styles.infoBox}>
+                    <strong>Institución actual:</strong>{" "}
+                    {institucionActiva?.nombre || "Sin seleccionar"}
+                  </div>
+                </div>
+              </div>
+
+              <div style={styles.box}>
+                <h3>Acceso del cliente</h3>
+
+                <form onSubmit={guardarCuentaInstitucion} style={styles.form}>
+                  <label style={styles.label}>Correo</label>
+                  <input
+                    type="email"
+                    placeholder="Correo"
+                    value={cuentaForm.correo}
+                    onChange={(e) =>
+                      setCuentaForm({ ...cuentaForm, correo: e.target.value })
+                    }
+                    style={styles.input}
+                    required
+                  />
+
+                  <label style={styles.label}>Contraseña actual</label>
+                  <input
+                    type="password"
+                    placeholder="Contraseña actual"
+                    value={cuentaForm.password_actual}
+                    onChange={(e) =>
+                      setCuentaForm({
+                        ...cuentaForm,
+                        password_actual: e.target.value,
+                      })
+                    }
+                    style={styles.input}
+                  />
+
+                  <label style={styles.label}>Nueva contraseña</label>
+                  <input
+                    type="password"
+                    placeholder="Nueva contraseña"
+                    value={cuentaForm.nueva_password}
+                    onChange={(e) =>
+                      setCuentaForm({
+                        ...cuentaForm,
+                        nueva_password: e.target.value,
+                      })
+                    }
+                    style={styles.input}
+                  />
+
+                  <label style={styles.label}>Confirmar nueva contraseña</label>
+                  <input
+                    type="password"
+                    placeholder="Confirmar nueva contraseña"
+                    value={cuentaForm.confirmar_password}
+                    onChange={(e) =>
+                      setCuentaForm({
+                        ...cuentaForm,
+                        confirmar_password: e.target.value,
+                      })
+                    }
+                    style={styles.input}
+                  />
+
+                  <button type="submit" style={styles.button} disabled={guardandoCuenta}>
+                    {guardandoCuenta ? "Guardando..." : "Guardar cambios"}
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <div style={{ height: 20 }} />
+
+            <div style={styles.box}>
+              <h3>Instituciones definidas</h3>
+              <div style={styles.tableWrap}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>ID</th>
+                      <th style={styles.th}>Nombre</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {INSTITUCIONES.map((inst) => (
+                      <tr key={inst.id}>
+                        <td style={styles.td}>{inst.id}</td>
+                        <td style={styles.td}>{inst.nombre}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
       </main>
     </div>
   );
@@ -921,16 +1620,19 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: "#f4f6fb",
+    background: "#eef2f7",
     fontFamily: "Arial, sans-serif",
+    padding: "20px",
+    boxSizing: "border-box",
   },
-  card: {
+  loginCard: {
     width: "100%",
     maxWidth: "420px",
     background: "#fff",
     padding: "32px",
     borderRadius: "18px",
     boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+    boxSizing: "border-box",
   },
   title: {
     margin: 0,
@@ -945,16 +1647,186 @@ const styles = {
     textAlign: "center",
     color: "#555",
   },
+  appShell: {
+    minHeight: "100vh",
+    width: "100%",
+    display: "grid",
+    gridTemplateColumns: "270px minmax(0, 1fr)",
+    background: "#f3f4f6",
+    fontFamily: "Arial, sans-serif",
+  },
+  sidebar: {
+    background: "#1e3a8a",
+    color: "#fff",
+    padding: "22px 20px",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-between",
+    gap: "20px",
+    minHeight: "100vh",
+    boxSizing: "border-box",
+    position: "sticky",
+    top: 0,
+  },
+  logo: {
+    margin: 0,
+    marginBottom: "16px",
+    fontSize: "22px",
+  },
+  institucionBadge: {
+    background: "rgba(255,255,255,0.12)",
+    border: "1px solid rgba(255,255,255,0.15)",
+    borderRadius: "12px",
+    padding: "12px",
+    marginBottom: "18px",
+  },
+  institucionLabel: {
+    display: "block",
+    fontSize: "12px",
+    color: "#cbd5e1",
+    marginBottom: "6px",
+  },
+  institucionName: {
+    display: "block",
+    fontSize: "14px",
+    lineHeight: 1.35,
+  },
+  menuButton: {
+    width: "100%",
+    background: "transparent",
+    color: "#fff",
+    border: "none",
+    textAlign: "left",
+    padding: "13px 12px",
+    borderRadius: "12px",
+    cursor: "pointer",
+    fontSize: "17px",
+    marginBottom: "8px",
+  },
+  menuButtonActive: {
+    width: "100%",
+    background: "#3b82f6",
+    color: "#fff",
+    border: "2px solid #93c5fd",
+    textAlign: "left",
+    padding: "13px 12px",
+    borderRadius: "12px",
+    cursor: "pointer",
+    fontSize: "17px",
+    marginBottom: "8px",
+  },
+  menuButtonDisabled: {
+    width: "100%",
+    background: "transparent",
+    color: "#cbd5e1",
+    border: "none",
+    textAlign: "left",
+    padding: "13px 12px",
+    borderRadius: "12px",
+    fontSize: "17px",
+    marginBottom: "8px",
+    opacity: 0.9,
+  },
+  logoutButton: {
+    width: "100%",
+    padding: "15px",
+    borderRadius: "12px",
+    border: "none",
+    background: "#dc2626",
+    color: "#fff",
+    fontSize: "17px",
+    cursor: "pointer",
+  },
+  main: {
+    width: "100%",
+    minWidth: 0,
+    padding: "34px 36px",
+    boxSizing: "border-box",
+  },
+  pageHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "20px",
+    marginBottom: "24px",
+    flexWrap: "wrap",
+  },
+  pageHeaderSmall: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "16px",
+    marginBottom: "16px",
+    flexWrap: "wrap",
+  },
+  dashboardTitle: {
+    marginTop: 0,
+    marginBottom: "10px",
+    color: "#111827",
+    fontSize: "52px",
+    lineHeight: 1.05,
+  },
+  dashboardSubtitle: {
+    color: "#6b7280",
+    margin: 0,
+    fontSize: "18px",
+  },
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: "20px",
+    width: "100%",
+  },
+  twoColumn: {
+    display: "grid",
+    gridTemplateColumns: "minmax(320px, 420px) minmax(0, 1fr)",
+    gap: "20px",
+    width: "100%",
+    alignItems: "start",
+  },
+  accountLayout: {
+    display: "grid",
+    gridTemplateColumns: "minmax(320px, 420px) minmax(320px, 1fr)",
+    gap: "20px",
+    width: "100%",
+    alignItems: "start",
+  },
+  box: {
+    background: "#fff",
+    borderRadius: "18px",
+    padding: "24px",
+    boxShadow: "0 8px 20px rgba(0,0,0,0.06)",
+    boxSizing: "border-box",
+    minWidth: 0,
+  },
   form: {
     display: "flex",
     flexDirection: "column",
     gap: "14px",
   },
+  label: {
+    fontSize: "14px",
+    color: "#374151",
+    fontWeight: "bold",
+    marginBottom: "-4px",
+  },
   input: {
+    width: "100%",
     padding: "14px",
     borderRadius: "10px",
     border: "1px solid #d1d5db",
     fontSize: "16px",
+    background: "#fff",
+    boxSizing: "border-box",
+  },
+  searchInput: {
+    padding: "12px 14px",
+    borderRadius: "10px",
+    border: "1px solid #d1d5db",
+    fontSize: "14px",
+    background: "#fff",
+    minWidth: "200px",
+    boxSizing: "border-box",
   },
   select: {
     padding: "12px 14px",
@@ -962,7 +1834,8 @@ const styles = {
     border: "1px solid #d1d5db",
     fontSize: "14px",
     background: "#fff",
-    minWidth: "140px",
+    minWidth: "150px",
+    boxSizing: "border-box",
   },
   button: {
     padding: "14px",
@@ -982,105 +1855,6 @@ const styles = {
     fontSize: "16px",
     cursor: "pointer",
   },
-  message: {
-    marginTop: "16px",
-    textAlign: "center",
-  },
-  dashboardPage: {
-    minHeight: "100vh",
-    display: "flex",
-    fontFamily: "Arial, sans-serif",
-    background: "#f3f4f6",
-  },
-  sidebar: {
-    width: "240px",
-    background: "#1e3a8a",
-    color: "#fff",
-    padding: "24px",
-    display: "flex",
-    flexDirection: "column",
-    gap: "10px",
-  },
-  logo: {
-    margin: 0,
-    marginBottom: "16px",
-  },
-  menuButton: {
-    background: "transparent",
-    color: "#fff",
-    border: "none",
-    textAlign: "left",
-    padding: "12px 10px",
-    borderRadius: "10px",
-    cursor: "pointer",
-    fontSize: "15px",
-  },
-  menuButtonActive: {
-    background: "#3b82f6",
-    color: "#fff",
-    border: "2px solid #93c5fd",
-    textAlign: "left",
-    padding: "12px 10px",
-    borderRadius: "10px",
-    cursor: "pointer",
-    fontSize: "15px",
-  },
-  menuButtonDisabled: {
-    background: "transparent",
-    color: "#cbd5e1",
-    border: "none",
-    textAlign: "left",
-    padding: "12px 10px",
-    borderRadius: "10px",
-    fontSize: "15px",
-  },
-  logoutButton: {
-    marginTop: "auto",
-    padding: "14px",
-    borderRadius: "10px",
-    border: "none",
-    background: "#dc2626",
-    color: "#fff",
-    fontSize: "16px",
-    cursor: "pointer",
-  },
-  main: {
-    flex: 1,
-    padding: "32px",
-  },
-  dashboardTitle: {
-    marginTop: 0,
-    color: "#111827",
-  },
-  dashboardSubtitle: {
-    color: "#6b7280",
-    marginBottom: "24px",
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: "20px",
-  },
-  box: {
-    background: "#fff",
-    borderRadius: "16px",
-    padding: "24px",
-    boxShadow: "0 8px 20px rgba(0,0,0,0.06)",
-  },
-  sectionHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "20px",
-    marginBottom: "20px",
-    flexWrap: "wrap",
-  },
-  headerActions: {
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-    flexWrap: "wrap",
-  },
   refreshButton: {
     padding: "12px 18px",
     borderRadius: "10px",
@@ -1088,18 +1862,22 @@ const styles = {
     background: "#0f766e",
     color: "#fff",
     cursor: "pointer",
+    fontSize: "16px",
   },
-  productsLayout: {
-    display: "grid",
-    gridTemplateColumns: "380px 1fr",
-    gap: "20px",
+  headerActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    flexWrap: "wrap",
   },
   tableWrap: {
+    width: "100%",
     overflowX: "auto",
   },
   table: {
     width: "100%",
     borderCollapse: "collapse",
+    minWidth: "720px",
   },
   th: {
     textAlign: "left",
@@ -1116,10 +1894,23 @@ const styles = {
     verticalAlign: "middle",
     whiteSpace: "nowrap",
   },
+  message: {
+    marginTop: "16px",
+    textAlign: "center",
+    color: "#b91c1c",
+  },
   filterLabel: {
     fontSize: "14px",
     color: "#6b7280",
     fontWeight: "normal",
+  },
+  infoBox: {
+    background: "#eff6ff",
+    border: "1px solid #bfdbfe",
+    color: "#1e3a8a",
+    borderRadius: "12px",
+    padding: "12px 14px",
+    fontSize: "14px",
   },
   badgeActive: {
     display: "inline-block",
@@ -1131,6 +1922,33 @@ const styles = {
     fontWeight: "bold",
   },
   badgeInactive: {
+    display: "inline-block",
+    padding: "6px 10px",
+    borderRadius: "999px",
+    background: "#fee2e2",
+    color: "#991b1b",
+    fontSize: "12px",
+    fontWeight: "bold",
+  },
+  badgeNormal: {
+    display: "inline-block",
+    padding: "6px 10px",
+    borderRadius: "999px",
+    background: "#dbeafe",
+    color: "#1d4ed8",
+    fontSize: "12px",
+    fontWeight: "bold",
+  },
+  badgeBajo: {
+    display: "inline-block",
+    padding: "6px 10px",
+    borderRadius: "999px",
+    background: "#fef3c7",
+    color: "#92400e",
+    fontSize: "12px",
+    fontWeight: "bold",
+  },
+  badgeAgotado: {
     display: "inline-block",
     padding: "6px 10px",
     borderRadius: "999px",
