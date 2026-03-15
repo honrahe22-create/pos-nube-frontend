@@ -9,6 +9,12 @@ const INSTITUCIONES = [
   { id: 4, nombre: "Club Los Cipreses" },
 ];
 
+const normalizarInstitucionId = (valor) => {
+  if (valor === null || valor === undefined || valor === "") return null;
+  const numero = Number(valor);
+  return Number.isInteger(numero) && numero > 0 ? numero : null;
+};
+
 export default function App() {
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
@@ -24,8 +30,15 @@ export default function App() {
   const [resumen, setResumen] = useState(null);
 
   const [institucionSeleccionadaId, setInstitucionSeleccionadaId] = useState(() => {
+    const usuarioGuardado = JSON.parse(localStorage.getItem("usuario") || "null");
+    const institucionUsuario = normalizarInstitucionId(usuarioGuardado?.institucion_id);
+
+    if (institucionUsuario) {
+      return institucionUsuario;
+    }
+
     const guardada = localStorage.getItem("institucionSeleccionadaId");
-    return guardada ? Number(guardada) : null;
+    return normalizarInstitucionId(guardada);
   });
 
   const [productos, setProductos] = useState([]);
@@ -67,24 +80,27 @@ export default function App() {
   });
   const [guardandoCuenta, setGuardandoCuenta] = useState(false);
 
-  const getAuthData = () => {
-    const token = localStorage.getItem("token");
-    const usuarioGuardado = JSON.parse(localStorage.getItem("usuario") || "null");
-    return { token, usuarioGuardado };
-  };
-
   const obtenerInstitucionActivaId = () => {
-  const { usuarioGuardado } = getAuthData();
-  return usuarioGuardado?.institucion_id
-    ? Number(usuarioGuardado.institucion_id)
-    : null;
-};
+    const usuarioGuardado = JSON.parse(localStorage.getItem("usuario") || "null");
+
+    const desdeUsuario = normalizarInstitucionId(usuario?.institucion_id);
+    if (desdeUsuario) return desdeUsuario;
+
+    const desdeUsuarioGuardado = normalizarInstitucionId(usuarioGuardado?.institucion_id);
+    if (desdeUsuarioGuardado) return desdeUsuarioGuardado;
+
+    const guardada = localStorage.getItem("institucionSeleccionadaId");
+    return normalizarInstitucionId(guardada);
+  };
 
   const institucionActivaId = obtenerInstitucionActivaId();
 
   const institucionActiva = useMemo(() => {
     return (
-      INSTITUCIONES.find((i) => Number(i.id) === Number(institucionActivaId)) || null
+      INSTITUCIONES.find((i) => Number(i.id) === Number(institucionActivaId)) || {
+        id: institucionActivaId,
+        nombre: "Institución asignada",
+      }
     );
   }, [institucionActivaId]);
 
@@ -205,12 +221,13 @@ export default function App() {
       localStorage.setItem("usuario", JSON.stringify(data.usuario));
       setUsuario(data.usuario);
 
-      if (!localStorage.getItem("institucionSeleccionadaId")) {
-        const institucionIdLogin = Number(data.usuario?.institucion_id || 0);
-        if (institucionIdLogin) {
-          localStorage.setItem("institucionSeleccionadaId", String(institucionIdLogin));
-          setInstitucionSeleccionadaId(institucionIdLogin);
-        }
+      const institucionIdLogin = normalizarInstitucionId(data.usuario?.institucion_id);
+      if (institucionIdLogin) {
+        localStorage.setItem("institucionSeleccionadaId", String(institucionIdLogin));
+        setInstitucionSeleccionadaId(institucionIdLogin);
+      } else {
+        localStorage.removeItem("institucionSeleccionadaId");
+        setInstitucionSeleccionadaId(null);
       }
 
       setCuentaForm((prev) => ({
@@ -301,7 +318,7 @@ export default function App() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          institucion_id: institucionId,
+          institucion_id: Number(institucionId),
           nombre: productoForm.nombre,
           descripcion: productoForm.descripcion,
           precio: Number(productoForm.precio || 0),
@@ -362,6 +379,12 @@ export default function App() {
 
       const cantidad = Number(inventarioForm.cantidad || 0);
       const stockActual = Number(producto.stock || 0);
+      const institucionId = obtenerInstitucionActivaId();
+
+      if (!institucionId) {
+        alert("Institución no válida");
+        return;
+      }
 
       if (Number.isNaN(cantidad) || cantidad < 0) {
         alert("La cantidad no es válida");
@@ -396,6 +419,7 @@ export default function App() {
       }
 
       const payload = {
+        institucion_id: Number(institucionId),
         nombre: producto.nombre,
         descripcion: producto.descripcion,
         precio: Number(producto.precio || 0),
@@ -488,7 +512,7 @@ export default function App() {
       }
 
       const payload = {
-        institucion_id: institucionId,
+        institucion_id: Number(institucionId),
         cedula: alumnoForm.cedula,
         nombres: alumnoForm.nombres,
         apellidos: alumnoForm.apellidos,
@@ -536,7 +560,7 @@ export default function App() {
       }
 
       const payload = {
-        institucion_id: institucionId,
+        institucion_id: Number(institucionId),
         cedula: alumnoForm.cedula,
         nombres: alumnoForm.nombres,
         apellidos: alumnoForm.apellidos,
@@ -641,7 +665,7 @@ export default function App() {
       }
 
       const payload = {
-        institucion_id: institucionId,
+        institucion_id: Number(institucionId),
         cedula: obtenerCedulaAlumno(alumno),
         nombres: alumno.nombres,
         apellidos: alumno.apellidos,
@@ -752,13 +776,14 @@ export default function App() {
     }
   }, [usuario]);
 
- useEffect(() => {
-  if (usuario && usuario.institucion_id) {
-    const id = Number(usuario.institucion_id);
-    setInstitucionSeleccionadaId(id);
-    localStorage.setItem("institucionSeleccionadaId", String(id));
-  }
-}, [usuario]);
+  useEffect(() => {
+    const id = normalizarInstitucionId(usuario?.institucion_id);
+
+    if (id) {
+      setInstitucionSeleccionadaId(id);
+      localStorage.setItem("institucionSeleccionadaId", String(id));
+    }
+  }, [usuario]);
 
   useEffect(() => {
     if (usuario) {
@@ -1499,9 +1524,13 @@ export default function App() {
                   <select
                     value={institucionSeleccionadaId || ""}
                     onChange={(e) => {
-                      const nuevoId = Number(e.target.value);
+                      const nuevoId = normalizarInstitucionId(e.target.value);
                       setInstitucionSeleccionadaId(nuevoId);
-                      localStorage.setItem("institucionSeleccionadaId", String(nuevoId));
+                      if (nuevoId) {
+                        localStorage.setItem("institucionSeleccionadaId", String(nuevoId));
+                      } else {
+                        localStorage.removeItem("institucionSeleccionadaId");
+                      }
                     }}
                     style={styles.input}
                   >
