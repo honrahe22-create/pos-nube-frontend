@@ -525,6 +525,62 @@ export default function App() {
   };
 
   const limpiarFiltrosVentas = () => {
+      const exportarVentasExcel = () => {
+    if (!ventasFiltradas.length) {
+      alert("No hay ventas para exportar");
+      return;
+    }
+
+    const encabezados = [
+      "Orden No",
+      "Usuario",
+      "Ubicación",
+      "Fecha de Consumo",
+      "Fecha de Pago",
+      "Fecha de Creación",
+      "Hora compra",
+      "Total",
+      "Estado",
+      "Forma Pago",
+      "Tipo orden",
+    ];
+
+    const filas = ventasFiltradas.map((v) => [
+      `#${v.id}`,
+      v.alumno_nombre || "",
+      "PRINCIPAL",
+      formatearSoloFecha(v.fecha_base),
+      formatearSoloFecha(v.fecha_base),
+      formatearSoloFecha(v.fecha_base),
+      formatearSoloHora(v.fecha_base),
+      Number(v.total || 0).toFixed(2),
+      "Entregada",
+      v.metodo_visual || "",
+      "Normal",
+    ]);
+
+    const csvContenido = [
+      encabezados.join(","),
+      ...filas.map((fila) =>
+        fila
+          .map((valor) => `"${String(valor).replace(/"/g, '""')}"`)
+          .join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob(["\ufeff" + csvContenido], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = window.URL.createObjectURL(blob);
+    const enlace = document.createElement("a");
+    enlace.href = url;
+    enlace.setAttribute("download", "ventas_exportadas.csv");
+    document.body.appendChild(enlace);
+    enlace.click();
+    document.body.removeChild(enlace);
+    window.URL.revokeObjectURL(url);
+  };
     setVentasFiltros({
       tipo_fecha: "created_at",
       fecha_inicio: "",
@@ -2818,17 +2874,25 @@ export default function App() {
                 <div style={{ height: 20 }} />
 
                 <div style={styles.box}>
-                  <div style={styles.pageHeaderSmall}>
-                    <div>
-                      <h3 style={{ margin: 0 }}>Historial de ventas</h3>
-                    </div>
+  <div style={styles.pageHeaderSmall}>
+    <div>
+      <h3 style={{ margin: 0 }}>Historial de ventas</h3>
+    </div>
 
-                    <div style={styles.headerActions}>
-                      <span style={styles.recordsBadge}>
-                        {ventasFiltradas.length} registros
-                      </span>
-                    </div>
-                  </div>
+    <div style={styles.headerActions}>
+      <span style={styles.recordsBadge}>
+        {ventasFiltradas.length} registros
+      </span>
+
+      <button
+        type="button"
+        style={styles.exportButton}
+        onClick={exportarVentasExcel}
+      >
+        Exportar
+      </button>
+    </div>
+  </div>
 
                   {ventasFiltradas.length === 0 ? (
                     <p>No hay ventas para los filtros seleccionados.</p>
