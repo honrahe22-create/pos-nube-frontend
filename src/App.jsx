@@ -525,76 +525,77 @@ export default function App() {
   };
 
   const limpiarFiltrosVentas = () => {
-      const exportarVentasExcel = () => {
-    if (!ventasFiltradas.length) {
-      alert("No hay ventas para exportar");
-      return;
-    }
+  setVentasFiltros({
+    tipo_fecha: "created_at",
+    fecha_inicio: "",
+    fecha_fin: "",
+    tipo_orden: "",
+    orden_id: "",
+    ubicacion: "",
+    operador: "",
+    estado: "ENTREGADA",
+    metodo_pago: "todos",
+    alumno_id: "",
+    texto: "",
+  });
+};
 
-    const encabezados = [
-      "Orden No",
-      "Usuario",
-      "Ubicación",
-      "Fecha de Consumo",
-      "Fecha de Pago",
-      "Fecha de Creación",
-      "Hora compra",
-      "Total",
-      "Estado",
-      "Forma Pago",
-      "Tipo orden",
-    ];
+const exportarVentasExcel = () => {
+  if (!ventasFiltradas.length) {
+    alert("No hay ventas para exportar");
+    return;
+  }
 
-    const filas = ventasFiltradas.map((v) => [
-      `#${v.id}`,
-      v.alumno_nombre || "",
-      "PRINCIPAL",
-      formatearSoloFecha(v.fecha_base),
-      formatearSoloFecha(v.fecha_base),
-      formatearSoloFecha(v.fecha_base),
-      formatearSoloHora(v.fecha_base),
-      Number(v.total || 0).toFixed(2),
-      "Entregada",
-      v.metodo_visual || "",
-      "Normal",
-    ]);
+  const encabezados = [
+    "Orden No",
+    "Usuario",
+    "Ubicación",
+    "Fecha de Consumo",
+    "Fecha de Pago",
+    "Fecha de Creación",
+    "Hora compra",
+    "Total",
+    "Estado",
+    "Forma Pago",
+    "Tipo orden",
+  ];
 
-    const csvContenido = [
-      encabezados.join(","),
-      ...filas.map((fila) =>
-        fila
-          .map((valor) => `"${String(valor).replace(/"/g, '""')}"`)
-          .join(",")
-      ),
-    ].join("\n");
+  const filas = ventasFiltradas.map((v) => [
+    `#${v.id}`,
+    v.alumno_nombre || "",
+    "PRINCIPAL",
+    formatearSoloFecha(v.fecha_base),
+    formatearSoloFecha(v.fecha_base),
+    formatearSoloFecha(v.fecha_base),
+    formatearSoloHora(v.fecha_base),
+    Number(v.total || 0).toFixed(2),
+    "Entregada",
+    v.metodo_visual || "",
+    "Normal",
+  ]);
 
-    const blob = new Blob(["\ufeff" + csvContenido], {
-      type: "text/csv;charset=utf-8;",
-    });
+  const csvContenido = [
+    encabezados.join(","),
+    ...filas.map((fila) =>
+      fila
+        .map((valor) => `"${String(valor).replace(/"/g, '""')}"`)
+        .join(",")
+    ),
+  ].join("\n");
 
-    const url = window.URL.createObjectURL(blob);
-    const enlace = document.createElement("a");
-    enlace.href = url;
-    enlace.setAttribute("download", "ventas_exportadas.csv");
-    document.body.appendChild(enlace);
-    enlace.click();
-    document.body.removeChild(enlace);
-    window.URL.revokeObjectURL(url);
-  };
-    setVentasFiltros({
-      tipo_fecha: "created_at",
-      fecha_inicio: "",
-      fecha_fin: "",
-      tipo_orden: "",
-      orden_id: "",
-      ubicacion: "",
-      operador: "",
-      estado: "ENTREGADA",
-      metodo_pago: "todos",
-      alumno_id: "",
-      texto: "",
-    });
-  };
+  const blob = new Blob(["\ufeff" + csvContenido], {
+    type: "text/csv;charset=utf-8;",
+  });
+
+  const url = window.URL.createObjectURL(blob);
+  const enlace = document.createElement("a");
+  enlace.href = url;
+  enlace.setAttribute("download", "ventas_exportadas.csv");
+  document.body.appendChild(enlace);
+  enlace.click();
+  document.body.removeChild(enlace);
+  window.URL.revokeObjectURL(url);
+};
 
   const agregarItemVenta = () => {
     setVentaItems((prev) => [
