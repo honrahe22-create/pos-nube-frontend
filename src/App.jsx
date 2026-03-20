@@ -116,6 +116,16 @@ export default function App() {
     observacion: "",
   });
 
+  const [vistaRecargasInterna, setVistaRecargasInterna] = useState("lista");
+
+const [recargasFiltros, setRecargasFiltros] = useState({
+  fecha_inicio: "",
+  fecha_fin: "",
+  metodo_pago: "todas",
+  alumno_id: "",
+  texto: "",
+});
+
   const [ventas, setVentas] = useState([]);
   const [ventaForm, setVentaForm] = useState({
     alumno_id: "",
@@ -308,6 +318,93 @@ export default function App() {
       saldoTotalAlumnos,
     };
   }, [recargas, ventas, alumnosActivos]);
+
+  const recargasEnriquecidas = useMemo(() => {
+  return recargas.map((recarga) => {
+    const alumno = alumnos.find((a) => String(a.id) === String(recarga.alumno_id));
+    const nombreAlumno = alumno
+      ? obtenerNombreAlumno(alumno)
+      : `${recarga.nombres || ""} ${recarga.apellidos || ""}`.trim() || "Alumno";
+
+    return {
+      ...recarga,
+      alumno_nombre: nombreAlumno,
+      fecha_base: recarga.created_at || recarga.fecha || null,
+      operador_nombre: usuario?.nombre || "Sistema",
+      estado_visual: "Aceptada",
+      documento_visual: recarga.id ? String(recarga.id) : "-",
+      dinero_entregado: Number(recarga.monto || 0),
+      dinero_recargado: Number(recarga.monto || 0),
+      tipo_visual:
+        recarga.metodo_pago === "TRANSFERENCIA"
+          ? "Transferencia"
+          : recarga.metodo_pago === "EFECTIVO"
+          ? "Efectivo"
+          : recarga.metodo_pago || "-",
+    };
+  });
+}, [recargas, alumnos, usuario]);
+
+const recargasFiltradas = useMemo(() => {
+  let lista = [...recargasEnriquecidas];
+
+  if (recargasFiltros.metodo_pago !== "todas") {
+    lista = lista.filter(
+      (recarga) => recarga.metodo_pago === recargasFiltros.metodo_pago
+    );
+  }
+
+  if (recargasFiltros.alumno_id) {
+    lista = lista.filter(
+      (recarga) =>
+        String(recarga.alumno_id || "") === String(recargasFiltros.alumno_id)
+    );
+  }
+
+  if (recargasFiltros.fecha_inicio) {
+    lista = lista.filter((recarga) => {
+      const fecha = formatearFechaInput(recarga.fecha_base);
+      return fecha && fecha >= recargasFiltros.fecha_inicio;
+    });
+  }
+
+  if (recargasFiltros.fecha_fin) {
+    lista = lista.filter((recarga) => {
+      const fecha = formatearFechaInput(recarga.fecha_base);
+      return fecha && fecha <= recargasFiltros.fecha_fin;
+    });
+  }
+
+  const texto = recargasFiltros.texto.trim().toLowerCase();
+  if (texto) {
+    lista = lista.filter((recarga) => {
+      const nombre = (recarga.alumno_nombre || "").toLowerCase();
+      const tipo = (recarga.tipo_visual || "").toLowerCase();
+      const observacion = (recarga.observacion || "").toLowerCase();
+      const documento = String(recarga.documento_visual || "").toLowerCase();
+
+      return (
+        nombre.includes(texto) ||
+        tipo.includes(texto) ||
+        observacion.includes(texto) ||
+        documento.includes(texto)
+      );
+    });
+  }
+
+  return lista.sort((a, b) => {
+    const fechaA = new Date(a.fecha_base || 0).getTime();
+    const fechaB = new Date(b.fecha_base || 0).getTime();
+    return fechaB - fechaA;
+  });
+}, [recargasEnriquecidas, recargasFiltros]);
+
+const totalRecargasVista = useMemo(() => {
+  return recargasFiltradas.reduce(
+    (acc, recarga) => acc + Number(recarga.dinero_recargado || 0),
+    0
+  );
+}, [recargasFiltradas]);
 
   const ventaItemsCalculados = useMemo(() => {
     return ventaItems.map((item) => {
@@ -509,6 +606,69 @@ export default function App() {
       observacion: "",
     });
   };
+
+  const limpiarFiltrosRecargas = () => {
+  setRecargasFiltros({
+    fecha_inicio: "",
+    fecha_fin: "",
+    metodo_pago: "todas",
+    alumno_id: "",
+    texto: "",
+  });
+};
+
+const exportarRecargasExcel = () => {
+  if (!recargasFiltradas.length) {
+    alert("No hay recargas para exportar");
+    return;
+  }
+
+  const encabezados = [
+    "Fecha y Hora",
+    "Nombre",
+    "Dinero entregado",
+    "Dinero recargado",
+    "Operador",
+    "Tipo",
+    "Estado",
+    "Documento",
+    "Observacion",
+  ];
+
+  const filas = recargasFiltradas.map((r) => [
+    formatearFechaHora(r.fecha_base),
+    r.alumno_nombre || "",
+    Number(r.dinero_entregado || 0).toFixed(2),
+    Number(r.dinero_recargado || 0).toFixed(2),
+    r.operador_nombre || "Sistema",
+    r.tipo_visual || "",
+    r.estado_visual || "Aceptada",
+    r.documento_visual || "-",
+    r.observacion || "",
+  ]);
+
+  const csvContenido = [
+    encabezados.join(","),
+    ...filas.map((fila) =>
+      fila
+        .map((valor) => `"${String(valor).replace(/"/g, '""')}"`)
+        .join(",")
+    ),
+  ].join("\n");
+
+  const blob = new Blob(["\ufeff" + csvContenido], {
+    type: "text/csv;charset=utf-8;",
+  });
+
+  const url = window.URL.createObjectURL(blob);
+  const enlace = document.createElement("a");
+  enlace.href = url;
+  enlace.setAttribute("download", "recargas_exportadas.csv");
+  document.body.appendChild(enlace);
+  enlace.click();
+  document.body.removeChild(enlace);
+  window.URL.revokeObjectURL(url);
+};
 
   const limpiarFormularioVenta = () => {
     setVentaForm({
@@ -1557,11 +1717,13 @@ const exportarVentasExcel = () => {
     setVista("dashboard");
     setInstitucionSeleccionadaId(null);
     setVistaVentasInterna("consultar");
+    setVistaRecargasInterna("lista");
     limpiarFormularioAlumno();
     limpiarFormularioProducto();
     limpiarFormularioRecarga();
     limpiarFormularioVenta();
     limpiarFiltrosVentas();
+    limpiarFiltrosRecargas();
   };
 
   if (!usuario) {
@@ -2335,133 +2497,217 @@ const exportarVentasExcel = () => {
           </>
         )}
 
-        {vista === "recargas" && (
-          <>
-            <div style={styles.pageHeader}>
-              <div>
-                <h1 style={styles.dashboardTitle}>Recargas</h1>
-                <p style={styles.dashboardSubtitle}>
-                  Carga saldo a la cuenta del alumno para consumo posterior
-                </p>
-              </div>
+       {vista === "recargas" && (
+  <>
+    <div style={styles.pageHeader}>
+      <div>
+        <h1 style={styles.dashboardTitle}>Recargas en efectivo</h1>
+        <p style={styles.dashboardSubtitle}>
+          Lista de recargas realizadas
+        </p>
+      </div>
 
-              <button
-                style={styles.refreshButton}
-                onClick={() => {
-                  cargarRecargas();
-                  cargarAlumnos();
-                }}
-              >
-                Refrescar
-              </button>
-            </div>
+      <button
+        style={styles.refreshButton}
+        onClick={() => {
+          cargarRecargas();
+          cargarAlumnos();
+        }}
+      >
+        Refrescar
+      </button>
+    </div>
 
-            <div style={styles.twoColumn}>
-              <div style={styles.box}>
-                <h3>Nueva recarga</h3>
+    {/* FILTROS */}
 
-                <form onSubmit={crearRecarga} style={styles.form}>
-                  <select
-                    value={recargaForm.alumno_id}
-                    onChange={(e) =>
-                      setRecargaForm({ ...recargaForm, alumno_id: e.target.value })
-                    }
-                    style={styles.input}
-                    required
-                  >
-                    <option value="">Seleccione un alumno</option>
-                    {alumnosActivos.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {`${a.nombres || ""} ${a.apellidos || ""} | Saldo: ${formatearMoneda(
-                          a.saldo
-                        )}`}
-                      </option>
-                    ))}
-                  </select>
+    <div style={styles.box}>
+      <div style={styles.filtersGridPaymon}>
 
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="Monto"
-                    value={recargaForm.monto}
-                    onChange={(e) =>
-                      setRecargaForm({ ...recargaForm, monto: e.target.value })
-                    }
-                    style={styles.input}
-                    required
-                  />
+        <div style={styles.filterField}>
+          <label style={styles.filterLabelTop}>Fecha inicial</label>
+          <input
+            type="date"
+            value={recargasFiltros.fecha_inicio}
+            onChange={(e) =>
+              setRecargasFiltros({
+                ...recargasFiltros,
+                fecha_inicio: e.target.value,
+              })
+            }
+            style={styles.input}
+          />
+        </div>
 
-                  <select
-                    value={recargaForm.metodo_pago}
-                    onChange={(e) =>
-                      setRecargaForm({ ...recargaForm, metodo_pago: e.target.value })
-                    }
-                    style={styles.input}
-                    required
-                  >
-                    <option value="EFECTIVO">Efectivo</option>
-                    <option value="TRANSFERENCIA">Transferencia</option>
-                  </select>
+        <div style={styles.filterField}>
+          <label style={styles.filterLabelTop}>Fecha final</label>
+          <input
+            type="date"
+            value={recargasFiltros.fecha_fin}
+            onChange={(e) =>
+              setRecargasFiltros({
+                ...recargasFiltros,
+                fecha_fin: e.target.value,
+              })
+            }
+            style={styles.input}
+          />
+        </div>
 
-                  <input
-                    type="text"
-                    placeholder="Observación"
-                    value={recargaForm.observacion}
-                    onChange={(e) =>
-                      setRecargaForm({ ...recargaForm, observacion: e.target.value })
-                    }
-                    style={styles.input}
-                  />
+        <div style={styles.filterField}>
+          <label style={styles.filterLabelTop}>Forma de pago</label>
+          <select
+            value={recargasFiltros.metodo_pago}
+            onChange={(e) =>
+              setRecargasFiltros({
+                ...recargasFiltros,
+                metodo_pago: e.target.value,
+              })
+            }
+            style={styles.input}
+          >
+            <option value="todas">Todas</option>
+            <option value="EFECTIVO">Efectivo</option>
+            <option value="TRANSFERENCIA">Transferencia</option>
+          </select>
+        </div>
 
-                  <button type="submit" style={styles.button}>
-                    Guardar recarga
-                  </button>
-                </form>
-              </div>
+      </div>
 
-              <div style={styles.box}>
-                <h3>Historial de recargas</h3>
+      <div style={styles.filterButtons}>
+        <button
+          type="button"
+          style={styles.button}
+          onClick={() => setRecargasFiltros({ ...recargasFiltros })}
+        >
+          Consultar
+        </button>
 
-                {recargas.length === 0 ? (
-                  <p>No hay recargas registradas.</p>
-                ) : (
-                  <div style={styles.tableWrap}>
-                    <table style={styles.table}>
-                      <thead>
-                        <tr>
-                          <th style={styles.th}>Fecha</th>
-                          <th style={styles.th}>Alumno</th>
-                          <th style={styles.th}>Monto</th>
-                          <th style={styles.th}>Método</th>
-                          <th style={styles.th}>Observación</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {recargas.map((r) => (
-                          <tr key={r.id}>
-                            <td style={styles.td}>
-                              {r.created_at
-                                ? formatearFechaHora(r.created_at)
-                                : r.fecha
-                                ? formatearFechaHora(r.fecha)
-                                : "-"}
-                            </td>
-                            <td style={styles.td}>
-                              {`${r.nombres || ""} ${r.apellidos || ""}`.trim() || "-"}
-                            </td>
-                            <td style={styles.td}>{formatearMoneda(r.monto)}</td>
-                            <td style={styles.td}>{r.metodo_pago || "-"}</td>
-                            <td style={styles.td}>{r.observacion || "-"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
-        )}
+        <button
+          type="button"
+          style={styles.outlineButton}
+          onClick={limpiarFiltrosRecargas}
+        >
+          Borrar filtros
+        </button>
+      </div>
+    </div>
+
+    <div style={{ height: 20 }} />
+
+    {/* TOTAL */}
+
+    <div style={styles.paymonTotalWrap}>
+      <span style={styles.paymonTotalLabel}>
+        Total recargas: {formatearMoneda(totalRecargasVista)}
+      </span>
+    </div>
+
+    <div style={{ height: 20 }} />
+
+    {/* TABLA */}
+
+    <div style={styles.box}>
+
+      <div style={styles.pageHeaderSmall}>
+
+        <div>
+          <h3 style={{ margin: 0 }}>
+            Historial de recargas
+          </h3>
+        </div>
+
+        <div style={styles.headerActions}>
+
+          <span style={styles.recordsBadge}>
+            {recargasFiltradas.length} registros
+          </span>
+
+          <button
+            type="button"
+            style={styles.exportButton}
+            onClick={exportarRecargasExcel}
+          >
+            Exportar
+          </button>
+
+        </div>
+
+      </div>
+
+      {recargasFiltradas.length === 0 ? (
+        <p>No hay recargas para los filtros seleccionados.</p>
+      ) : (
+
+        <div style={styles.tableWrap}>
+
+          <table style={styles.table}>
+
+            <thead>
+              <tr>
+                <th style={styles.th}>Fecha</th>
+                <th style={styles.th}>Nombre</th>
+                <th style={styles.th}>Entregado</th>
+                <th style={styles.th}>Recargado</th>
+                <th style={styles.th}>Operador</th>
+                <th style={styles.th}>Tipo</th>
+                <th style={styles.th}>Estado</th>
+                <th style={styles.th}>Documento</th>
+              </tr>
+            </thead>
+
+            <tbody>
+
+              {recargasFiltradas.map((r) => (
+
+                <tr key={r.id}>
+
+                  <td style={styles.td}>
+                    {formatearFechaHora(r.fecha_base)}
+                  </td>
+
+                  <td style={styles.td}>
+                    {r.alumno_nombre}
+                  </td>
+
+                  <td style={styles.td}>
+                    {formatearMoneda(r.dinero_entregado)}
+                  </td>
+
+                  <td style={styles.td}>
+                    {formatearMoneda(r.dinero_recargado)}
+                  </td>
+
+                  <td style={styles.td}>
+                    {r.operador_nombre}
+                  </td>
+
+                  <td style={styles.td}>
+                    {r.tipo_visual}
+                  </td>
+
+                  <td style={styles.td}>
+                    {r.estado_visual}
+                  </td>
+
+                  <td style={styles.td}>
+                    {r.documento_visual}
+                  </td>
+
+                </tr>
+
+              ))}
+
+            </tbody>
+
+          </table>
+
+        </div>
+
+      )}
+
+    </div>
+  </>
+)}
 
         {vista === "ventas" && (
           <>
