@@ -1804,12 +1804,12 @@ const exportarVentasExcel = () => {
             Inventario
           </button>
 
-          <button
-            style={vista === "recargas" ? styles.menuButtonActive : styles.menuButton}
-            onClick={() => setVista("recargas")}
-          >
-            Recargas
-          </button>
+         <button
+  style={vista === "recargas" ? styles.menuButtonActive : styles.menuButton}
+  onClick={() => setVista("recargas")}
+>
+  Recargas en efectivo
+</button>
 
           <button
             style={vista === "ventas" ? styles.menuButtonActive : styles.menuButton}
@@ -4019,5 +4019,17 @@ const styles = {
     fontSize: "18px",
     color: "#1d4ed8",
     fontWeight: "500",
+
+    exportButton: {
+  padding: "12px 18px",
+  borderRadius: "10px",
+  border: "1px solid #166534",
+  background: "#fff",
+  color: "#166534",
+  cursor: "pointer",
+  fontSize: "16px",
+  fontWeight: "bold",
+},
+    
   },
 };
