@@ -1822,11 +1822,38 @@ const exportarVentasExcel = () => {
           </button>
 
           <button
-            style={vista === "reportes" ? styles.menuButtonActive : styles.menuButton}
-            onClick={() => setVista("reportes")}
-          >
-            Reportes
-          </button>
+  style={styles.menuButton}
+  onClick={() => setVista("reportes")}
+>
+  Reportes
+</button>
+
+{vista === "reportes" && (
+  <div style={styles.subMenu}>
+
+    <button
+      style={styles.subMenuButton}
+      onClick={() => setVista("reporte_cierre")}
+    >
+      Cierre de caja
+    </button>
+
+    <button
+      style={styles.subMenuButton}
+      onClick={() => setVista("reporte_productos")}
+    >
+      Productos vendidos
+    </button>
+
+    <button
+      style={styles.subMenuButton}
+      onClick={() => setVista("reporte_productos_dia")}
+    >
+      Productos por día
+    </button>
+
+  </div>
+)}
 
           <button
             style={vista === "cuenta" ? styles.menuButtonActive : styles.menuButton}
@@ -4030,6 +4057,23 @@ const styles = {
   fontSize: "16px",
   fontWeight: "bold",
 },
-    
+
+subMenu: {
+  marginLeft: 10,
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+},
+
+subMenuButton: {
+  padding: "8px 10px",
+  border: "none",
+  background: "#e5e7eb",
+  borderRadius: 8,
+  cursor: "pointer",
+  textAlign: "left",
+  fontSize: 14,
+},
+
   },
 };
