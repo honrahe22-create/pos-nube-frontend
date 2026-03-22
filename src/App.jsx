@@ -181,6 +181,27 @@ const [productosVendidos, setProductosVendidos] = useState([]);
 
 const [productosVendidosPorDia, setProductosVendidosPorDia] = useState([]);
 
+const [egresosFiltros, setEgresosFiltros] = useState({
+  fecha_inicio: "",
+  fecha_fin: "",
+  texto: "",
+});
+
+const [egresosDiarios, setEgresosDiarios] = useState([]);
+const [mostrarCrearEgreso, setMostrarCrearEgreso] = useState(false);
+
+const [egresoForm, setEgresoForm] = useState({
+  negocio: "",
+  usuario: "",
+  fecha: "",
+  nombre_egreso: "",
+  total: "",
+  descripcion: "",
+  estado: "ACTIVO",
+  numero_factura: "",
+  tipo_egreso: "Efectivo",
+});
+
   const [cuentaForm, setCuentaForm] = useState({
     correo: "",
     password_actual: "",
@@ -1966,42 +1987,60 @@ const consultarProductosPorDia = () => {
     limpiarFiltrosCierreCaja();
   };
 
-  if (!usuario) {
-    return (
-      <div style={styles.page}>
-        <div style={styles.loginCard}>
-          <h1 style={styles.title}>POS NUBE</h1>
-          <p style={styles.subtitle}>Iniciar sesión</p>
+ if (!usuario) {
+  return (
+    <div style={styles.page}>
+      <div style={styles.loginCard}>
+        <h1 style={styles.title}>¡Bienvenido a POSNUBE!</h1>
+        <p style={styles.subtitle}>
+          Maneja tus ventas y recargas de forma rápida y segura
+        </p>
 
-          <form onSubmit={handleLogin} style={styles.form}>
-            <input
-              type="email"
-              placeholder="Correo"
-              value={correo}
-              onChange={(e) => setCorreo(e.target.value)}
-              style={styles.input}
-              required
-            />
+        <form onSubmit={handleLogin} style={styles.form}>
+          <label style={styles.label}>Correo electrónico</label>
+          <input
+            type="email"
+            placeholder="Coloca tu correo electrónico"
+            value={correo}
+            onChange={(e) => setCorreo(e.target.value)}
+            style={styles.input}
+            required
+          />
 
-            <input
-              type="password"
-              placeholder="Contraseña"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={styles.input}
-              required
-            />
+          <label style={styles.label}>Contraseña</label>
+          <input
+            type="password"
+            placeholder="Coloca tu contraseña"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={styles.input}
+            required
+          />
 
-            <button type="submit" style={styles.button} disabled={cargando}>
-              {cargando ? "Ingresando..." : "Ingresar"}
+          <div style={styles.loginExtraRow}>
+            <button
+              type="button"
+              style={styles.linkButton}
+              onClick={() =>
+                alert(
+                  "La recuperación de contraseña aún no está implementada."
+                )
+              }
+            >
+              ¿Olvidaste tu contraseña?
             </button>
-          </form>
+          </div>
 
-          {mensaje && <p style={styles.message}>{mensaje}</p>}
-        </div>
+          <button type="submit" style={styles.button} disabled={cargando}>
+            {cargando ? "Ingresando..." : "Iniciar sesión"}
+          </button>
+        </form>
+
+        {mensaje && <p style={styles.message}>{mensaje}</p>}
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   return (
     <div style={styles.appShell}>
@@ -2052,16 +2091,23 @@ const consultarProductosPorDia = () => {
 </button>
 
           <button
-            style={vista === "ventas" ? styles.menuButtonActive : styles.menuButton}
-            onClick={() => {
-              setVista("ventas");
-              setVistaVentasInterna("consultar");
-            }}
-          >
-            Ventas
-          </button>
+  style={vista === "ventas" ? styles.menuButtonActive : styles.menuButton}
+  onClick={() => {
+    setVista("ventas");
+    setVistaVentasInterna("consultar");
+  }}
+>
+  Ventas
+</button>
 
-         <button
+<button
+  style={vista === "egresos_diarios" ? styles.menuButtonActive : styles.menuButton}
+  onClick={() => setVista("egresos_diarios")}
+>
+  Egresos diarios
+</button>
+
+<button
   style={
     vista === "reportes" ||
     vista === "reporte_cierre" ||
@@ -2519,6 +2565,344 @@ const consultarProductosPorDia = () => {
             </div>
           ))
       )}
+    </div>
+  </div>
+)}
+
+{vista === "egresos_diarios" && (
+  <div style={styles.card}>
+    <div style={styles.pageHeaderSmall}>
+      <div>
+        <h2 style={{ margin: 0, fontSize: "28px", color: "#0f172a" }}>
+          Egresos diarios
+        </h2>
+      </div>
+
+      <button
+        style={styles.secondaryButton}
+        onClick={() => setMostrarCrearEgreso(!mostrarCrearEgreso)}
+      >
+        {mostrarCrearEgreso ? "Cerrar formulario" : "Crear egreso"}
+      </button>
+    </div>
+
+    {mostrarCrearEgreso && (
+      <div style={{ ...styles.box, marginBottom: 20, padding: 20 }}>
+        <div style={styles.filtersGrid}>
+          <div style={styles.filterField}>
+            <label style={styles.label}>Negocio</label>
+            <input
+              type="text"
+              value={egresoForm.negocio}
+              onChange={(e) =>
+                setEgresoForm({ ...egresoForm, negocio: e.target.value })
+              }
+              style={styles.input}
+              placeholder="Ej. KIDSFOOD by GRUPO ZAZ"
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Usuario</label>
+            <input
+              type="text"
+              value={egresoForm.usuario}
+              onChange={(e) =>
+                setEgresoForm({ ...egresoForm, usuario: e.target.value })
+              }
+              style={styles.input}
+              placeholder="Ej. SAMUEL"
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Fecha</label>
+            <input
+              type="date"
+              value={egresoForm.fecha}
+              onChange={(e) =>
+                setEgresoForm({ ...egresoForm, fecha: e.target.value })
+              }
+              style={styles.input}
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Nombre del egreso</label>
+            <input
+              type="text"
+              value={egresoForm.nombre_egreso}
+              onChange={(e) =>
+                setEgresoForm({ ...egresoForm, nombre_egreso: e.target.value })
+              }
+              style={styles.input}
+              placeholder="Ej. MERCADILLO"
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Total</label>
+            <input
+              type="number"
+              step="0.01"
+              value={egresoForm.total}
+              onChange={(e) =>
+                setEgresoForm({ ...egresoForm, total: e.target.value })
+              }
+              style={styles.input}
+              placeholder="0.00"
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Número de factura</label>
+            <input
+              type="text"
+              value={egresoForm.numero_factura}
+              onChange={(e) =>
+                setEgresoForm({
+                  ...egresoForm,
+                  numero_factura: e.target.value,
+                })
+              }
+              style={styles.input}
+              placeholder="001-002-000028733"
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Tipo de egreso</label>
+            <select
+              value={egresoForm.tipo_egreso}
+              onChange={(e) =>
+                setEgresoForm({ ...egresoForm, tipo_egreso: e.target.value })
+              }
+              style={styles.input}
+            >
+              <option value="Efectivo">Efectivo</option>
+              <option value="Transferencia">Transferencia</option>
+            </select>
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Estado</label>
+            <select
+              value={egresoForm.estado}
+              onChange={(e) =>
+                setEgresoForm({ ...egresoForm, estado: e.target.value })
+              }
+              style={styles.input}
+            >
+              <option value="ACTIVO">ACTIVO</option>
+              <option value="ANULADO">ANULADO</option>
+            </select>
+          </div>
+
+          <div style={styles.filterFieldWide}>
+            <label style={styles.label}>Descripción</label>
+            <input
+              type="text"
+              value={egresoForm.descripcion}
+              onChange={(e) =>
+                setEgresoForm({ ...egresoForm, descripcion: e.target.value })
+              }
+              style={styles.input}
+              placeholder="Detalle del pago o gasto"
+            />
+          </div>
+        </div>
+
+        <div style={styles.filterButtons}>
+          <button
+            style={styles.button}
+            onClick={() => {
+              const nuevo = {
+                ...egresoForm,
+                id: Date.now(),
+                total: Number(egresoForm.total || 0),
+              };
+
+              setEgresosDiarios([nuevo, ...egresosDiarios]);
+
+              setEgresoForm({
+                negocio: "",
+                usuario: "",
+                fecha: "",
+                nombre_egreso: "",
+                total: "",
+                descripcion: "",
+                estado: "ACTIVO",
+                numero_factura: "",
+                tipo_egreso: "Efectivo",
+              });
+
+              setMostrarCrearEgreso(false);
+            }}
+          >
+            Guardar egreso
+          </button>
+        </div>
+      </div>
+    )}
+
+    <div style={styles.filtersGrid}>
+      <div style={styles.filterField}>
+        <label style={styles.label}>Fecha inicial</label>
+        <input
+          type="date"
+          value={egresosFiltros.fecha_inicio}
+          onChange={(e) =>
+            setEgresosFiltros({
+              ...egresosFiltros,
+              fecha_inicio: e.target.value,
+            })
+          }
+          style={styles.input}
+        />
+      </div>
+
+      <div style={styles.filterField}>
+        <label style={styles.label}>Fecha final</label>
+        <input
+          type="date"
+          value={egresosFiltros.fecha_fin}
+          onChange={(e) =>
+            setEgresosFiltros({
+              ...egresosFiltros,
+              fecha_fin: e.target.value,
+            })
+          }
+          style={styles.input}
+        />
+      </div>
+
+      <div style={styles.filterFieldWide}>
+        <label style={styles.label}>Buscar</label>
+        <input
+          type="text"
+          value={egresosFiltros.texto}
+          onChange={(e) =>
+            setEgresosFiltros({
+              ...egresosFiltros,
+              texto: e.target.value,
+            })
+          }
+          style={styles.searchInput}
+          placeholder="Buscar"
+        />
+      </div>
+    </div>
+
+    <div style={styles.filterButtons}>
+      <button style={styles.button}>Consultar</button>
+
+      <button
+        style={styles.outlineButton}
+        onClick={() =>
+          setEgresosFiltros({
+            fecha_inicio: "",
+            fecha_fin: "",
+            texto: "",
+          })
+        }
+      >
+        Borrar filtros
+      </button>
+
+      <button style={styles.exportButton}>EXPORTAR</button>
+    </div>
+
+    <div style={{ marginTop: 20, overflowX: "auto" }}>
+      <table style={styles.table}>
+        <thead>
+          <tr>
+            <th style={styles.th}>Negocio</th>
+            <th style={styles.th}>Usuario</th>
+            <th style={styles.th}>Fecha</th>
+            <th style={styles.th}>Nombre del egreso</th>
+            <th style={styles.th}>Total</th>
+            <th style={styles.th}>Descripción</th>
+            <th style={styles.th}>Estado</th>
+            <th style={styles.th}>Número de factura</th>
+            <th style={styles.th}>Tipo de egreso</th>
+            <th style={styles.th}>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {egresosDiarios
+            .filter((egreso) => {
+              const cumpleInicio =
+                !egresosFiltros.fecha_inicio ||
+                (egreso.fecha && egreso.fecha >= egresosFiltros.fecha_inicio);
+
+              const cumpleFin =
+                !egresosFiltros.fecha_fin ||
+                (egreso.fecha && egreso.fecha <= egresosFiltros.fecha_fin);
+
+              const texto = egresosFiltros.texto.toLowerCase();
+
+              const cumpleTexto =
+                !texto ||
+                String(egreso.negocio || "").toLowerCase().includes(texto) ||
+                String(egreso.usuario || "").toLowerCase().includes(texto) ||
+                String(egreso.nombre_egreso || "").toLowerCase().includes(texto) ||
+                String(egreso.descripcion || "").toLowerCase().includes(texto) ||
+                String(egreso.numero_factura || "").toLowerCase().includes(texto);
+
+              return cumpleInicio && cumpleFin && cumpleTexto;
+            })
+            .map((egreso) => (
+              <tr key={egreso.id}>
+                <td style={styles.td}>{egreso.negocio}</td>
+                <td style={styles.td}>{egreso.usuario}</td>
+                <td style={styles.td}>{egreso.fecha}</td>
+                <td style={styles.td}>{egreso.nombre_egreso}</td>
+                <td style={styles.td}>${Number(egreso.total || 0).toFixed(2)}</td>
+                <td style={styles.td}>{egreso.descripcion}</td>
+                <td style={styles.td}>{egreso.estado}</td>
+                <td style={styles.td}>{egreso.numero_factura}</td>
+                <td style={styles.td}>{egreso.tipo_egreso}</td>
+                <td style={styles.td}>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      style={styles.editIconButton}
+                      onClick={() => {
+                        setEgresoForm({
+                          negocio: egreso.negocio || "",
+                          usuario: egreso.usuario || "",
+                          fecha: egreso.fecha || "",
+                          nombre_egreso: egreso.nombre_egreso || "",
+                          total: egreso.total || "",
+                          descripcion: egreso.descripcion || "",
+                          estado: egreso.estado || "ACTIVO",
+                          numero_factura: egreso.numero_factura || "",
+                          tipo_egreso: egreso.tipo_egreso || "Efectivo",
+                        });
+                        setMostrarCrearEgreso(true);
+                        setEgresosDiarios(
+                          egresosDiarios.filter((item) => item.id !== egreso.id)
+                        );
+                      }}
+                    >
+                      ✎
+                    </button>
+
+                    <button
+                      style={styles.deleteIconButton}
+                      onClick={() =>
+                        setEgresosDiarios(
+                          egresosDiarios.filter((item) => item.id !== egreso.id)
+                        )
+                      }
+                    >
+                      🗑
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+        </tbody>
+      </table>
     </div>
   </div>
 )}
