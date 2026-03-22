@@ -1855,57 +1855,173 @@ const exportarVentasExcel = () => {
   </div>
 )}
 
-          <button
-            style={vista === "cuenta" ? styles.menuButtonActive : styles.menuButton}
-            onClick={() => setVista("cuenta")}
-          >
-            Cuenta Institución
-          </button>
+<button
+  style={vista === "cuenta" ? styles.menuButtonActive : styles.menuButton}
+  onClick={() => setVista("cuenta")}
+>
+  Cuenta Institución
+</button>
+
+</div>
+
+<button onClick={cerrarSesion} style={styles.logoutButton}>
+  Cerrar sesión
+</button>
+
+</aside>
+
+<main style={styles.main}>
+
+{vista === "dashboard" && (
+  <>
+    <div style={styles.pageHeader}>
+      <div>
+        <h1 style={styles.dashboardTitle}>
+          Bienvenido, {usuario.nombre}
+        </h1>
+
+        <p style={styles.dashboardSubtitle}>
+          Resumen general del sistema
+        </p>
+      </div>
+    </div>
+
+    <div style={styles.grid}>
+
+      <div style={styles.box}>
+        <h3>Total ventas</h3>
+        <p>{resumen ? resumen.total_ventas : "0"}</p>
+      </div>
+
+      <div style={styles.box}>
+        <h3>Total general</h3>
+        <p>${resumen ? resumen.total_general : "0.00"}</p>
+      </div>
+
+      <div style={styles.box}>
+        <h3>Total saldo</h3>
+        <p>${resumen ? resumen.total_saldo : "0.00"}</p>
+      </div>
+
+      <div style={styles.box}>
+        <h3>Total efectivo</h3>
+        <p>${resumen ? resumen.total_efectivo : "0.00"}</p>
+      </div>
+
+      <div style={styles.box}>
+        <h3>Total transferencia</h3>
+        <p>${resumen ? resumen.total_transferencia : "0.00"}</p>
+      </div>
+
+    </div>
+  </>
+)}
+
+{vista === "reporte_cierre" && (
+  <>
+    <div style={styles.pageHeader}>
+      <div>
+        <h1 style={styles.dashboardTitle}>
+          Cierre de caja diario
+        </h1>
+
+        <p style={styles.dashboardSubtitle}>
+          Resumen por fecha
+        </p>
+      </div>
+    </div>
+
+    <div style={styles.box}>
+
+      <div style={styles.filtersGridPaymon}>
+
+        <div style={styles.filterField}>
+          <label style={styles.filterLabelTop}>
+            Fecha inicial
+          </label>
+
+          <input
+            type="date"
+            style={styles.input}
+          />
         </div>
 
-        <button onClick={cerrarSesion} style={styles.logoutButton}>
-          Cerrar sesión
+        <div style={styles.filterField}>
+          <label style={styles.filterLabelTop}>
+            Fecha final
+          </label>
+
+          <input
+            type="date"
+            style={styles.input}
+          />
+        </div>
+
+      </div>
+
+      <div style={styles.filterButtons}>
+
+        <button style={styles.button}>
+          Consultar
         </button>
-      </aside>
 
-      <main style={styles.main}>
-        {vista === "dashboard" && (
-          <>
-            <div style={styles.pageHeader}>
-              <div>
-                <h1 style={styles.dashboardTitle}>Bienvenido, {usuario.nombre}</h1>
-                <p style={styles.dashboardSubtitle}>Resumen general del sistema</p>
-              </div>
-            </div>
+        <button style={styles.outlineButton}>
+          Borrar filtros
+        </button>
 
-            <div style={styles.grid}>
-              <div style={styles.box}>
-                <h3>Total ventas</h3>
-                <p>{resumen ? resumen.total_ventas : "0"}</p>
-              </div>
+      </div>
 
-              <div style={styles.box}>
-                <h3>Total general</h3>
-                <p>${resumen ? resumen.total_general : "0.00"}</p>
-              </div>
+    </div>
 
-              <div style={styles.box}>
-                <h3>Total saldo</h3>
-                <p>${resumen ? resumen.total_saldo : "0.00"}</p>
-              </div>
+    <div style={{ height: 20 }} />
 
-              <div style={styles.box}>
-                <h3>Total efectivo</h3>
-                <p>${resumen ? resumen.total_efectivo : "0.00"}</p>
-              </div>
+    <div style={styles.box}>
 
-              <div style={styles.box}>
-                <h3>Total transferencia</h3>
-                <p>${resumen ? resumen.total_transferencia : "0.00"}</p>
-              </div>
-            </div>
-          </>
-        )}
+      <h3>Cierre de caja</h3>
+
+      <table style={styles.table}>
+
+        <thead>
+
+          <tr>
+
+            <th style={styles.th}>Tipo</th>
+            <th style={styles.th}>Total</th>
+
+          </tr>
+
+        </thead>
+
+        <tbody>
+
+          <tr>
+            <td style={styles.td}>Efectivo</td>
+            <td style={styles.td}>0.00</td>
+          </tr>
+
+          <tr>
+            <td style={styles.td}>Transferencia</td>
+            <td style={styles.td}>0.00</td>
+          </tr>
+
+          <tr>
+            <td style={styles.td}>Saldo</td>
+            <td style={styles.td}>0.00</td>
+          </tr>
+
+          <tr>
+            <td style={styles.td}>TOTAL</td>
+            <td style={styles.td}>0.00</td>
+          </tr>
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+  </>
+)}
 
         {vista === "productos" && (
           <>
