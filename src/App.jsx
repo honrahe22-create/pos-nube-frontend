@@ -171,6 +171,16 @@ const [productosVendidos, setProductosVendidos] = useState([]);
     fecha_fin: "",
   });
 
+  const [productosPorDiaFiltros, setProductosPorDiaFiltros] = useState({
+  fecha_inicio: "",
+  fecha_fin: "",
+  ubicacion: "",
+  comprado: "",
+  texto: "",
+});
+
+const [productosVendidosPorDia, setProductosVendidosPorDia] = useState([]);
+
   const [cuentaForm, setCuentaForm] = useState({
     correo: "",
     password_actual: "",
@@ -1055,6 +1065,141 @@ const exportarVentasExcel = () => {
       setVentas([]);
     }
   };
+
+  const consultarProductos = () => {
+  let lista = [...ventasEnriquecidas];
+
+  if (productosFiltros.fecha_inicio) {
+    lista = lista.filter((venta) => {
+      const fecha = formatearFechaInput(venta.fecha_base);
+      return fecha && fecha >= productosFiltros.fecha_inicio;
+    });
+  }
+
+  if (productosFiltros.fecha_fin) {
+    lista = lista.filter((venta) => {
+      const fecha = formatearFechaInput(venta.fecha_base);
+      return fecha && fecha <= productosFiltros.fecha_fin;
+    });
+  }
+
+  const mapa = {};
+
+  lista.forEach((venta) => {
+    const items = Array.isArray(venta.items)
+      ? venta.items
+      : Array.isArray(venta.detalles)
+      ? venta.detalles
+      : [];
+
+    items.forEach((item) => {
+      const nombre =
+        item.producto_nombre ||
+        item.nombre ||
+        item.descripcion ||
+        "Producto";
+
+      const codigo =
+        item.producto_id ||
+        item.codigo ||
+        "-";
+
+      const categoria =
+        item.categoria ||
+        "-";
+
+      const descripcion =
+        item.descripcion ||
+        item.producto_nombre ||
+        item.nombre ||
+        "-";
+
+      if (!mapa[nombre]) {
+        mapa[nombre] = {
+          id: `${nombre}-${codigo}`,
+          nombre,
+          codigo,
+          categoria,
+          descripcion,
+          cantidad: 0,
+          total: 0,
+        };
+      }
+
+      mapa[nombre].cantidad += Number(item.cantidad || 0);
+      mapa[nombre].total += Number(item.total || 0);
+    });
+  });
+
+  setProductosVendidos(Object.values(mapa));
+};
+
+const consultarProductosPorDia = () => {
+  let lista = [...ventasEnriquecidas];
+
+  if (productosPorDiaFiltros.fecha_inicio) {
+    lista = lista.filter((venta) => {
+      const fecha = formatearFechaInput(venta.fecha_base);
+      return fecha && fecha >= productosPorDiaFiltros.fecha_inicio;
+    });
+  }
+
+  if (productosPorDiaFiltros.fecha_fin) {
+    lista = lista.filter((venta) => {
+      const fecha = formatearFechaInput(venta.fecha_base);
+      return fecha && fecha <= productosPorDiaFiltros.fecha_fin;
+    });
+  }
+
+  const mapa = {};
+
+  lista.forEach((venta) => {
+    const items = Array.isArray(venta.items)
+      ? venta.items
+      : Array.isArray(venta.detalles)
+      ? venta.detalles
+      : [];
+
+    items.forEach((item) => {
+      const nombre =
+        item.producto_nombre ||
+        item.nombre ||
+        item.descripcion ||
+        "Producto";
+
+      const categoria = item.categoria || "-";
+
+      const fecha = venta.fecha_base ? new Date(venta.fecha_base) : null;
+      const dia = fecha && !Number.isNaN(fecha.getTime()) ? fecha.getDay() : null;
+
+      if (!mapa[nombre]) {
+        mapa[nombre] = {
+          producto: nombre,
+          categoria,
+          domingo: 0,
+          lunes: 0,
+          martes: 0,
+          miercoles: 0,
+          jueves: 0,
+          viernes: 0,
+          sabado: 0,
+        };
+      }
+
+      const cantidad = Number(item.cantidad || 0);
+
+      if (dia === 0) mapa[nombre].domingo += cantidad;
+      if (dia === 1) mapa[nombre].lunes += cantidad;
+      if (dia === 2) mapa[nombre].martes += cantidad;
+      if (dia === 3) mapa[nombre].miercoles += cantidad;
+      if (dia === 4) mapa[nombre].jueves += cantidad;
+      if (dia === 5) mapa[nombre].viernes += cantidad;
+      if (dia === 6) mapa[nombre].sabado += cantidad;
+    });
+  });
+
+  setProductosVendidosPorDia(Object.values(mapa));
+};
     const crearProducto = async (e) => {
     e.preventDefault();
 
@@ -1916,14 +2061,26 @@ const exportarVentasExcel = () => {
             Ventas
           </button>
 
-          <button
-  style={styles.menuButton}
+         <button
+  style={
+    vista === "reportes" ||
+    vista === "reporte_cierre" ||
+    vista === "reporte_productos" ||
+    vista === "reporte_productos_dia"
+      ? styles.menuButtonActive
+      : styles.menuButton
+  }
   onClick={() => setVista("reportes")}
 >
   Reportes
 </button>
 
-{vista === "reportes" && (
+{(
+  vista === "reportes" ||
+  vista === "reporte_cierre" ||
+  vista === "reporte_productos" ||
+  vista === "reporte_productos_dia"
+) && (
   <div style={styles.subMenu}>
     <button
       style={styles.subMenuButton}
@@ -2359,6 +2516,166 @@ const exportarVentasExcel = () => {
               <span>{p.descripcion || "-"}</span>
               <span>{p.cantidad || 0}</span>
               <span>${Number(p.total || 0).toFixed(2)}</span>
+            </div>
+          ))
+      )}
+    </div>
+  </div>
+)}
+
+{vista === "reporte_productos_dia" && (
+  <div style={styles.card}>
+    <div style={styles.reporteHeader}>
+      <div>
+        <h2 style={{ margin: 0 }}>Reporte de Productos Vendidos por Día</h2>
+      </div>
+    </div>
+
+    <div style={styles.filtrosRow}>
+      <div style={styles.filterGroup}>
+        <label style={styles.label}>Fecha inicial</label>
+        <input
+          type="date"
+          value={productosPorDiaFiltros.fecha_inicio}
+          onChange={(e) =>
+            setProductosPorDiaFiltros({
+              ...productosPorDiaFiltros,
+              fecha_inicio: e.target.value,
+            })
+          }
+          style={styles.input}
+        />
+      </div>
+
+      <div style={styles.filterGroup}>
+        <label style={styles.label}>Fecha final</label>
+        <input
+          type="date"
+          value={productosPorDiaFiltros.fecha_fin}
+          onChange={(e) =>
+            setProductosPorDiaFiltros({
+              ...productosPorDiaFiltros,
+              fecha_fin: e.target.value,
+            })
+          }
+          style={styles.input}
+        />
+      </div>
+
+      <div style={styles.filterGroup}>
+        <label style={styles.label}>Ubicación</label>
+        <select
+          value={productosPorDiaFiltros.ubicacion || ""}
+          onChange={(e) =>
+            setProductosPorDiaFiltros({
+              ...productosPorDiaFiltros,
+              ubicacion: e.target.value,
+            })
+          }
+          style={styles.input}
+        >
+          <option value="">Seleccionar</option>
+        </select>
+      </div>
+
+      <div style={styles.filterGroup}>
+        <label style={styles.label}>Comprado</label>
+        <select
+          value={productosPorDiaFiltros.comprado || ""}
+          onChange={(e) =>
+            setProductosPorDiaFiltros({
+              ...productosPorDiaFiltros,
+              comprado: e.target.value,
+            })
+          }
+          style={styles.input}
+        >
+          <option value="">Seleccionar</option>
+        </select>
+      </div>
+    </div>
+
+    <div style={styles.filterActions}>
+      <button
+        style={styles.outlineButton}
+        onClick={() =>
+          setProductosPorDiaFiltros({
+            fecha_inicio: "",
+            fecha_fin: "",
+            ubicacion: "",
+            comprado: "",
+            texto: "",
+          })
+        }
+      >
+        Borrar filtros
+      </button>
+
+      <button style={styles.exportButton}>
+        EXPORTAR
+      </button>
+
+      <button
+        style={styles.button}
+        onClick={consultarProductosPorDia}
+      >
+        Filtrar
+      </button>
+    </div>
+
+    <div style={styles.reportToolbar}>
+      <input
+        type="text"
+        placeholder="Buscar"
+        value={productosPorDiaFiltros.texto || ""}
+        onChange={(e) =>
+          setProductosPorDiaFiltros({
+            ...productosPorDiaFiltros,
+            texto: e.target.value,
+          })
+        }
+        style={styles.searchInput}
+      />
+    </div>
+
+    <div style={{ marginTop: 20, overflowX: "auto" }}>
+      <div style={styles.tableHeaderProductosDia}>
+        <span>Producto</span>
+        <span>Categoría</span>
+        <span>Domingo</span>
+        <span>Lunes</span>
+        <span>Martes</span>
+        <span>Miércoles</span>
+        <span>Jueves</span>
+        <span>Viernes</span>
+        <span>Sábado</span>
+      </div>
+
+      {productosVendidosPorDia.length === 0 ? (
+        <div style={styles.emptyState}>
+          No hay productos vendidos por día para mostrar
+        </div>
+      ) : (
+        productosVendidosPorDia
+          .filter((p) => {
+            if (!productosPorDiaFiltros.texto) return true;
+            const texto = productosPorDiaFiltros.texto.toLowerCase();
+            return (
+              String(p.producto || "").toLowerCase().includes(texto) ||
+              String(p.categoria || "").toLowerCase().includes(texto)
+            );
+          })
+          .map((p, index) => (
+            <div key={index} style={styles.rowTablaProductosDia}>
+              <span>{p.producto}</span>
+              <span>{p.categoria}</span>
+              <span>{p.domingo}</span>
+              <span>{p.lunes}</span>
+              <span>{p.martes}</span>
+              <span>{p.miercoles}</span>
+              <span>{p.jueves}</span>
+              <span>{p.viernes}</span>
+              <span>{p.sabado}</span>
             </div>
           ))
       )}
@@ -4506,17 +4823,6 @@ const styles = {
   fontWeight: "500",
 },
 
-exportButton: {
-  padding: "12px 18px",
-  borderRadius: "10px",
-  border: "1px solid #166534",
-  background: "#fff",
-  color: "#166534",
-  cursor: "pointer",
-  fontSize: "16px",
-  fontWeight: "bold",
-},
-
 subMenu: {
   marginLeft: 10,
   display: "flex",
@@ -4532,6 +4838,119 @@ subMenuButton: {
   cursor: "pointer",
   textAlign: "left",
   fontSize: 14,
+},
+
+card: {
+  background: "#fff",
+  borderRadius: "18px",
+  padding: "24px",
+  boxShadow: "0 8px 20px rgba(0,0,0,0.06)",
+  boxSizing: "border-box",
+  minWidth: 0,
+},
+
+reporteHeader: {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 20,
+  flexWrap: "wrap",
+  gap: 12,
+},
+
+filtrosRow: {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: "16px",
+  width: "100%",
+  alignItems: "end",
+},
+
+filterGroup: {
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+},
+
+filterActions: {
+  display: "flex",
+  alignItems: "flex-end",
+  gap: 10,
+  flexWrap: "wrap",
+  marginTop: 16,
+},
+
+reportToolbar: {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  marginTop: 16,
+  flexWrap: "wrap",
+},
+
+exportButton: {
+  padding: "12px 18px",
+  borderRadius: "10px",
+  border: "1px solid #166534",
+  background: "#fff",
+  color: "#166534",
+  cursor: "pointer",
+  fontSize: "16px",
+  fontWeight: "bold",
+},
+
+emptyState: {
+  padding: "18px",
+  textAlign: "center",
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+  borderRadius: 10,
+  color: "#64748b",
+},
+
+tableHeaderProductos: {
+  display: "grid",
+  gridTemplateColumns: "2fr 1fr 1.2fr 2fr 1fr 1.2fr",
+  gap: 12,
+  padding: "12px 14px",
+  background: "#dbe7ff",
+  borderRadius: 10,
+  fontWeight: 700,
+  color: "#334155",
+  marginBottom: 10,
+},
+
+rowTablaProductos: {
+  display: "grid",
+  gridTemplateColumns: "2fr 1fr 1.2fr 2fr 1fr 1.2fr",
+  gap: 12,
+  padding: "12px 14px",
+  borderBottom: "1px solid #e2e8f0",
+  alignItems: "center",
+},
+
+tableHeaderProductosDia: {
+  display: "grid",
+  gridTemplateColumns: "2fr 1.2fr repeat(7, 1fr)",
+  gap: 12,
+  padding: "12px 14px",
+  background: "#dbe7ff",
+  borderRadius: 10,
+  fontWeight: 700,
+  color: "#334155",
+  marginBottom: 10,
+  minWidth: "1100px",
+},
+
+rowTablaProductosDia: {
+  display: "grid",
+  gridTemplateColumns: "2fr 1.2fr repeat(7, 1fr)",
+  gap: 12,
+  padding: "12px 14px",
+  borderBottom: "1px solid #e2e8f0",
+  alignItems: "center",
+  minWidth: "1100px",
 },
 
 };
