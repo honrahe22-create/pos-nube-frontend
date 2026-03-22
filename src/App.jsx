@@ -155,6 +155,11 @@ const [recargasFiltros, setRecargasFiltros] = useState({
     texto: "",
   });
 
+  const [cierreCajaFiltros, setCierreCajaFiltros] = useState({
+  fecha_inicio: "",
+  fecha_fin: "",
+});
+
   const [cuentaForm, setCuentaForm] = useState({
     correo: "",
     password_actual: "",
@@ -527,6 +532,80 @@ const totalRecargasVista = useMemo(() => {
       (acc, venta) => acc + Number(venta.total || 0),
       0
     );
+    const limpiarFiltrosCierreCaja = () => {
+  setCierreCajaFiltros({
+    fecha_inicio: "",
+    fecha_fin: "",
+  });
+};
+
+const cierreCajaResumen = useMemo(() => {
+  let ventasLista = [...ventasEnriquecidas];
+  let recargasLista = [...recargasEnriquecidas];
+
+  if (cierreCajaFiltros.fecha_inicio) {
+    ventasLista = ventasLista.filter((venta) => {
+      const fecha = formatearFechaInput(venta.fecha_base);
+      return fecha && fecha >= cierreCajaFiltros.fecha_inicio;
+    });
+
+    recargasLista = recargasLista.filter((recarga) => {
+      const fecha = formatearFechaInput(recarga.fecha_base);
+      return fecha && fecha >= cierreCajaFiltros.fecha_inicio;
+    });
+  }
+
+  if (cierreCajaFiltros.fecha_fin) {
+    ventasLista = ventasLista.filter((venta) => {
+      const fecha = formatearFechaInput(venta.fecha_base);
+      return fecha && fecha <= cierreCajaFiltros.fecha_fin;
+    });
+
+    recargasLista = recargasLista.filter((recarga) => {
+      const fecha = formatearFechaInput(recarga.fecha_base);
+      return fecha && fecha <= cierreCajaFiltros.fecha_fin;
+    });
+  }
+
+  const ventasEfectivo = ventasLista
+    .filter((v) => v.metodo_pago === "EFECTIVO")
+    .reduce((acc, v) => acc + Number(v.total || 0), 0);
+
+  const ventasTransferencia = ventasLista
+    .filter((v) => v.metodo_pago === "TRANSFERENCIA")
+    .reduce((acc, v) => acc + Number(v.total || 0), 0);
+
+  const ventasSaldo = ventasLista
+    .filter((v) => v.metodo_visual === "RECARGA")
+    .reduce((acc, v) => acc + Number(v.total || 0), 0);
+
+  const recargasEfectivo = recargasLista
+    .filter((r) => r.metodo_pago === "EFECTIVO")
+    .reduce((acc, r) => acc + Number(r.monto || 0), 0);
+
+  const recargasTransferencia = recargasLista
+    .filter((r) => r.metodo_pago === "TRANSFERENCIA")
+    .reduce((acc, r) => acc + Number(r.monto || 0), 0);
+
+  const totalVentas =
+    ventasEfectivo + ventasTransferencia + ventasSaldo;
+
+  const totalRecargas =
+    recargasEfectivo + recargasTransferencia;
+
+  const totalGeneral = totalVentas + totalRecargas;
+
+  return {
+    ventasEfectivo,
+    ventasTransferencia,
+    ventasSaldo,
+    recargasEfectivo,
+    recargasTransferencia,
+    totalVentas,
+    totalRecargas,
+    totalGeneral,
+  };
+}, [ventasEnriquecidas, recargasEnriquecidas, cierreCajaFiltros]);
     const montoEfectivo = ventasFiltradas
       .filter((venta) => venta.metodo_pago === "EFECTIVO")
       .reduce((acc, venta) => acc + Number(venta.total || 0), 0);
@@ -1724,6 +1803,7 @@ const exportarVentasExcel = () => {
     limpiarFormularioVenta();
     limpiarFiltrosVentas();
     limpiarFiltrosRecargas();
+    limpiarFiltrosCierreCaja();
   };
 
   if (!usuario) {
@@ -1921,105 +2001,182 @@ const exportarVentasExcel = () => {
   <>
     <div style={styles.pageHeader}>
       <div>
-        <h1 style={styles.dashboardTitle}>
-          Cierre de caja diario
-        </h1>
-
-        <p style={styles.dashboardSubtitle}>
-          Resumen por fecha
-        </p>
+        <h1 style={styles.dashboardTitle}>Cierre de caja diario</h1>
+        <p style={styles.dashboardSubtitle}>Resumen por fecha</p>
       </div>
+
+      <button
+        style={styles.refreshButton}
+        onClick={() => {
+          cargarVentas();
+          cargarRecargas();
+          cargarAlumnos();
+        }}
+      >
+        Refrescar
+      </button>
     </div>
 
     <div style={styles.box}>
-
       <div style={styles.filtersGridPaymon}>
-
         <div style={styles.filterField}>
-          <label style={styles.filterLabelTop}>
-            Fecha inicial
-          </label>
-
+          <label style={styles.filterLabelTop}>Fecha inicial</label>
           <input
             type="date"
+            value={cierreCajaFiltros.fecha_inicio}
+            onChange={(e) =>
+              setCierreCajaFiltros({
+                ...cierreCajaFiltros,
+                fecha_inicio: e.target.value,
+              })
+            }
             style={styles.input}
           />
         </div>
 
         <div style={styles.filterField}>
-          <label style={styles.filterLabelTop}>
-            Fecha final
-          </label>
-
+          <label style={styles.filterLabelTop}>Fecha final</label>
           <input
             type="date"
+            value={cierreCajaFiltros.fecha_fin}
+            onChange={(e) =>
+              setCierreCajaFiltros({
+                ...cierreCajaFiltros,
+                fecha_fin: e.target.value,
+              })
+            }
             style={styles.input}
           />
         </div>
-
       </div>
 
       <div style={styles.filterButtons}>
-
-        <button style={styles.button}>
+        <button
+          type="button"
+          style={styles.button}
+          onClick={() => setCierreCajaFiltros({ ...cierreCajaFiltros })}
+        >
           Consultar
         </button>
 
-        <button style={styles.outlineButton}>
+        <button
+          type="button"
+          style={styles.outlineButton}
+          onClick={limpiarFiltrosCierreCaja}
+        >
           Borrar filtros
         </button>
+      </div>
+    </div>
 
+    <div style={{ height: 20 }} />
+
+    <div style={styles.grid}>
+      <div style={styles.box}>
+        <h3>Ventas en efectivo</h3>
+        <p>{formatearMoneda(cierreCajaResumen.ventasEfectivo)}</p>
       </div>
 
+      <div style={styles.box}>
+        <h3>Ventas transferencia</h3>
+        <p>{formatearMoneda(cierreCajaResumen.ventasTransferencia)}</p>
+      </div>
+
+      <div style={styles.box}>
+        <h3>Ventas por saldo</h3>
+        <p>{formatearMoneda(cierreCajaResumen.ventasSaldo)}</p>
+      </div>
+
+      <div style={styles.box}>
+        <h3>Recargas efectivo</h3>
+        <p>{formatearMoneda(cierreCajaResumen.recargasEfectivo)}</p>
+      </div>
+
+      <div style={styles.box}>
+        <h3>Recargas transferencia</h3>
+        <p>{formatearMoneda(cierreCajaResumen.recargasTransferencia)}</p>
+      </div>
+
+      <div style={styles.box}>
+        <h3>Total general</h3>
+        <p>{formatearMoneda(cierreCajaResumen.totalGeneral)}</p>
+      </div>
     </div>
 
     <div style={{ height: 20 }} />
 
     <div style={styles.box}>
-
       <h3>Cierre de caja</h3>
 
-      <table style={styles.table}>
+      <div style={styles.tableWrap}>
+        <table style={styles.table}>
+          <thead>
+            <tr>
+              <th style={styles.th}>Concepto</th>
+              <th style={styles.th}>Total</th>
+            </tr>
+          </thead>
 
-        <thead>
+          <tbody>
+            <tr>
+              <td style={styles.td}>Ventas en efectivo</td>
+              <td style={styles.td}>
+                {formatearMoneda(cierreCajaResumen.ventasEfectivo)}
+              </td>
+            </tr>
 
-          <tr>
+            <tr>
+              <td style={styles.td}>Ventas por transferencia</td>
+              <td style={styles.td}>
+                {formatearMoneda(cierreCajaResumen.ventasTransferencia)}
+              </td>
+            </tr>
 
-            <th style={styles.th}>Tipo</th>
-            <th style={styles.th}>Total</th>
+            <tr>
+              <td style={styles.td}>Ventas por saldo</td>
+              <td style={styles.td}>
+                {formatearMoneda(cierreCajaResumen.ventasSaldo)}
+              </td>
+            </tr>
 
-          </tr>
+            <tr>
+              <td style={styles.td}>Recargas en efectivo</td>
+              <td style={styles.td}>
+                {formatearMoneda(cierreCajaResumen.recargasEfectivo)}
+              </td>
+            </tr>
 
-        </thead>
+            <tr>
+              <td style={styles.td}>Recargas por transferencia</td>
+              <td style={styles.td}>
+                {formatearMoneda(cierreCajaResumen.recargasTransferencia)}
+              </td>
+            </tr>
 
-        <tbody>
+            <tr>
+              <td style={styles.td}><strong>Total ventas</strong></td>
+              <td style={styles.td}>
+                <strong>{formatearMoneda(cierreCajaResumen.totalVentas)}</strong>
+              </td>
+            </tr>
 
-          <tr>
-            <td style={styles.td}>Efectivo</td>
-            <td style={styles.td}>0.00</td>
-          </tr>
+            <tr>
+              <td style={styles.td}><strong>Total recargas</strong></td>
+              <td style={styles.td}>
+                <strong>{formatearMoneda(cierreCajaResumen.totalRecargas)}</strong>
+              </td>
+            </tr>
 
-          <tr>
-            <td style={styles.td}>Transferencia</td>
-            <td style={styles.td}>0.00</td>
-          </tr>
-
-          <tr>
-            <td style={styles.td}>Saldo</td>
-            <td style={styles.td}>0.00</td>
-          </tr>
-
-          <tr>
-            <td style={styles.td}>TOTAL</td>
-            <td style={styles.td}>0.00</td>
-          </tr>
-
-        </tbody>
-
-      </table>
-
+            <tr>
+              <td style={styles.td}><strong>Total general</strong></td>
+              <td style={styles.td}>
+                <strong>{formatearMoneda(cierreCajaResumen.totalGeneral)}</strong>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
-
   </>
 )}
 
