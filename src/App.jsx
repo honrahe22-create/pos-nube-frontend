@@ -141,24 +141,35 @@ const [recargasFiltros, setRecargasFiltros] = useState({
 
   const [vistaVentasInterna, setVistaVentasInterna] = useState("consultar");
 
-  const [ventasFiltros, setVentasFiltros] = useState({
-    tipo_fecha: "created_at",
-    fecha_inicio: "",
-    fecha_fin: "",
-    tipo_orden: "",
-    orden_id: "",
-    ubicacion: "",
-    operador: "",
-    estado: "ENTREGADA",
-    metodo_pago: "todos",
-    alumno_id: "",
-    texto: "",
-  });
-
-  const [cierreCajaFiltros, setCierreCajaFiltros] = useState({
+   const [ventasFiltros, setVentasFiltros] = useState({
+  tipo_fecha: "created_at",
   fecha_inicio: "",
   fecha_fin: "",
+  tipo_orden: "",
+  orden_id: "",
+  ubicacion: "",
+  operador: "",
+  estado: "ENTREGADA",
+  metodo_pago: "todos",
+  alumno_id: "",
+  texto: "",
 });
+
+const [productosFiltros, setProductosFiltros] = useState({
+  fecha_inicio: "",
+  fecha_fin: "",
+  operador: "",
+  ubicacion: "",
+  comprado: "",
+  texto: "",
+});
+
+const [productosVendidos, setProductosVendidos] = useState([]);
+
+  const [cierreCajaFiltros, setCierreCajaFiltros] = useState({
+    fecha_inicio: "",
+    fecha_fin: "",
+  });
 
   const [cuentaForm, setCuentaForm] = useState({
     correo: "",
@@ -526,92 +537,21 @@ const totalRecargasVista = useMemo(() => {
     });
   }, [ventasEnriquecidas, ventasFiltros]);
 
-  const resumenVentasVista = useMemo(() => {
+    const resumenVentasVista = useMemo(() => {
     const totalVentas = ventasFiltradas.length;
     const montoTotal = ventasFiltradas.reduce(
       (acc, venta) => acc + Number(venta.total || 0),
       0
     );
-    const limpiarFiltrosCierreCaja = () => {
-  setCierreCajaFiltros({
-    fecha_inicio: "",
-    fecha_fin: "",
-  });
-};
 
-const cierreCajaResumen = useMemo(() => {
-  let ventasLista = [...ventasEnriquecidas];
-  let recargasLista = [...recargasEnriquecidas];
-
-  if (cierreCajaFiltros.fecha_inicio) {
-    ventasLista = ventasLista.filter((venta) => {
-      const fecha = formatearFechaInput(venta.fecha_base);
-      return fecha && fecha >= cierreCajaFiltros.fecha_inicio;
-    });
-
-    recargasLista = recargasLista.filter((recarga) => {
-      const fecha = formatearFechaInput(recarga.fecha_base);
-      return fecha && fecha >= cierreCajaFiltros.fecha_inicio;
-    });
-  }
-
-  if (cierreCajaFiltros.fecha_fin) {
-    ventasLista = ventasLista.filter((venta) => {
-      const fecha = formatearFechaInput(venta.fecha_base);
-      return fecha && fecha <= cierreCajaFiltros.fecha_fin;
-    });
-
-    recargasLista = recargasLista.filter((recarga) => {
-      const fecha = formatearFechaInput(recarga.fecha_base);
-      return fecha && fecha <= cierreCajaFiltros.fecha_fin;
-    });
-  }
-
-  const ventasEfectivo = ventasLista
-    .filter((v) => v.metodo_pago === "EFECTIVO")
-    .reduce((acc, v) => acc + Number(v.total || 0), 0);
-
-  const ventasTransferencia = ventasLista
-    .filter((v) => v.metodo_pago === "TRANSFERENCIA")
-    .reduce((acc, v) => acc + Number(v.total || 0), 0);
-
-  const ventasSaldo = ventasLista
-    .filter((v) => v.metodo_visual === "RECARGA")
-    .reduce((acc, v) => acc + Number(v.total || 0), 0);
-
-  const recargasEfectivo = recargasLista
-    .filter((r) => r.metodo_pago === "EFECTIVO")
-    .reduce((acc, r) => acc + Number(r.monto || 0), 0);
-
-  const recargasTransferencia = recargasLista
-    .filter((r) => r.metodo_pago === "TRANSFERENCIA")
-    .reduce((acc, r) => acc + Number(r.monto || 0), 0);
-
-  const totalVentas =
-    ventasEfectivo + ventasTransferencia + ventasSaldo;
-
-  const totalRecargas =
-    recargasEfectivo + recargasTransferencia;
-
-  const totalGeneral = totalVentas + totalRecargas;
-
-  return {
-    ventasEfectivo,
-    ventasTransferencia,
-    ventasSaldo,
-    recargasEfectivo,
-    recargasTransferencia,
-    totalVentas,
-    totalRecargas,
-    totalGeneral,
-  };
-}, [ventasEnriquecidas, recargasEnriquecidas, cierreCajaFiltros]);
     const montoEfectivo = ventasFiltradas
       .filter((venta) => venta.metodo_pago === "EFECTIVO")
       .reduce((acc, venta) => acc + Number(venta.total || 0), 0);
+
     const montoTransferencia = ventasFiltradas
       .filter((venta) => venta.metodo_pago === "TRANSFERENCIA")
       .reduce((acc, venta) => acc + Number(venta.total || 0), 0);
+
     const montoRecarga = ventasFiltradas
       .filter((venta) => venta.metodo_visual === "RECARGA")
       .reduce((acc, venta) => acc + Number(venta.total || 0), 0);
@@ -624,6 +564,81 @@ const cierreCajaResumen = useMemo(() => {
       montoRecarga,
     };
   }, [ventasFiltradas]);
+
+  const limpiarFiltrosCierreCaja = () => {
+    setCierreCajaFiltros({
+      fecha_inicio: "",
+      fecha_fin: "",
+    });
+  };
+
+  const cierreCajaResumen = useMemo(() => {
+    let ventasLista = [...ventasEnriquecidas];
+    let recargasLista = [...recargasEnriquecidas];
+
+    if (cierreCajaFiltros.fecha_inicio) {
+      ventasLista = ventasLista.filter((venta) => {
+        const fecha = formatearFechaInput(venta.fecha_base);
+        return fecha && fecha >= cierreCajaFiltros.fecha_inicio;
+      });
+
+      recargasLista = recargasLista.filter((recarga) => {
+        const fecha = formatearFechaInput(recarga.fecha_base);
+        return fecha && fecha >= cierreCajaFiltros.fecha_inicio;
+      });
+    }
+
+    if (cierreCajaFiltros.fecha_fin) {
+      ventasLista = ventasLista.filter((venta) => {
+        const fecha = formatearFechaInput(venta.fecha_base);
+        return fecha && fecha <= cierreCajaFiltros.fecha_fin;
+      });
+
+      recargasLista = recargasLista.filter((recarga) => {
+        const fecha = formatearFechaInput(recarga.fecha_base);
+        return fecha && fecha <= cierreCajaFiltros.fecha_fin;
+      });
+    }
+
+    const ventasEfectivo = ventasLista
+      .filter((v) => v.metodo_pago === "EFECTIVO")
+      .reduce((acc, v) => acc + Number(v.total || 0), 0);
+
+    const ventasTransferencia = ventasLista
+      .filter((v) => v.metodo_pago === "TRANSFERENCIA")
+      .reduce((acc, v) => acc + Number(v.total || 0), 0);
+
+    const ventasSaldo = ventasLista
+      .filter((v) => v.metodo_visual === "RECARGA")
+      .reduce((acc, v) => acc + Number(v.total || 0), 0);
+
+    const recargasEfectivo = recargasLista
+      .filter((r) => r.metodo_pago === "EFECTIVO")
+      .reduce((acc, r) => acc + Number(r.monto || 0), 0);
+
+    const recargasTransferencia = recargasLista
+      .filter((r) => r.metodo_pago === "TRANSFERENCIA")
+      .reduce((acc, r) => acc + Number(r.monto || 0), 0);
+
+    const totalVentas =
+      ventasEfectivo + ventasTransferencia + ventasSaldo;
+
+    const totalRecargas =
+      recargasEfectivo + recargasTransferencia;
+
+    const totalGeneral = totalVentas + totalRecargas;
+
+    return {
+      ventasEfectivo,
+      ventasTransferencia,
+      ventasSaldo,
+      recargasEfectivo,
+      recargasTransferencia,
+      totalVentas,
+      totalRecargas,
+      totalGeneral,
+    };
+  }, [ventasEnriquecidas, recargasEnriquecidas, cierreCajaFiltros]);
 
   const obtenerEstadoStock = (producto) => {
     const stock = Number(producto.stock || 0);
@@ -1910,7 +1925,6 @@ const exportarVentasExcel = () => {
 
 {vista === "reportes" && (
   <div style={styles.subMenu}>
-
     <button
       style={styles.subMenuButton}
       onClick={() => setVista("reporte_cierre")}
@@ -1931,7 +1945,6 @@ const exportarVentasExcel = () => {
     >
       Productos por día
     </button>
-
   </div>
 )}
 
@@ -2180,6 +2193,178 @@ const exportarVentasExcel = () => {
   </>
 )}
 
+{vista === "reporte_productos" && (
+  <div style={styles.card}>
+    <div style={styles.reporteHeader}>
+      <div>
+        <h2 style={{ margin: 0 }}>Reporte de Productos Vendidos</h2>
+      </div>
+    </div>
+
+    <div style={styles.filtrosRow}>
+      <div style={styles.filterGroup}>
+        <label style={styles.label}>Fecha inicial</label>
+        <input
+          type="date"
+          value={productosFiltros.fecha_inicio}
+          onChange={(e) =>
+            setProductosFiltros({
+              ...productosFiltros,
+              fecha_inicio: e.target.value,
+            })
+          }
+          style={styles.input}
+        />
+      </div>
+
+      <div style={styles.filterGroup}>
+        <label style={styles.label}>Fecha final</label>
+        <input
+          type="date"
+          value={productosFiltros.fecha_fin}
+          onChange={(e) =>
+            setProductosFiltros({
+              ...productosFiltros,
+              fecha_fin: e.target.value,
+            })
+          }
+          style={styles.input}
+        />
+      </div>
+
+      <div style={styles.filterGroup}>
+        <label style={styles.label}>Operador</label>
+        <select
+          value={productosFiltros.operador || ""}
+          onChange={(e) =>
+            setProductosFiltros({
+              ...productosFiltros,
+              operador: e.target.value,
+            })
+          }
+          style={styles.input}
+        >
+          <option value="">Seleccionar</option>
+        </select>
+      </div>
+
+      <div style={styles.filterGroup}>
+        <label style={styles.label}>Ubicación</label>
+        <select
+          value={productosFiltros.ubicacion || ""}
+          onChange={(e) =>
+            setProductosFiltros({
+              ...productosFiltros,
+              ubicacion: e.target.value,
+            })
+          }
+          style={styles.input}
+        >
+          <option value="">Seleccionar</option>
+        </select>
+      </div>
+
+      <div style={styles.filterGroup}>
+        <label style={styles.label}>Comprado</label>
+        <select
+          value={productosFiltros.comprado || ""}
+          onChange={(e) =>
+            setProductosFiltros({
+              ...productosFiltros,
+              comprado: e.target.value,
+            })
+          }
+          style={styles.input}
+        >
+          <option value="">Seleccionar</option>
+        </select>
+      </div>
+    </div>
+
+    <div style={styles.filterActions}>
+      <button
+        style={styles.primaryButton}
+        onClick={() => consultarProductos()}
+      >
+        Consultar
+      </button>
+
+      <button
+        style={styles.outlineButton}
+        onClick={() =>
+          setProductosFiltros({
+            fecha_inicio: "",
+            fecha_fin: "",
+            operador: "",
+            ubicacion: "",
+            comprado: "",
+            texto: "",
+          })
+        }
+      >
+        Borrar filtros
+      </button>
+    </div>
+
+    <div style={styles.reportToolbar}>
+      <input
+        type="text"
+        placeholder="Buscar"
+        value={productosFiltros.texto || ""}
+        onChange={(e) =>
+          setProductosFiltros({
+            ...productosFiltros,
+            texto: e.target.value,
+          })
+        }
+        style={styles.searchInput}
+      />
+
+      <button style={styles.exportButton}>
+        EXPORTAR
+      </button>
+    </div>
+
+    <div style={{ marginTop: 20 }}>
+      <div style={styles.tableHeaderProductos}>
+        <span>Nombre</span>
+        <span>Código</span>
+        <span>Categoría</span>
+        <span>Descripción</span>
+        <span>Cantidad</span>
+        <span>Total de Ventas</span>
+      </div>
+
+      {productosVendidos.length === 0 ? (
+        <div style={styles.emptyState}>
+          No hay productos vendidos para mostrar
+        </div>
+      ) : (
+        productosVendidos
+          .filter((p) => {
+            if (!productosFiltros.texto) return true;
+            const texto = productosFiltros.texto.toLowerCase();
+            return (
+              String(p.nombre || "").toLowerCase().includes(texto) ||
+              String(p.codigo || "").toLowerCase().includes(texto) ||
+              String(p.categoria || "").toLowerCase().includes(texto) ||
+              String(p.descripcion || "").toLowerCase().includes(texto)
+            );
+          })
+          .map((p, index) => (
+            <div key={p.id || index} style={styles.rowTablaProductos}>
+              <span>{p.nombre || "-"}</span>
+              <span>{p.codigo || "-"}</span>
+              <span>{p.categoria || "-"}</span>
+              <span>{p.descripcion || "-"}</span>
+              <span>{p.cantidad || 0}</span>
+              <span>${Number(p.total || 0).toFixed(2)}</span>
+            </div>
+          ))
+      )}
+    </div>
+  </div>
+)}
         {vista === "productos" && (
           <>
             <div style={styles.pageHeader}>
@@ -4315,12 +4500,13 @@ const styles = {
     marginBottom: "8px",
   },
   paymonTotalLabel: {
-    display: "inline-block",
-    fontSize: "18px",
-    color: "#1d4ed8",
-    fontWeight: "500",
+  display: "inline-block",
+  fontSize: "18px",
+  color: "#1d4ed8",
+  fontWeight: "500",
+},
 
-    exportButton: {
+exportButton: {
   padding: "12px 18px",
   borderRadius: "10px",
   border: "1px solid #166534",
@@ -4348,5 +4534,4 @@ subMenuButton: {
   fontSize: 14,
 },
 
-  },
 };
