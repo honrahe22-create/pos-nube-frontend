@@ -144,6 +144,10 @@ const [recargasFiltros, setRecargasFiltros] = useState({
   const [busquedaProductos, setBusquedaProductos] = useState("");
 const [busquedaInventario, setBusquedaInventario] = useState("");
 
+const [mostrarFormularioProducto, setMostrarFormularioProducto] = useState(false);
+const [filtroCategoriaProductos, setFiltroCategoriaProductos] = useState("");
+const [productoEditando, setProductoEditando] = useState(null);
+
    const [ventasFiltros, setVentasFiltros] = useState({
   tipo_fecha: "created_at",
   fecha_inicio: "",
