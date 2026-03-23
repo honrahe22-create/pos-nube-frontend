@@ -141,6 +141,8 @@ const [recargasFiltros, setRecargasFiltros] = useState({
 
   const [vistaVentasInterna, setVistaVentasInterna] = useState("consultar");
   const [menuComidasAbierto, setMenuComidasAbierto] = useState(true);
+  const [busquedaProductos, setBusquedaProductos] = useState("");
+const [busquedaInventario, setBusquedaInventario] = useState("");
 
    const [ventasFiltros, setVentasFiltros] = useState({
   tipo_fecha: "created_at",
@@ -3083,208 +3085,111 @@ const consultarProductosPorDia = () => {
   </div>
 )}
         {vista === "productos" && (
-          <>
-            <div style={styles.pageHeader}>
-              <div>
-                <h1 style={styles.dashboardTitle}>Menú Cafetería</h1>
-<p style={styles.dashboardSubtitle}>Crear y visualizar alimentos de la institución</p>                
-              </div>
+  <>
+    <div style={styles.pageHeader}>
+      <div>
+        <h1 style={styles.dashboardTitle}>Menu de la Cafetería</h1>
+      </div>
 
-              <button style={styles.refreshButton} onClick={cargarProductos}>
-                Refrescar
-              </button>
-            </div>
+      <div style={styles.headerActions}>
+        <button style={styles.secondaryButton}>
+          Crear alimento
+        </button>
+      </div>
+    </div>
 
-            <div style={styles.twoColumn}>
-              <div style={styles.box}>
-                <h3>{editandoProductoId ? "Editar producto" : "Nuevo producto"}</h3>
+    <div style={styles.box}>
+      <div style={styles.pageHeaderSmall}>
+        <input
+          type="text"
+          placeholder="Buscar"
+          value={busquedaProductos}
+          onChange={(e) => setBusquedaProductos(e.target.value)}
+          style={styles.searchInput}
+        />
 
-                <form
-                  onSubmit={editandoProductoId ? actualizarProducto : crearProducto}
-                  style={styles.form}
-                >
-                  <input
-                    type="text"
-                    placeholder="Nombre"
-                    value={productoForm.nombre}
-                    onChange={(e) =>
-                      setProductoForm({ ...productoForm, nombre: e.target.value })
-                    }
-                    style={styles.input}
-                    required
-                  />
+        <button style={styles.button}>
+          Exportar
+        </button>
+      </div>
 
-                  <input
-                    type="text"
-                    placeholder="Descripción"
-                    value={productoForm.descripcion}
-                    onChange={(e) =>
-                      setProductoForm({
-                        ...productoForm,
-                        descripcion: e.target.value,
-                      })
-                    }
-                    style={styles.input}
-                  />
+      <div style={styles.tableWrap}>
+        <table style={styles.table}>
+          <thead>
+            <tr>
+              <th style={styles.th}></th>
+              <th style={styles.th}>Nombre</th>
+              <th style={styles.th}>Código</th>
+              <th style={styles.th}>Precio</th>
+              <th style={styles.th}>% impuestos</th>
+              <th style={styles.th}>Precio final</th>
+              <th style={styles.th}>Categoría</th>
+              <th style={styles.th}>Acciones</th>
+            </tr>
 
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="Precio"
-                    value={productoForm.precio}
-                    onChange={(e) =>
-                      setProductoForm({ ...productoForm, precio: e.target.value })
-                    }
-                    style={styles.input}
-                    required
-                  />
+            <tr>
+              <th style={styles.th}></th>
+              <th style={styles.th}></th>
+              <th style={styles.th}></th>
+              <th style={styles.th}></th>
+              <th style={styles.th}></th>
+              <th style={styles.th}></th>
+              <th style={styles.th}>
+                <select style={styles.select}>
+                  <option value="">Seleccionar</option>
+                </select>
+              </th>
+              <th style={styles.th}></th>
+            </tr>
+          </thead>
 
-                  <input
-                    type="number"
-                    placeholder="Stock inicial"
-                    value={productoForm.stock}
-                    onChange={(e) =>
-                      setProductoForm({ ...productoForm, stock: e.target.value })
-                    }
-                    style={styles.input}
-                    required
-                  />
-
-                  <input
-                    type="number"
-                    placeholder="Stock mínimo"
-                    value={productoForm.stock_minimo}
-                    onChange={(e) =>
-                      setProductoForm({
-                        ...productoForm,
-                        stock_minimo: e.target.value,
-                      })
-                    }
-                    style={styles.input}
-                  />
-
-                  <input
-                    type="text"
-                    placeholder="Categoría"
-                    value={productoForm.categoria}
-                    onChange={(e) =>
-                      setProductoForm({ ...productoForm, categoria: e.target.value })
-                    }
-                    style={styles.input}
-                  />
-
-                  <button type="submit" style={styles.button}>
-                    {editandoProductoId ? "Actualizar producto" : "Guardar producto"}
-                  </button>
-
-                  {editandoProductoId && (
-                    <button
-                      type="button"
-                      style={styles.cancelButton}
-                      onClick={limpiarFormularioProducto}
-                    >
-                      Cancelar edición
-                    </button>
-                  )}
-                </form>
-              </div>
-                            <div style={styles.box}>
-                <h3>Lista de productos</h3>
-
-                {productosFiltrados.length === 0 ? (
-                  <p>No hay productos registrados.</p>
-                ) : (
-                  <div style={styles.tableWrap}>
-                    <table style={styles.table}>
-                      <thead>
-                        <tr>
-                          <th style={styles.th}>ID</th>
-                          <th style={styles.th}>Nombre</th>
-                          <th style={styles.th}>Precio</th>
-                          <th style={styles.th}>Stock</th>
-                          <th style={styles.th}>Stock mínimo</th>
-                          <th style={styles.th}>Categoría</th>
-                          <th style={styles.th}>Activo</th>
-                          <th style={styles.th}>Editar</th>
-                          <th style={styles.th}>Eliminar</th>
-                          <th style={styles.th}>Restaurar</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {productosFiltrados.map((p) => {
-                          const activo = p.activo !== false;
-
-                          return (
-                            <tr key={p.id}>
-                              <td style={styles.td}>{p.id}</td>
-                              <td style={styles.td}>{p.nombre}</td>
-                              <td style={styles.td}>{formatearMoneda(p.precio)}</td>
-                              <td style={styles.td}>{Number(p.stock || 0)}</td>
-                              <td style={styles.td}>{Number(p.stock_minimo || 0)}</td>
-                              <td style={styles.td}>{p.categoria || "-"}</td>
-                              <td style={styles.td}>
-                                <span
-                                  style={activo ? styles.badgeActive : styles.badgeInactive}
-                                >
-                                  {activo ? "Activo" : "Inactivo"}
-                                </span>
-                              </td>
-                              <td style={styles.td}>
-                                <button
-                                  type="button"
-                                  style={
-                                    activo
-                                      ? styles.editIconButton
-                                      : styles.disabledIconButton
-                                  }
-                                  onClick={() => activo && iniciarEdicionProducto(p)}
-                                  disabled={!activo}
-                                  title="Editar producto"
-                                >
-                                  ✏️
-                                </button>
-                              </td>
-                              <td style={styles.td}>
-                                <button
-                                  type="button"
-                                  style={
-                                    activo
-                                      ? styles.deleteIconButton
-                                      : styles.disabledIconButton
-                                  }
-                                  onClick={() => activo && eliminarProducto(p)}
-                                  disabled={!activo}
-                                  title="Eliminar producto"
-                                >
-                                  🗑️
-                                </button>
-                              </td>
-                              <td style={styles.td}>
-                                <button
-                                  type="button"
-                                  style={
-                                    !activo
-                                      ? styles.restoreIconButton
-                                      : styles.disabledIconButton
-                                  }
-                                  onClick={() => !activo && restaurarProducto(p)}
-                                  disabled={activo}
-                                  title="Restaurar producto"
-                                >
-                                  ↩️
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
-        )}
+          <tbody>
+            {productos
+              .filter((p) =>
+                String(p.nombre || "")
+                  .toLowerCase()
+                  .includes(busquedaProductos.toLowerCase())
+              )
+              .map((producto) => (
+                <tr key={producto.id}>
+                  <td style={styles.td}>
+                    <input type="checkbox" />
+                  </td>
+                  <td style={styles.td}>{producto.nombre}</td>
+                  <td style={styles.td}>{producto.codigo || ""}</td>
+                  <td style={styles.td}>
+                    {Number(producto.precio || 0).toFixed(4)}
+                  </td>
+                  <td style={styles.td}>0.0000</td>
+                  <td style={styles.td}>
+                    {Number(producto.precio || 0).toFixed(0)}
+                  </td>
+                  <td style={styles.td}>{producto.categoria}</td>
+                  <td style={styles.td}>
+                    <div style={{ display: "flex", gap: 10 }}>
+                      <button style={styles.smallDarkButton}>◉</button>
+                      <button
+                        style={styles.editIconButton}
+                        onClick={() => editarProducto(producto)}
+                      >
+                        ✎
+                      </button>
+                      <button
+                        style={styles.deleteIconButton}
+                        onClick={() => desactivarProducto(producto.id)}
+                      >
+                        🗑
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </>
+)}
 
         {vista === "alumnos" && (
           <>
@@ -3509,193 +3414,101 @@ const consultarProductosPorDia = () => {
         )}
 
         {vista === "inventario" && (
-          <>
-            <div style={styles.pageHeader}>
-              <div>
-                <h1 style={styles.dashboardTitle}>Inventario</h1>
-                <p style={styles.dashboardSubtitle}>
-                  Control diario de stock de productos
-                </p>
-              </div>
+  <>
+    <div style={styles.pageHeader}>
+      <div>
+        <h1 style={styles.dashboardTitle}>Stock</h1>
+      </div>
 
-              <button style={styles.refreshButton} onClick={cargarProductos}>
-                Refrescar
-              </button>
-            </div>
+      <div style={styles.headerActions}>
+        <button style={styles.outlineButton}>
+          Exportar stock
+        </button>
+        <button style={styles.secondaryButton}>
+          Importar stock
+        </button>
+      </div>
+    </div>
 
-            <div style={styles.grid}>
-              <div style={styles.box}>
-                <h3>Total productos</h3>
-                <p>{inventarioResumen.totalProductos}</p>
-              </div>
+    <div style={styles.box}>
+      <div style={styles.pageHeaderSmall}>
+        <input
+          type="text"
+          placeholder="Buscar"
+          value={busquedaInventario}
+          onChange={(e) => setBusquedaInventario(e.target.value)}
+          style={styles.searchInput}
+        />
+      </div>
 
-              <div style={styles.box}>
-                <h3>Stock bajo</h3>
-                <p>{inventarioResumen.bajos}</p>
-              </div>
+      <div style={styles.tableWrap}>
+        <table style={styles.table}>
+          <thead>
+            <tr>
+              <th style={styles.th}>Nombre</th>
+              <th style={styles.th}>Código</th>
+              <th style={styles.th}>Precio</th>
+              <th style={styles.th}>Categoría</th>
+              <th style={styles.th}>Stock actual</th>
+              <th style={styles.th}>Nuevo Stock</th>
+              <th style={styles.th}>Actualizar stock</th>
+            </tr>
 
-              <div style={styles.box}>
-                <h3>Agotados</h3>
-                <p>{inventarioResumen.agotados}</p>
-              </div>
+            <tr>
+              <th style={styles.th}></th>
+              <th style={styles.th}></th>
+              <th style={styles.th}></th>
+              <th style={styles.th}>
+                <select style={styles.select}>
+                  <option value="">Seleccionar</option>
+                </select>
+              </th>
+              <th style={styles.th}></th>
+              <th style={styles.th}></th>
+              <th style={styles.th}></th>
+            </tr>
+          </thead>
 
-              <div style={styles.box}>
-                <h3>Valor inventario</h3>
-                <p>{formatearMoneda(inventarioResumen.valorInventario)}</p>
-              </div>
-            </div>
-
-            <div style={{ height: 20 }} />
-
-            <div style={styles.twoColumn}>
-              <div style={styles.box}>
-                <h3>Movimiento de inventario</h3>
-
-                <form onSubmit={aplicarMovimientoInventario} style={styles.form}>
-                  <select
-                    value={inventarioForm.producto_id}
-                    onChange={(e) =>
-                      setInventarioForm({
-                        ...inventarioForm,
-                        producto_id: e.target.value,
-                      })
-                    }
-                    style={styles.input}
-                    required
-                  >
-                    <option value="">Seleccione un producto</option>
-                    {productos
-                      .filter((p) => p.activo !== false)
-                      .map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {`${p.nombre} | Stock: ${Number(p.stock || 0)} | ID: ${p.id}`}
-                        </option>
-                      ))}
-                  </select>
-
-                  <select
-                    value={inventarioForm.tipo}
-                    onChange={(e) =>
-                      setInventarioForm({
-                        ...inventarioForm,
-                        tipo: e.target.value,
-                      })
-                    }
-                    style={styles.input}
-                    required
-                  >
-                    <option value="ENTRADA">Entrada</option>
-                    <option value="SALIDA">Salida</option>
-                    <option value="AJUSTE">Ajuste</option>
-                  </select>
-
-                  <input
-                    type="number"
-                    placeholder={
-                      inventarioForm.tipo === "AJUSTE"
-                        ? "Nuevo stock total"
-                        : "Cantidad"
-                    }
-                    value={inventarioForm.cantidad}
-                    onChange={(e) =>
-                      setInventarioForm({
-                        ...inventarioForm,
-                        cantidad: e.target.value,
-                      })
-                    }
-                    style={styles.input}
-                    required
-                  />
-
-                  <input
-                    type="text"
-                    placeholder="Motivo"
-                    value={inventarioForm.motivo}
-                    onChange={(e) =>
-                      setInventarioForm({
-                        ...inventarioForm,
-                        motivo: e.target.value,
-                      })
-                    }
-                    style={styles.input}
-                  />
-
-                  <button type="submit" style={styles.button}>
-                    Aplicar movimiento
-                  </button>
-                </form>
-              </div>
-
-              <div style={styles.box}>
-                <div style={styles.pageHeaderSmall}>
-                  <div>
-                    <h3 style={{ margin: 0 }}>Stock actual</h3>
-                  </div>
-
-                  <div style={styles.headerActions}>
+          <tbody>
+            {productos
+              .filter((p) =>
+                String(p.nombre || "")
+                  .toLowerCase()
+                  .includes(busquedaInventario.toLowerCase())
+              )
+              .map((producto) => (
+                <tr key={producto.id}>
+                  <td style={styles.td}>{producto.nombre}</td>
+                  <td style={styles.td}>{producto.codigo || ""}</td>
+                  <td style={styles.td}>
+                    {Number(producto.precio || 0).toFixed(4)}
+                  </td>
+                  <td style={styles.td}>{producto.categoria}</td>
+                  <td style={styles.td}>
+                    PRINCIPAL: {Number(producto.stock || 0)}
+                  </td>
+                  <td style={styles.td}>
                     <input
-                      type="text"
-                      placeholder="Buscar producto"
-                      value={inventarioBusqueda}
-                      onChange={(e) => setInventarioBusqueda(e.target.value)}
-                      style={styles.searchInput}
+                      type="number"
+                      style={{ ...styles.input, minWidth: 90, padding: "10px" }}
                     />
-
-                    <select
-                      value={inventarioFiltro}
-                      onChange={(e) => setInventarioFiltro(e.target.value)}
-                      style={styles.select}
-                    >
-                      <option value="todos">Todos</option>
-                      <option value="normal">Normal</option>
-                      <option value="bajo">Stock bajo</option>
-                      <option value="agotado">Agotado</option>
-                    </select>
-                  </div>
-                </div>
-
-                {productosInventario.length === 0 ? (
-                  <p>No hay productos para este filtro.</p>
-                ) : (
-                  <div style={styles.tableWrap}>
-                    <table style={styles.table}>
-                      <thead>
-                        <tr>
-                          <th style={styles.th}>ID</th>
-                          <th style={styles.th}>Producto</th>
-                          <th style={styles.th}>Categoría</th>
-                          <th style={styles.th}>Precio</th>
-                          <th style={styles.th}>Stock</th>
-                          <th style={styles.th}>Stock mínimo</th>
-                          <th style={styles.th}>Estado</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {productosInventario.map((p) => {
-                          const estado = obtenerEstadoStock(p);
-
-                          return (
-                            <tr key={p.id}>
-                              <td style={styles.td}>{p.id}</td>
-                              <td style={styles.td}>{p.nombre}</td>
-                              <td style={styles.td}>{p.categoria || "-"}</td>
-                              <td style={styles.td}>{formatearMoneda(p.precio)}</td>
-                              <td style={styles.td}>{Number(p.stock || 0)}</td>
-                              <td style={styles.td}>{Number(p.stock_minimo || 0)}</td>
-                              <td style={styles.td}>
-                                <span style={estado.estilo}>{estado.texto}</span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
-        )}
+                  </td>
+                  <td style={styles.td}>
+                    <div style={{ display: "flex", gap: 10 }}>
+                      <button style={styles.saveIconButton}>💾</button>
+                      <button style={styles.viewIconButton}>◉</button>
+                      <button style={styles.deleteIconButton}>🗑</button>
+                      <button style={styles.moveIconButton}>⇄</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </>
+)}
 
        {vista === "recargas" && (
   <>
@@ -5351,4 +5164,47 @@ rowTablaProductosDia: {
   minWidth: "1100px",
 },
 
+moveIconButton: {
+  border: "none",
+  background: "#d97706",
+  color: "#fff",
+  width: "40px",
+  height: "40px",
+  borderRadius: "10px",
+  cursor: "pointer",
+  fontSize: "16px",
+},
+
+smallDarkButton: {
+  border: "none",
+  background: "#7f1d1d",
+  color: "#fff",
+  width: "40px",
+  height: "40px",
+  borderRadius: "10px",
+  cursor: "pointer",
+  fontSize: "16px",
+},
+
+saveIconButton: {
+  border: "none",
+  background: "#1d4ed8",
+  color: "#fff",
+  width: "40px",
+  height: "40px",
+  borderRadius: "10px",
+  cursor: "pointer",
+  fontSize: "16px",
+},
+
+viewIconButton: {
+  border: "none",
+  background: "#059669",
+  color: "#fff",
+  width: "40px",
+  height: "40px",
+  borderRadius: "10px",
+  cursor: "pointer",
+  fontSize: "16px",
+},
 };
