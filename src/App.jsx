@@ -3092,11 +3092,130 @@ const consultarProductosPorDia = () => {
       </div>
 
       <div style={styles.headerActions}>
-        <button style={styles.secondaryButton}>
+        <button
+          style={styles.secondaryButton}
+          onClick={() => {
+            setProductoEditando(null);
+            setProductoForm({
+              nombre: "",
+              codigo: "",
+              precio: "",
+              categoria: "",
+              stock: "",
+              activo: true,
+            });
+            setVista("productos");
+            setMostrarFormularioProducto(true);
+          }}
+        >
           Crear alimento
         </button>
       </div>
     </div>
+
+    {mostrarFormularioProducto && (
+      <div style={{ ...styles.box, marginBottom: 20 }}>
+        <div style={styles.pageHeaderSmall}>
+          <h2 style={{ margin: 0 }}>
+            {productoEditando ? "Editar alimento" : "Crear alimento"}
+          </h2>
+
+          <button
+            style={styles.outlineButton}
+            onClick={() => {
+              setMostrarFormularioProducto(false);
+              setProductoEditando(null);
+              setProductoForm({
+                nombre: "",
+                codigo: "",
+                precio: "",
+                categoria: "",
+                stock: "",
+                activo: true,
+              });
+            }}
+          >
+            Cerrar
+          </button>
+        </div>
+
+        <form
+          onSubmit={productoEditando ? actualizarProducto : crearProducto}
+          style={styles.form}
+        >
+          <div style={styles.filtersGrid}>
+            <div style={styles.filterField}>
+              <label style={styles.label}>Nombre</label>
+              <input
+                type="text"
+                value={productoForm.nombre}
+                onChange={(e) =>
+                  setProductoForm({ ...productoForm, nombre: e.target.value })
+                }
+                style={styles.input}
+                required
+              />
+            </div>
+
+            <div style={styles.filterField}>
+              <label style={styles.label}>Código</label>
+              <input
+                type="text"
+                value={productoForm.codigo}
+                onChange={(e) =>
+                  setProductoForm({ ...productoForm, codigo: e.target.value })
+                }
+                style={styles.input}
+              />
+            </div>
+
+            <div style={styles.filterField}>
+              <label style={styles.label}>Precio</label>
+              <input
+                type="number"
+                step="0.01"
+                value={productoForm.precio}
+                onChange={(e) =>
+                  setProductoForm({ ...productoForm, precio: e.target.value })
+                }
+                style={styles.input}
+                required
+              />
+            </div>
+
+            <div style={styles.filterField}>
+              <label style={styles.label}>Categoría</label>
+              <input
+                type="text"
+                value={productoForm.categoria}
+                onChange={(e) =>
+                  setProductoForm({ ...productoForm, categoria: e.target.value })
+                }
+                style={styles.input}
+              />
+            </div>
+
+            <div style={styles.filterField}>
+              <label style={styles.label}>Stock inicial</label>
+              <input
+                type="number"
+                value={productoForm.stock}
+                onChange={(e) =>
+                  setProductoForm({ ...productoForm, stock: e.target.value })
+                }
+                style={styles.input}
+              />
+            </div>
+          </div>
+
+          <div style={styles.filterButtons}>
+            <button type="submit" style={styles.button}>
+              {productoEditando ? "Actualizar alimento" : "Guardar alimento"}
+            </button>
+          </div>
+        </form>
+      </div>
+    )}
 
     <div style={styles.box}>
       <div style={styles.pageHeaderSmall}>
@@ -3108,9 +3227,80 @@ const consultarProductosPorDia = () => {
           style={styles.searchInput}
         />
 
-        <button style={styles.button}>
-          Exportar
-        </button>
+        <div style={styles.headerActions}>
+          <select
+            value={filtroCategoriaProductos || ""}
+            onChange={(e) => setFiltroCategoriaProductos(e.target.value)}
+            style={styles.select}
+          >
+            <option value="">Todas las categorías</option>
+            {[...new Set(productos.map((p) => p.categoria).filter(Boolean))].map(
+              (categoria) => (
+                <option key={categoria} value={categoria}>
+                  {categoria}
+                </option>
+              )
+            )}
+          </select>
+
+          <button
+            style={styles.button}
+            onClick={() => {
+              const filas = [
+                [
+                  "Nombre",
+                  "Código",
+                  "Precio",
+                  "% impuestos",
+                  "Precio final",
+                  "Categoría",
+                ],
+                ...productos
+                  .filter((p) => {
+                    const coincideTexto = String(p.nombre || "")
+                      .toLowerCase()
+                      .includes(busquedaProductos.toLowerCase());
+
+                    const coincideCategoria =
+                      !filtroCategoriaProductos ||
+                      String(p.categoria || "") === filtroCategoriaProductos;
+
+                    return coincideTexto && coincideCategoria;
+                  })
+                  .map((p) => {
+                    const impuesto = Number(p.impuesto || 0);
+                    const precio = Number(p.precio || 0);
+                    const precioFinal = precio + precio * (impuesto / 100);
+
+                    return [
+                      p.nombre || "",
+                      p.codigo || "",
+                      precio.toFixed(2),
+                      impuesto.toFixed(2),
+                      precioFinal.toFixed(2),
+                      p.categoria || "",
+                    ];
+                  }),
+              ];
+
+              const csv = filas
+                .map((fila) =>
+                  fila.map((valor) => `"${String(valor).replace(/"/g, '""')}"`).join(",")
+                )
+                .join("\n");
+
+              const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = "menu_cafeteria.csv";
+              link.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            Exportar
+          </button>
+        </div>
       </div>
 
       <div style={styles.tableWrap}>
@@ -3135,8 +3325,19 @@ const consultarProductosPorDia = () => {
               <th style={styles.th}></th>
               <th style={styles.th}></th>
               <th style={styles.th}>
-                <select style={styles.select}>
+                <select
+                  value={filtroCategoriaProductos || ""}
+                  onChange={(e) => setFiltroCategoriaProductos(e.target.value)}
+                  style={styles.select}
+                >
                   <option value="">Seleccionar</option>
+                  {[...new Set(productos.map((p) => p.categoria).filter(Boolean))].map(
+                    (categoria) => (
+                      <option key={categoria} value={categoria}>
+                        {categoria}
+                      </option>
+                    )
+                  )}
                 </select>
               </th>
               <th style={styles.th}></th>
@@ -3145,45 +3346,64 @@ const consultarProductosPorDia = () => {
 
           <tbody>
             {productos
-              .filter((p) =>
-                String(p.nombre || "")
+              .filter((p) => {
+                const coincideTexto = String(p.nombre || "")
                   .toLowerCase()
-                  .includes(busquedaProductos.toLowerCase())
-              )
-              .map((producto) => (
-                <tr key={producto.id}>
-                  <td style={styles.td}>
-                    <input type="checkbox" />
-                  </td>
-                  <td style={styles.td}>{producto.nombre}</td>
-                  <td style={styles.td}>{producto.codigo || ""}</td>
-                  <td style={styles.td}>
-                    {Number(producto.precio || 0).toFixed(4)}
-                  </td>
-                  <td style={styles.td}>0.0000</td>
-                  <td style={styles.td}>
-                    {Number(producto.precio || 0).toFixed(0)}
-                  </td>
-                  <td style={styles.td}>{producto.categoria}</td>
-                  <td style={styles.td}>
-                    <div style={{ display: "flex", gap: 10 }}>
-                      <button style={styles.smallDarkButton}>◉</button>
-                      <button
-                        style={styles.editIconButton}
-                        onClick={() => editarProducto(producto)}
-                      >
-                        ✎
-                      </button>
-                      <button
-                        style={styles.deleteIconButton}
-                        onClick={() => desactivarProducto(producto.id)}
-                      >
-                        🗑
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                  .includes(busquedaProductos.toLowerCase());
+
+                const coincideCategoria =
+                  !filtroCategoriaProductos ||
+                  String(p.categoria || "") === filtroCategoriaProductos;
+
+                return coincideTexto && coincideCategoria;
+              })
+              .map((producto) => {
+                const precio = Number(producto.precio || 0);
+                const impuesto = Number(producto.impuesto || 0);
+                const precioFinal = precio + precio * (impuesto / 100);
+
+                return (
+                  <tr key={producto.id}>
+                    <td style={styles.td}>
+                      <input type="checkbox" />
+                    </td>
+                    <td style={styles.td}>{producto.nombre}</td>
+                    <td style={styles.td}>{producto.codigo || ""}</td>
+                    <td style={styles.td}>{precio.toFixed(4)}</td>
+                    <td style={styles.td}>{impuesto.toFixed(4)}</td>
+                    <td style={styles.td}>{precioFinal.toFixed(2)}</td>
+                    <td style={styles.td}>{producto.categoria || ""}</td>
+                    <td style={styles.td}>
+                      <div style={{ display: "flex", gap: 10 }}>
+                        <button
+                          style={styles.smallDarkButton}
+                          onClick={() => alert(`Producto: ${producto.nombre}`)}
+                        >
+                          ◉
+                        </button>
+
+                        <button
+                          style={styles.editIconButton}
+                          onClick={() => {
+                            editarProducto(producto);
+                            setProductoEditando(producto);
+                            setMostrarFormularioProducto(true);
+                          }}
+                        >
+                          ✎
+                        </button>
+
+                        <button
+                          style={styles.deleteIconButton}
+                          onClick={() => desactivarProducto(producto.id)}
+                        >
+                          🗑
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
           </tbody>
         </table>
       </div>
