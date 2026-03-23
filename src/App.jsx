@@ -140,6 +140,7 @@ const [recargasFiltros, setRecargasFiltros] = useState({
   ]);
 
   const [vistaVentasInterna, setVistaVentasInterna] = useState("consultar");
+  const [menuComidasAbierto, setMenuComidasAbierto] = useState(true);
 
    const [ventasFiltros, setVentasFiltros] = useState({
   tipo_fecha: "created_at",
@@ -2063,25 +2064,40 @@ const consultarProductosPorDia = () => {
           </button>
 
           <button
-            style={vista === "productos" ? styles.menuButtonActive : styles.menuButton}
-            onClick={() => setVista("productos")}
-          >
-            Productos
-          </button>
+  style={
+    vista === "productos" || vista === "inventario"
+      ? styles.menuButtonActive
+      : styles.menuButton
+  }
+  onClick={() => setMenuComidasAbierto(!menuComidasAbierto)}
+>
+  Comidas
+</button>
 
-          <button
-            style={vista === "alumnos" ? styles.menuButtonActive : styles.menuButton}
-            onClick={() => setVista("alumnos")}
-          >
-            Alumnos
-          </button>
+{menuComidasAbierto && (
+  <div style={styles.subMenu}>
+    <button
+      style={styles.subMenuButton}
+      onClick={() => setVista("productos")}
+    >
+      Menú Cafetería
+    </button>
 
-          <button
-            style={vista === "inventario" ? styles.menuButtonActive : styles.menuButton}
-            onClick={() => setVista("inventario")}
-          >
-            Inventario
-          </button>
+    <button
+      style={styles.subMenuButton}
+      onClick={() => setVista("inventario")}
+    >
+      Stock
+    </button>
+  </div>
+)}
+
+<button
+  style={vista === "alumnos" ? styles.menuButtonActive : styles.menuButton}
+  onClick={() => setVista("alumnos")}
+>
+  Alumnos
+</button>
 
          <button
   style={vista === "recargas" ? styles.menuButtonActive : styles.menuButton}
@@ -3070,10 +3086,8 @@ const consultarProductosPorDia = () => {
           <>
             <div style={styles.pageHeader}>
               <div>
-                <h1 style={styles.dashboardTitle}>Productos</h1>
-                <p style={styles.dashboardSubtitle}>
-                  Crear y visualizar productos de la institución
-                </p>
+                <h1 style={styles.dashboardTitle}>Menú Cafetería</h1>
+<p style={styles.dashboardSubtitle}>Crear y visualizar alimentos de la institución</p>                
               </div>
 
               <button style={styles.refreshButton} onClick={cargarProductos}>
