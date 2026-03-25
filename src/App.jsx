@@ -2118,14 +2118,22 @@ const consultarProductosPorDia = () => {
 {menuComidasAbierto && (
   <div style={styles.subMenu}>
     <button
-      style={styles.subMenuButton}
+      style={
+        vista === "productos"
+          ? styles.subMenuButtonActive
+          : styles.subMenuButton
+      }
       onClick={() => setVista("productos")}
     >
       Menú Cafetería
     </button>
 
     <button
-      style={styles.subMenuButton}
+      style={
+        vista === "inventario"
+          ? styles.subMenuButtonActive
+          : styles.subMenuButton
+      }
       onClick={() => setVista("inventario")}
     >
       Stock
@@ -2160,7 +2168,11 @@ const consultarProductosPorDia = () => {
 {menuVentasAbierto && (
   <div style={styles.subMenu}>
     <button
-      style={styles.subMenuButton}
+      style={
+        vista === "ventas" && vistaVentasInterna === "registrar"
+          ? styles.subMenuButtonActive
+          : styles.subMenuButton
+      }
       onClick={() => {
         setVista("ventas");
         setVistaVentasInterna("registrar");
@@ -2170,7 +2182,11 @@ const consultarProductosPorDia = () => {
     </button>
 
     <button
-      style={styles.subMenuButton}
+      style={
+        vista === "ventas" && vistaVentasInterna === "consultar"
+          ? styles.subMenuButtonActive
+          : styles.subMenuButton
+      }
       onClick={() => {
         setVista("ventas");
         setVistaVentasInterna("consultar");
@@ -2208,21 +2224,33 @@ const consultarProductosPorDia = () => {
 {menuReportesAbierto && (
   <div style={styles.subMenu}>
     <button
-      style={styles.subMenuButton}
+      style={
+        vista === "reporte_cierre"
+          ? styles.subMenuButtonActive
+          : styles.subMenuButton
+      }
       onClick={() => setVista("reporte_cierre")}
     >
       Cierre de caja
     </button>
 
     <button
-      style={styles.subMenuButton}
+      style={
+        vista === "reporte_productos"
+          ? styles.subMenuButtonActive
+          : styles.subMenuButton
+      }
       onClick={() => setVista("reporte_productos")}
     >
       Productos vendidos
     </button>
 
     <button
-      style={styles.subMenuButton}
+      style={
+        vista === "reporte_productos_dia"
+          ? styles.subMenuButtonActive
+          : styles.subMenuButton
+      }
       onClick={() => setVista("reporte_productos_dia")}
     >
       Productos por día
@@ -5626,6 +5654,17 @@ subMenuButton: {
   fontSize: 14,
 },
 
+subMenuButtonActive: {
+  padding: "8px 10px",
+  border: "none",
+  background: "#3b82f6",
+  color: "#fff",
+  borderRadius: 8,
+  cursor: "pointer",
+  textAlign: "left",
+  fontSize: 14,
+},
+
 card: {
   background: "#fff",
   borderRadius: "18px",
@@ -5781,5 +5820,16 @@ viewIconButton: {
   borderRadius: "10px",
   cursor: "pointer",
   fontSize: "16px",
+},
+
+subMenuButtonActive: {
+  padding: "8px 10px",
+  border: "none",
+  background: "#3b82f6",
+  color: "#fff",
+  borderRadius: 8,
+  cursor: "pointer",
+  textAlign: "left",
+  fontSize: 14,
 },
 };
