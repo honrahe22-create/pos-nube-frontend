@@ -1028,31 +1028,35 @@ const exportarVentasExcel = () => {
   };
 
   const cargarAlumnos = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const institucionId = obtenerInstitucionActivaId();
+  try {
+    const token = localStorage.getItem("token");
+    const institucionId = obtenerInstitucionActivaId();
 
-      if (!token || !institucionId) return;
+    if (!token || !institucionId) return;
 
-      const res = await fetch(
-        `${API_URL}/api/alumnos?institucion_id=${institucionId}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-
-      const data = await res.json();
-
-      if (res.ok) {
-        setAlumnos(Array.isArray(data) ? data : []);
-      } else {
-        setAlumnos([]);
+    const res = await fetch(
+      `${API_URL}/api/alumnos?institucion_id=${institucionId}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
       }
-    } catch (error) {
-      console.error("Error cargando alumnos:", error);
+    );
+
+    const data = await res.json();
+
+    // 🔵 DEBUG
+    console.log("institucionId:", institucionId);
+    console.log("respuesta alumnos:", data);
+
+    if (res.ok) {
+      setAlumnos(Array.isArray(data) ? data : []);
+    } else {
       setAlumnos([]);
     }
-  };
+  } catch (error) {
+    console.error("Error cargando alumnos:", error);
+    setAlumnos([]);
+  }
+};
 
   const cargarRecargas = async () => {
     try {
