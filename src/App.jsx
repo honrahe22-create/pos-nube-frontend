@@ -140,13 +140,24 @@ const [recargasFiltros, setRecargasFiltros] = useState({
   ]);
 
   const [vistaVentasInterna, setVistaVentasInterna] = useState("consultar");
-  const [menuComidasAbierto, setMenuComidasAbierto] = useState(true);
-  const [busquedaProductos, setBusquedaProductos] = useState("");
+const [menuComidasAbierto, setMenuComidasAbierto] = useState(true);
+const [busquedaProductos, setBusquedaProductos] = useState("");
 const [busquedaInventario, setBusquedaInventario] = useState("");
 
 const [mostrarFormularioProducto, setMostrarFormularioProducto] = useState(false);
 const [filtroCategoriaProductos, setFiltroCategoriaProductos] = useState("");
 const [productoEditando, setProductoEditando] = useState(null);
+
+const [modoNuevaOrden, setModoNuevaOrden] = useState("consumidor_final");
+const [tipoUsuarioNuevaOrden, setTipoUsuarioNuevaOrden] = useState("TODOS");
+const [busquedaUsuarioNuevaOrden, setBusquedaUsuarioNuevaOrden] = useState("");
+const [codigoBarraNuevaOrden, setCodigoBarraNuevaOrden] = useState("");
+const [busquedaProductoNuevaOrden, setBusquedaProductoNuevaOrden] = useState("");
+const [categoriaNuevaOrden, setCategoriaNuevaOrden] = useState("TODOS");
+const [localNuevaOrden, setLocalNuevaOrden] = useState("PRINCIPAL");
+const [fechaNuevaOrden, setFechaNuevaOrden] = useState(
+  new Date().toISOString().slice(0, 10)
+);
 
    const [ventasFiltros, setVentasFiltros] = useState({
   tipo_fecha: "created_at",
@@ -3967,214 +3978,482 @@ const consultarProductosPorDia = () => {
             </div>
 
             <div style={styles.ventasTabs}>
-              <button
-                type="button"
-                style={
-                  vistaVentasInterna === "registrar"
-                    ? styles.ventasTabActive
-                    : styles.ventasTab
-                }
-                onClick={() => setVistaVentasInterna("registrar")}
-              >
-                Registrar venta
-              </button>
+  <button
+    type="button"
+    style={
+      vistaVentasInterna === "registrar"
+        ? styles.ventasTabActive
+        : styles.ventasTab
+    }
+    onClick={() => setVistaVentasInterna("registrar")}
+  >
+    Nueva Orden
+  </button>
 
-              <button
-                type="button"
-                style={
-                  vistaVentasInterna === "consultar"
-                    ? styles.ventasTabActive
-                    : styles.ventasTab
-                }
-                onClick={() => setVistaVentasInterna("consultar")}
-              >
-                Consultar ventas
-              </button>
-            </div>
+  <button
+    type="button"
+    style={
+      vistaVentasInterna === "consultar"
+        ? styles.ventasTabActive
+        : styles.ventasTab
+    }
+    onClick={() => setVistaVentasInterna("consultar")}
+  >
+    Consultar ventas
+  </button>
+</div>
 
-            {vistaVentasInterna === "registrar" && (
-              <div style={styles.twoColumnWide}>
-                <div style={styles.box}>
-                  <h3>Nueva venta</h3>
+           {vistaVentasInterna === "registrar" && (
+  <div style={styles.box}>
+    <div
+      style={{
+        background: "#2528b8",
+        color: "#fff",
+        padding: "20px 24px",
+        borderRadius: "16px 16px 0 0",
+        margin: "-24px -24px 20px -24px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 12,
+        flexWrap: "wrap",
+      }}
+    >
+      <h2 style={{ margin: 0, fontSize: "24px" }}>Nueva Orden</h2>
 
-                  <form onSubmit={crearVenta} style={styles.form}>
-                    <select
-                      value={ventaForm.metodo_pago}
-                      onChange={(e) =>
-                        setVentaForm({ ...ventaForm, metodo_pago: e.target.value })
-                      }
-                      style={styles.input}
-                      required
-                    >
-                      <option value="EFECTIVO">Efectivo</option>
-                      <option value="TRANSFERENCIA">Transferencia</option>
-                      <option value="RECARGA">Recarga</option>
-                    </select>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <button
+          type="button"
+          style={styles.secondaryButton}
+          onClick={() => setModoNuevaOrden("identificar")}
+        >
+          Identificar usuario
+        </button>
 
-                    {ventaForm.metodo_pago === "RECARGA" && (
-                      <select
-                        value={ventaForm.alumno_id}
-                        onChange={(e) =>
-                          setVentaForm({ ...ventaForm, alumno_id: e.target.value })
-                        }
-                        style={styles.input}
-                        required
-                      >
-                        <option value="">Seleccione un alumno</option>
-                        {alumnosActivos.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {`${a.nombres || ""} ${a.apellidos || ""} | Saldo: ${formatearMoneda(
-                              a.saldo
-                            )}`}
-                          </option>
-                        ))}
-                      </select>
-                    )}
+        <button
+          type="button"
+          style={styles.outlineButton}
+          onClick={() => setModoNuevaOrden("consumidor_final")}
+        >
+          Consumidor Final
+        </button>
+      </div>
+    </div>
 
-                    {ventaItemsCalculados.map((item, index) => (
-                      <div key={index} style={styles.itemVentaCard}>
-                        <select
-                          value={item.producto_id}
-                          onChange={(e) =>
-                            actualizarItemVenta(index, "producto_id", e.target.value)
-                          }
-                          style={styles.input}
-                          required
-                        >
-                          <option value="">Seleccione un producto</option>
-                          {productosActivos.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {`${p.nombre} | Stock: ${Number(p.stock || 0)} | ${formatearMoneda(
-                                p.precio
-                              )}`}
-                            </option>
-                          ))}
-                        </select>
+    {modoNuevaOrden === "identificar" && (
+      <div style={{ ...styles.box, marginBottom: 20, padding: 20 }}>
+        <div style={styles.filtersGrid}>
+          <div style={styles.filterField}>
+            <label style={styles.label}>Tipo de usuario</label>
+            <select
+              value={tipoUsuarioNuevaOrden}
+              onChange={(e) => setTipoUsuarioNuevaOrden(e.target.value)}
+              style={styles.input}
+            >
+              <option value="TODOS">Todos</option>
+              <option value="ESTUDIANTE">Estudiante</option>
+              <option value="PADRE">Padre</option>
+              <option value="PROFESOR">Profesor</option>
+            </select>
+          </div>
 
-                        <input
-                          type="number"
-                          min="1"
-                          placeholder="Cantidad"
-                          value={item.cantidad}
-                          onChange={(e) =>
-                            actualizarItemVenta(index, "cantidad", e.target.value)
-                          }
-                          style={styles.input}
-                          required
-                        />
+          <div style={styles.filterFieldWide}>
+            <label style={styles.label}>Buscar usuario / código</label>
+            <input
+              type="text"
+              value={busquedaUsuarioNuevaOrden}
+              onChange={(e) => setBusquedaUsuarioNuevaOrden(e.target.value)}
+              style={styles.input}
+              placeholder="Buscar usuario / código"
+            />
+          </div>
+        </div>
 
-                        <div style={styles.itemVentaResumen}>
-                          <span>Precio: {formatearMoneda(item.precio)}</span>
-                          <span>Total: {formatearMoneda(item.total)}</span>
-                        </div>
+        <div style={{ marginTop: 16 }}>
+          {alumnosActivos.filter((a) => {
+            const texto = busquedaUsuarioNuevaOrden.toLowerCase();
+            const nombre = `${a.nombres || ""} ${a.apellidos || ""}`.toLowerCase();
+            const codigo = String(a.codigo || a.cedula || "").toLowerCase();
 
-                        <button
-                          type="button"
-                          style={styles.smallDangerButton}
-                          onClick={() => eliminarItemVenta(index)}
-                        >
-                          Quitar ítem
-                        </button>
-                      </div>
+            return !texto || nombre.includes(texto) || codigo.includes(texto);
+          }).length === 0 ? (
+            <p style={{ color: "#6b7280", margin: 0 }}>No se encontraron resultados.</p>
+          ) : (
+            <div style={styles.tableWrap}>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>Nombre</th>
+                    <th style={styles.th}>Código</th>
+                    <th style={styles.th}>Saldo</th>
+                    <th style={styles.th}>Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {alumnosActivos
+                    .filter((a) => {
+                      const texto = busquedaUsuarioNuevaOrden.toLowerCase();
+                      const nombre = `${a.nombres || ""} ${a.apellidos || ""}`.toLowerCase();
+                      const codigo = String(a.codigo || a.cedula || "").toLowerCase();
+
+                      return !texto || nombre.includes(texto) || codigo.includes(texto);
+                    })
+                    .slice(0, 10)
+                    .map((a) => (
+                      <tr key={a.id}>
+                        <td style={styles.td}>{`${a.nombres || ""} ${a.apellidos || ""}`}</td>
+                        <td style={styles.td}>{a.codigo || a.cedula || "-"}</td>
+                        <td style={styles.td}>{formatearMoneda(a.saldo || 0)}</td>
+                        <td style={styles.td}>
+                          <button
+                            type="button"
+                            style={styles.button}
+                            onClick={() => {
+                              setVentaForm({
+                                ...ventaForm,
+                                alumno_id: a.id,
+                              });
+                              setModoNuevaOrden("consumidor_final");
+                            }}
+                          >
+                            Seleccionar
+                          </button>
+                        </td>
+                      </tr>
                     ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+
+    <div style={styles.twoColumnWide}>
+      <div style={styles.box}>
+        <label style={styles.label}>Escanea el código de barras</label>
+        <input
+          type="text"
+          placeholder="Código de barras"
+          value={codigoBarraNuevaOrden}
+          onChange={(e) => setCodigoBarraNuevaOrden(e.target.value)}
+          style={styles.input}
+        />
+
+        <div style={{ height: 12 }} />
+
+        <input
+          type="text"
+          placeholder="Busca productos"
+          value={busquedaProductoNuevaOrden}
+          onChange={(e) => setBusquedaProductoNuevaOrden(e.target.value)}
+          style={styles.input}
+        />
+
+        <div style={{ height: 20 }} />
+
+        <h3 style={{ marginTop: 0 }}>Categorías</h3>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <button
+            type="button"
+            style={
+              categoriaNuevaOrden === "TODOS"
+                ? styles.ventasTabActive
+                : styles.ventasTab
+            }
+            onClick={() => setCategoriaNuevaOrden("TODOS")}
+          >
+            Más vendidos
+          </button>
+
+          {[...new Set(productosActivos.map((p) => p.categoria).filter(Boolean))].map(
+            (categoria) => (
+              <button
+                key={categoria}
+                type="button"
+                style={
+                  categoriaNuevaOrden === categoria
+                    ? styles.ventasTabActive
+                    : styles.ventasTab
+                }
+                onClick={() => setCategoriaNuevaOrden(categoria)}
+              >
+                {categoria}
+              </button>
+            )
+          )}
+        </div>
+      </div>
+
+      <div style={styles.box}>
+        <p
+          style={{
+            textAlign: "center",
+            fontSize: "18px",
+            color: "#111827",
+            marginTop: 0,
+          }}
+        >
+          Configura la compra, da click en los productos para seleccionarlos o escanéa el código de barras
+        </p>
+
+        <div
+          style={{
+            border: "2px solid #2f3ddb",
+            borderRadius: 14,
+            padding: 16,
+            marginBottom: 20,
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 16,
+          }}
+        >
+          <div>
+            <label style={styles.label}>Local</label>
+            <select
+              value={localNuevaOrden}
+              onChange={(e) => setLocalNuevaOrden(e.target.value)}
+              style={styles.input}
+            >
+              <option value="PRINCIPAL">PRINCIPAL</option>
+            </select>
+          </div>
+
+          <div>
+            <label style={styles.label}>Fecha de la orden</label>
+            <input
+              type="date"
+              value={fechaNuevaOrden}
+              onChange={(e) => setFechaNuevaOrden(e.target.value)}
+              style={styles.input}
+            />
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            gap: 18,
+          }}
+        >
+          {productosActivos
+            .filter((p) => {
+              const coincideTexto = String(p.nombre || "")
+                .toLowerCase()
+                .includes(busquedaProductoNuevaOrden.toLowerCase());
+
+              const coincideCategoria =
+                categoriaNuevaOrden === "TODOS" ||
+                !categoriaNuevaOrden ||
+                String(p.categoria || "") === categoriaNuevaOrden;
+
+              return coincideTexto && coincideCategoria;
+            })
+            .map((producto) => (
+              <div
+                key={producto.id}
+                style={{
+                  borderRadius: 16,
+                  background: "#fff",
+                  boxShadow: "0 8px 20px rgba(0,0,0,0.06)",
+                  padding: 16,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: "flex", gap: 14 }}>
+                  <div
+                    style={{
+                      width: 110,
+                      height: 90,
+                      borderRadius: 14,
+                      background: "#dbe7ff",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "34px",
+                    }}
+                  >
+                    🍽️
+                  </div>
+
+                  <div style={{ flex: 1 }}>
+                    <strong style={{ display: "block", marginBottom: 6 }}>
+                      {producto.nombre}
+                    </strong>
+                    <div style={{ marginBottom: 6 }}>
+                      Costo: {formatearMoneda(producto.precio)}
+                    </div>
+                    <div
+                      style={{
+                        display: "inline-block",
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        background:
+                          Number(producto.stock || 0) > 3 ? "#d1fae5" : "#fee2e2",
+                        color:
+                          Number(producto.stock || 0) > 3 ? "#065f46" : "#991b1b",
+                        fontWeight: "bold",
+                        fontSize: "13px",
+                      }}
+                    >
+                      Stock: {Number(producto.stock || 0)}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  style={styles.button}
+                  onClick={() => {
+                    const existe = ventaForm.items.find(
+                      (i) => Number(i.producto_id) === Number(producto.id)
+                    );
+
+                    if (existe) {
+                      setVentaForm({
+                        ...ventaForm,
+                        items: ventaForm.items.map((i) =>
+                          Number(i.producto_id) === Number(producto.id)
+                            ? { ...i, cantidad: Number(i.cantidad || 0) + 1 }
+                            : i
+                        ),
+                      });
+                    } else {
+                      setVentaForm({
+                        ...ventaForm,
+                        items: [
+                          ...ventaForm.items,
+                          { producto_id: producto.id, cantidad: 1 },
+                        ],
+                      });
+                    }
+                  }}
+                >
+                  Agregar producto
+                </button>
+              </div>
+            ))}
+        </div>
+
+        <div style={{ height: 20 }} />
+
+        <div style={styles.box}>
+          <h3 style={{ marginTop: 0 }}>Resumen de orden</h3>
+
+          {ventaItemsCalculados.length === 0 ? (
+            <p>No hay productos agregados.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {ventaItemsCalculados.map((item, index) => (
+                <div key={index} style={styles.itemVentaCard}>
+                  <div style={styles.itemVentaResumen}>
+                    <span>{item.nombre || "Producto"}</span>
+                    <span>Cant: {item.cantidad}</span>
+                    <span>Total: {formatearMoneda(item.total)}</span>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <button
+                      type="button"
+                      style={styles.outlineButton}
+                      onClick={() =>
+                        actualizarItemVenta(index, "cantidad", Math.max(1, Number(item.cantidad || 1) - 1))
+                      }
+                    >
+                      -
+                    </button>
 
                     <button
                       type="button"
-                      style={styles.secondaryButton}
-                      onClick={agregarItemVenta}
-                    >
-                      Agregar producto
-                    </button>
-
-                    <input
-                      type="text"
-                      placeholder="Observación"
-                      value={ventaForm.observacion}
-                      onChange={(e) =>
-                        setVentaForm({ ...ventaForm, observacion: e.target.value })
+                      style={styles.outlineButton}
+                      onClick={() =>
+                        actualizarItemVenta(index, "cantidad", Number(item.cantidad || 0) + 1)
                       }
-                      style={styles.input}
-                    />
-
-                    {ventaForm.metodo_pago === "RECARGA" && alumnoVentaSeleccionado && (
-                      <div style={styles.infoBox}>
-                        <strong>Saldo disponible:</strong>{" "}
-                        {formatearMoneda(alumnoVentaSeleccionado.saldo)}
-                      </div>
-                    )}
-
-                    <div style={styles.totalVentaBox}>
-                      Total venta: {formatearMoneda(totalVentaCalculado)}
-                    </div>
-
-                    <button type="submit" style={styles.button}>
-                      Guardar venta
+                    >
+                      +
                     </button>
-                  </form>
-                </div>
 
-                <div style={styles.box}>
-                  <h3>Resumen rápido</h3>
-
-                  <div style={styles.gridMini}>
-                    <div style={styles.summaryCard}>
-                      <span style={styles.summaryLabel}>Ventas registradas</span>
-                      <strong style={styles.summaryValue}>{ventas.length}</strong>
-                    </div>
-
-                    <div style={styles.summaryCard}>
-                      <span style={styles.summaryLabel}>Total vendido</span>
-                      <strong style={styles.summaryValue}>
-                        {formatearMoneda(
-                          ventas.reduce((acc, v) => acc + Number(v.total || 0), 0)
-                        )}
-                      </strong>
-                    </div>
-
-                    <div style={styles.summaryCard}>
-                      <span style={styles.summaryLabel}>Productos activos</span>
-                      <strong style={styles.summaryValue}>{productosActivos.length}</strong>
-                    </div>
-
-                    <div style={styles.summaryCard}>
-                      <span style={styles.summaryLabel}>Alumnos activos</span>
-                      <strong style={styles.summaryValue}>{alumnosActivos.length}</strong>
-                    </div>
+                    <button
+                      type="button"
+                      style={styles.smallDangerButton}
+                      onClick={() => eliminarItemVenta(index)}
+                    >
+                      Quitar
+                    </button>
                   </div>
-
-                  <div style={{ height: 20 }} />
-
-                  <h3 style={{ marginTop: 0 }}>Últimas ventas</h3>
-
-                  {ventasFiltradas.length === 0 ? (
-                    <p>No hay ventas registradas.</p>
-                  ) : (
-                    <div style={styles.tableWrap}>
-                      <table style={styles.table}>
-                        <thead>
-                          <tr>
-                            <th style={styles.th}>Fecha</th>
-                            <th style={styles.th}>Método</th>
-                            <th style={styles.th}>Total</th>
-                            <th style={styles.th}>Alumno</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {ventasFiltradas.slice(0, 8).map((v) => (
-                            <tr key={v.id}>
-                              <td style={styles.td}>{formatearFechaHora(v.fecha_base)}</td>
-                              <td style={styles.td}>{v.metodo_visual}</td>
-                              <td style={styles.td}>{formatearMoneda(v.total)}</td>
-                              <td style={styles.td}>{v.alumno_nombre}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
                 </div>
-              </div>
-            )}
+              ))}
+            </div>
+          )}
+
+          <div style={{ height: 16 }} />
+
+          <select
+            value={ventaForm.metodo_pago}
+            onChange={(e) =>
+              setVentaForm({ ...ventaForm, metodo_pago: e.target.value })
+            }
+            style={styles.input}
+          >
+            <option value="EFECTIVO">Efectivo</option>
+            <option value="TRANSFERENCIA">Transferencia</option>
+            <option value="RECARGA">Recarga</option>
+          </select>
+
+          <div style={{ height: 12 }} />
+
+          <input
+            type="text"
+            placeholder="Observación"
+            value={ventaForm.observacion}
+            onChange={(e) =>
+              setVentaForm({ ...ventaForm, observacion: e.target.value })
+            }
+            style={styles.input}
+          />
+
+          {ventaForm.metodo_pago === "RECARGA" && alumnoVentaSeleccionado && (
+            <div style={styles.infoBox}>
+              <strong>Saldo disponible:</strong>{" "}
+              {formatearMoneda(alumnoVentaSeleccionado.saldo)}
+            </div>
+          )}
+
+          <div style={{ height: 12 }} />
+
+          <div style={styles.totalVentaBox}>
+            Total venta: {formatearMoneda(totalVentaCalculado)}
+          </div>
+
+          <div style={styles.filterButtons}>
+            <button type="submit" style={styles.button} onClick={crearVenta}>
+              Generar venta
+            </button>
+
+            <button
+              type="button"
+              style={styles.cancelButton}
+              onClick={() =>
+                setVentaForm({
+                  alumno_id: "",
+                  metodo_pago: "EFECTIVO",
+                  observacion: "",
+                  items: [{ producto_id: "", cantidad: 1 }],
+                })
+              }
+            >
+              Cancelar orden
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
             {vistaVentasInterna === "consultar" && (
               <>
