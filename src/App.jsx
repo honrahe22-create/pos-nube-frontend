@@ -55,6 +55,7 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [mensaje, setMensaje] = useState("");
   const [cargando, setCargando] = useState(false);
+  const [loginInstitucionId, setLoginInstitucionId] = useState("");
 
   const [usuario, setUsuario] = useState(() => {
     const guardado = localStorage.getItem("usuario");
@@ -954,11 +955,20 @@ const exportarVentasExcel = () => {
     setMensaje("");
     setCargando(true);
 
+    if (!loginInstitucionId) {
+  setMensaje("Debes seleccionar una institución");
+  setCargando(false);
+  return;
+}
     try {
       const res = await fetch(`${API_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ correo, password }),
+        body: JSON.stringify({
+  correo,
+  password,
+  institucion_id: Number(loginInstitucionId),
+}),
       });
 
       const data = await res.json();
@@ -972,14 +982,20 @@ const exportarVentasExcel = () => {
       localStorage.setItem("usuario", JSON.stringify(data.usuario));
       setUsuario(data.usuario);
 
-      const institucionIdLogin = normalizarInstitucionId(data.usuario?.institucion_id);
-      if (institucionIdLogin) {
-        localStorage.setItem("institucionSeleccionadaId", String(institucionIdLogin));
-        setInstitucionSeleccionadaId(institucionIdLogin);
-      } else {
-        localStorage.removeItem("institucionSeleccionadaId");
-        setInstitucionSeleccionadaId(null);
-      }
+      const institucionIdLogin =
+  Number(loginInstitucionId) ||
+  normalizarInstitucionId(data.usuario?.institucion_id);
+
+if (institucionIdLogin) {
+  localStorage.setItem(
+    "institucionSeleccionadaId",
+    String(institucionIdLogin)
+  );
+  setInstitucionSeleccionadaId(institucionIdLogin);
+} else {
+  localStorage.removeItem("institucionSeleccionadaId");
+  setInstitucionSeleccionadaId(null);
+}
 
       setCuentaForm((prev) => ({
         ...prev,
@@ -2056,16 +2072,32 @@ const consultarProductosPorDia = () => {
     limpiarFiltrosCierreCaja();
   };
 
- if (!usuario) {
+if (!usuario) {
   return (
     <div style={styles.page}>
       <div style={styles.loginCard}>
         <h1 style={styles.title}>¡Bienvenido a POSNUBE!</h1>
         <p style={styles.subtitle}>
-          Maneja tus ventas y recargas de forma rápida y segura
+          Selecciona la institución e inicia sesión
         </p>
 
         <form onSubmit={handleLogin} style={styles.form}>
+          <label style={styles.label}>Institución</label>
+          <select
+            value={loginInstitucionId}
+            onChange={(e) => setLoginInstitucionId(e.target.value)}
+            style={styles.input}
+            required
+          >
+            <option value="">Seleccione una institución</option>
+
+            {INSTITUCIONES.map((inst) => (
+              <option key={inst.id} value={inst.id}>
+                {inst.nombre}
+              </option>
+            ))}
+          </select>
+
           <label style={styles.label}>Correo electrónico</label>
           <input
             type="email"
