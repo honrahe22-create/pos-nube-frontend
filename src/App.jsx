@@ -141,6 +141,8 @@ const [recargasFiltros, setRecargasFiltros] = useState({
 
   const [vistaVentasInterna, setVistaVentasInterna] = useState("consultar");
 const [menuComidasAbierto, setMenuComidasAbierto] = useState(true);
+const [menuVentasAbierto, setMenuVentasAbierto] = useState(false);
+const [menuReportesAbierto, setMenuReportesAbierto] = useState(false);
 const [busquedaProductos, setBusquedaProductos] = useState("");
 const [busquedaInventario, setBusquedaInventario] = useState("");
 
@@ -1955,29 +1957,50 @@ const consultarProductosPorDia = () => {
     }
   }, [usuario, institucionSeleccionadaId]);
 
-  useEffect(() => {
-    if (!usuario) return;
+ useEffect(() => {
+  if (!usuario) return;
 
-    if (vista === "productos" || vista === "inventario" || vista === "ventas") {
-      cargarProductos();
-    }
+  if (vista === "productos" || vista === "inventario" || vista === "ventas") {
+    cargarProductos();
+  }
 
-    if (vista === "alumnos" || vista === "recargas" || vista === "ventas") {
-      cargarAlumnos();
-    }
+  if (vista === "alumnos" || vista === "recargas" || vista === "ventas") {
+    cargarAlumnos();
+  }
 
-    if (vista === "dashboard" || vista === "reportes") {
-      cargarResumen();
-    }
+  if (vista === "dashboard" || vista === "reportes") {
+    cargarResumen();
+  }
 
-    if (vista === "recargas" || vista === "reportes") {
-      cargarRecargas();
-    }
+  if (vista === "recargas" || vista === "reportes") {
+    cargarRecargas();
+  }
 
-    if (vista === "ventas" || vista === "reportes") {
-      cargarVentas();
-    }
-  }, [vista]);
+  if (vista === "ventas" || vista === "reportes") {
+    cargarVentas();
+  }
+
+  // 🔵 abrir menú comidas
+  if (vista === "productos" || vista === "inventario") {
+    setMenuComidasAbierto(true);
+  }
+
+  // 🔵 abrir menú ventas
+  if (vista === "ventas") {
+    setMenuVentasAbierto(true);
+  }
+
+  // 🔵 abrir menú reportes
+  if (
+    vista === "reportes" ||
+    vista === "reporte_cierre" ||
+    vista === "reporte_productos" ||
+    vista === "reporte_productos_dia"
+  ) {
+    setMenuReportesAbierto(true);
+  }
+
+}, [vista]);
 
   const cerrarSesion = () => {
     localStorage.removeItem("token");
@@ -2127,11 +2150,35 @@ const consultarProductosPorDia = () => {
   style={vista === "ventas" ? styles.menuButtonActive : styles.menuButton}
   onClick={() => {
     setVista("ventas");
-    setVistaVentasInterna("consultar");
+    setMenuVentasAbierto(!menuVentasAbierto);
   }}
 >
   Ventas
 </button>
+
+{menuVentasAbierto && (
+  <div style={styles.subMenu}>
+    <button
+      style={styles.subMenuButton}
+      onClick={() => {
+        setVista("ventas");
+        setVistaVentasInterna("registrar");
+      }}
+    >
+      Nueva Orden
+    </button>
+
+    <button
+      style={styles.subMenuButton}
+      onClick={() => {
+        setVista("ventas");
+        setVistaVentasInterna("consultar");
+      }}
+    >
+      Consultar ventas
+    </button>
+  </div>
+)}
 
 <button
   style={vista === "egresos_diarios" ? styles.menuButtonActive : styles.menuButton}
@@ -2149,17 +2196,15 @@ const consultarProductosPorDia = () => {
       ? styles.menuButtonActive
       : styles.menuButton
   }
-  onClick={() => setVista("reportes")}
+  onClick={() => {
+    setVista("reportes");
+    setMenuReportesAbierto(!menuReportesAbierto);
+  }}
 >
   Reportes
 </button>
 
-{(
-  vista === "reportes" ||
-  vista === "reporte_cierre" ||
-  vista === "reporte_productos" ||
-  vista === "reporte_productos_dia"
-) && (
+{menuReportesAbierto && (
   <div style={styles.subMenu}>
     <button
       style={styles.subMenuButton}
