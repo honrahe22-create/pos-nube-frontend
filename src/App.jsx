@@ -708,13 +708,14 @@ const totalRecargasVista = useMemo(() => {
 
   const limpiarFormularioProducto = () => {
     setProductoForm({
-      nombre: "",
-      descripcion: "",
-      precio: "",
-      stock: "",
-      stock_minimo: "",
-      categoria: "",
-    });
+  nombre: "",
+  codigo: "",
+  precio: "",
+  categoria: "",
+  stock: "",
+  imagen: "",
+  activo: true,
+});
     setEditandoProductoId(null);
   };
 
@@ -3156,14 +3157,15 @@ const consultarProductosPorDia = () => {
           style={styles.secondaryButton}
           onClick={() => {
             setProductoEditando(null);
-            setProductoForm({
-              nombre: "",
-              codigo: "",
-              precio: "",
-              categoria: "",
-              stock: "",
-              activo: true,
-            });
+           setProductoForm({
+  nombre: "",
+  codigo: "",
+  precio: "",
+  categoria: "",
+  stock: "",
+  imagen: "",
+  activo: true,
+});
             setVista("productos");
             setMostrarFormularioProducto(true);
           }}
@@ -3186,13 +3188,14 @@ const consultarProductosPorDia = () => {
               setMostrarFormularioProducto(false);
               setProductoEditando(null);
               setProductoForm({
-                nombre: "",
-                codigo: "",
-                precio: "",
-                categoria: "",
-                stock: "",
-                activo: true,
-              });
+  nombre: "",
+  codigo: "",
+  precio: "",
+  categoria: "",
+  stock: "",
+  imagen: "",
+  activo: true,
+});
             }}
           >
             Cerrar
@@ -3267,6 +3270,22 @@ const consultarProductosPorDia = () => {
               />
             </div>
           </div>
+
+          <div style={styles.filterField}>
+  <label style={styles.label}>Imagen (URL)</label>
+  <input
+    type="text"
+    value={productoForm.imagen || ""}
+    onChange={(e) =>
+      setProductoForm({
+        ...productoForm,
+        imagen: e.target.value,
+      })
+    }
+    style={styles.input}
+    placeholder="https://..."
+  />
+</div>
 
           <div style={styles.filterButtons}>
             <button type="submit" style={styles.button}>
@@ -4310,20 +4329,28 @@ const consultarProductosPorDia = () => {
                 }}
               >
                 <div style={{ display: "flex", gap: 14 }}>
-                  <div
-                    style={{
-                      width: 110,
-                      height: 90,
-                      borderRadius: 14,
-                      background: "#dbe7ff",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: "34px",
-                    }}
-                  >
-                    🍽️
-                  </div>
+                 <div
+  style={{
+    width: 110,
+    height: 90,
+    borderRadius: 14,
+    background: "#eee",
+    overflow: "hidden",
+  }}
+>
+  <img
+    src={
+      producto.imagen ||
+      "https://cdn-icons-png.flaticon.com/512/1046/1046784.png"
+    }
+    alt=""
+    style={{
+      width: "100%",
+      height: "100%",
+      objectFit: "cover",
+    }}
+  />
+</div>
 
                   <div style={{ flex: 1 }}>
                     <strong style={{ display: "block", marginBottom: 6 }}>
