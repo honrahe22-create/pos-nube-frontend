@@ -3519,226 +3519,325 @@ const consultarProductosPorDia = () => {
 )}
 
         {vista === "alumnos" && (
-          <>
-            <div style={styles.pageHeader}>
-              <div>
-                <h1 style={styles.dashboardTitle}>Alumnos</h1>
-                <p style={styles.dashboardSubtitle}>
-                  Crear y visualizar alumnos de la institución
-                </p>
-              </div>
+  <>
+    <div style={styles.pageHeader}>
+      <div>
+        <h1 style={styles.dashboardTitle}>Alumnos</h1>
+        <p style={styles.dashboardSubtitle}>
+          Crear y visualizar alumnos de la institución
+        </p>
+      </div>
 
-              <div style={styles.headerActions}>
-                <select
-                  value={filtroAlumnos}
-                  onChange={(e) => setFiltroAlumnos(e.target.value)}
-                  style={styles.select}
-                >
-                  <option value="todos">Todos</option>
-                  <option value="activos">Activos</option>
-                  <option value="inactivos">Inactivos</option>
-                </select>
+      <div style={styles.headerActions}>
+        <select
+          value={filtroAlumnos}
+          onChange={(e) => setFiltroAlumnos(e.target.value)}
+          style={styles.select}
+        >
+          <option value="todos">Todos</option>
+          <option value="activos">Activos</option>
+          <option value="inactivos">Inactivos</option>
+        </select>
 
-                <button style={styles.refreshButton} onClick={cargarAlumnos}>
-                  Refrescar
-                </button>
-              </div>
-            </div>
+        <button style={styles.refreshButton} onClick={cargarAlumnos}>
+          Refrescar
+        </button>
+      </div>
+    </div>
 
-            <div style={styles.twoColumn}>
-              <div style={styles.box}>
-                <h3>{editandoAlumnoId ? "Editar alumno" : "Nuevo alumno"}</h3>
+    <div style={styles.twoColumn}>
+      <div style={styles.box}>
+        <h3>{editandoAlumnoId ? "Editar alumno" : "Nuevo alumno"}</h3>
 
-                <form
-                  onSubmit={editandoAlumnoId ? actualizarAlumno : crearAlumno}
-                  style={styles.form}
-                >
-                  <input
-                    type="text"
-                    placeholder="Cédula"
-                    value={alumnoForm.cedula}
-                    onChange={(e) =>
-                      setAlumnoForm({ ...alumnoForm, cedula: e.target.value })
-                    }
-                    style={styles.input}
-                    required
-                  />
+        <form
+          onSubmit={editandoAlumnoId ? actualizarAlumno : crearAlumno}
+          style={styles.form}
+        >
+          <input
+            type="text"
+            placeholder="Cédula"
+            value={alumnoForm.cedula}
+            onChange={(e) =>
+              setAlumnoForm({ ...alumnoForm, cedula: e.target.value })
+            }
+            style={styles.input}
+            required
+          />
 
-                  <input
-                    type="text"
-                    placeholder="Nombres"
-                    value={alumnoForm.nombres}
-                    onChange={(e) =>
-                      setAlumnoForm({ ...alumnoForm, nombres: e.target.value })
-                    }
-                    style={styles.input}
-                    required
-                  />
+          <input
+            type="text"
+            placeholder="Nombres"
+            value={alumnoForm.nombres}
+            onChange={(e) =>
+              setAlumnoForm({ ...alumnoForm, nombres: e.target.value })
+            }
+            style={styles.input}
+            required
+          />
 
-                  <input
-                    type="text"
-                    placeholder="Apellidos"
-                    value={alumnoForm.apellidos}
-                    onChange={(e) =>
-                      setAlumnoForm({ ...alumnoForm, apellidos: e.target.value })
-                    }
-                    style={styles.input}
-                    required
-                  />
+          <input
+            type="text"
+            placeholder="Apellidos"
+            value={alumnoForm.apellidos}
+            onChange={(e) =>
+              setAlumnoForm({ ...alumnoForm, apellidos: e.target.value })
+            }
+            style={styles.input}
+            required
+          />
 
-                  <input
-                    type="text"
-                    placeholder="Curso"
-                    value={alumnoForm.curso}
-                    onChange={(e) =>
-                      setAlumnoForm({ ...alumnoForm, curso: e.target.value })
-                    }
-                    style={styles.input}
-                  />
+          <input
+            type="text"
+            placeholder="Curso"
+            value={alumnoForm.curso}
+            onChange={(e) =>
+              setAlumnoForm({ ...alumnoForm, curso: e.target.value })
+            }
+            style={styles.input}
+          />
 
-                  <input
-                    type="text"
-                    placeholder="Paralelo"
-                    value={alumnoForm.paralelo}
-                    onChange={(e) =>
-                      setAlumnoForm({ ...alumnoForm, paralelo: e.target.value })
-                    }
-                    style={styles.input}
-                  />
+          <input
+            type="text"
+            placeholder="Paralelo"
+            value={alumnoForm.paralelo}
+            onChange={(e) =>
+              setAlumnoForm({ ...alumnoForm, paralelo: e.target.value })
+            }
+            style={styles.input}
+          />
 
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="Saldo inicial"
-                    value={alumnoForm.saldo}
-                    onChange={(e) =>
-                      setAlumnoForm({ ...alumnoForm, saldo: e.target.value })
-                    }
-                    style={styles.input}
-                  />
+          <input
+            type="number"
+            step="0.01"
+            placeholder="Saldo inicial"
+            value={alumnoForm.saldo}
+            onChange={(e) =>
+              setAlumnoForm({ ...alumnoForm, saldo: e.target.value })
+            }
+            style={styles.input}
+          />
 
-                  <button type="submit" style={styles.button}>
-                    {editandoAlumnoId ? "Actualizar alumno" : "Guardar alumno"}
-                  </button>
+          <button type="submit" style={styles.button}>
+            {editandoAlumnoId ? "Actualizar alumno" : "Guardar alumno"}
+          </button>
 
-                  {editandoAlumnoId && (
-                    <button
-                      type="button"
-                      style={styles.cancelButton}
-                      onClick={limpiarFormularioAlumno}
-                    >
-                      Cancelar edición
-                    </button>
-                  )}
-                </form>
-              </div>
+          {editandoAlumnoId && (
+            <button
+              type="button"
+              style={styles.cancelButton}
+              onClick={limpiarFormularioAlumno}
+            >
+              Cancelar edición
+            </button>
+          )}
+        </form>
+      </div>
 
-              <div style={styles.box}>
-                <h3>
-                  Lista de alumnos{" "}
-                  <span style={styles.filterLabel}>
-                    {filtroAlumnos === "activos"
-                      ? "(Activos)"
-                      : filtroAlumnos === "inactivos"
-                      ? "(Inactivos)"
-                      : "(Todos)"}
-                  </span>
-                </h3>
+      <div style={styles.box}>
+        <div style={styles.pageHeaderSmall}>
+          <h3 style={{ margin: 0 }}>
+            Lista de alumnos{" "}
+            <span style={styles.filterLabel}>
+              {filtroAlumnos === "activos"
+                ? "(Activos)"
+                : filtroAlumnos === "inactivos"
+                ? "(Inactivos)"
+                : "(Todos)"}
+            </span>
+          </h3>
 
-                {alumnosFiltrados.length === 0 ? (
-                  <p>No hay alumnos para este filtro.</p>
-                ) : (
-                  <div style={styles.tableWrap}>
-                    <table style={styles.table}>
-                      <thead>
-                        <tr>
-                          <th style={styles.th}>Cédula</th>
-                          <th style={styles.th}>Nombres</th>
-                          <th style={styles.th}>Apellidos</th>
-                          <th style={styles.th}>Curso</th>
-                          <th style={styles.th}>Paralelo</th>
-                          <th style={styles.th}>Saldo</th>
-                          <th style={styles.th}>Estado</th>
-                          <th style={styles.th}>Editar</th>
-                          <th style={styles.th}>Eliminar</th>
-                          <th style={styles.th}>Restaurar</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {alumnosFiltrados.map((a) => {
-                          const activo = a.activo !== false;
+          <button
+            type="button"
+            style={styles.secondaryButton}
+            onClick={() => {
+              const filas = [
+                [
+                  "ID",
+                  "Nombres",
+                  "Apellidos",
+                  "Cédula",
+                  "Curso",
+                  "Paralelo",
+                  "Saldo",
+                  "Estado",
+                ],
+                ...alumnosFiltrados.map((a) => [
+                  a.id || "",
+                  a.nombres || "",
+                  a.apellidos || "",
+                  obtenerCedulaAlumno(a) || "",
+                  a.curso || "",
+                  a.paralelo || "",
+                  Number(a.saldo || 0).toFixed(2),
+                  a.activo !== false ? "Activo" : "Inactivo",
+                ]),
+              ];
 
-                          return (
-                            <tr key={a.id}>
-                              <td style={styles.td}>{obtenerCedulaAlumno(a) || "-"}</td>
-                              <td style={styles.td}>{a.nombres || "-"}</td>
-                              <td style={styles.td}>{a.apellidos || "-"}</td>
-                              <td style={styles.td}>{a.curso || "-"}</td>
-                              <td style={styles.td}>{a.paralelo || "-"}</td>
-                              <td style={styles.td}>{formatearMoneda(a.saldo)}</td>
-                              <td style={styles.td}>
-                                <span
-                                  style={activo ? styles.badgeActive : styles.badgeInactive}
-                                >
-                                  {activo ? "Activo" : "Inactivo"}
-                                </span>
-                              </td>
-                              <td style={styles.td}>
-                                <button
-                                  type="button"
-                                  style={
-                                    activo
-                                      ? styles.editIconButton
-                                      : styles.disabledIconButton
-                                  }
-                                  onClick={() => activo && iniciarEdicionAlumno(a)}
-                                  disabled={!activo}
-                                  title="Editar alumno"
-                                >
-                                  ✏️
-                                </button>
-                              </td>
-                              <td style={styles.td}>
-                                <button
-                                  type="button"
-                                  style={
-                                    activo
-                                      ? styles.deleteIconButton
-                                      : styles.disabledIconButton
-                                  }
-                                  onClick={() => activo && eliminarAlumno(a)}
-                                  disabled={!activo}
-                                  title="Eliminar alumno"
-                                >
-                                  🗑️
-                                </button>
-                              </td>
-                              <td style={styles.td}>
-                                <button
-                                  type="button"
-                                  style={
-                                    !activo
-                                      ? styles.restoreIconButton
-                                      : styles.disabledIconButton
-                                  }
-                                  onClick={() => !activo && restaurarAlumno(a)}
-                                  disabled={activo}
-                                  title="Restaurar alumno"
-                                >
-                                  ↩️
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
+              const csv = filas
+                .map((fila) =>
+                  fila.map((valor) => `"${String(valor).replace(/"/g, '""')}"`).join(",")
+                )
+                .join("\n");
+
+              const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = "alumnos.csv";
+              link.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            Exportar
+          </button>
+        </div>
+
+        {alumnosFiltrados.length === 0 ? (
+          <p>No hay alumnos para este filtro.</p>
+        ) : (
+          <div style={styles.tableWrap}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>ID</th>
+                  <th style={styles.th}>Nombre</th>
+                  <th style={styles.th}>Apellido</th>
+                  <th style={styles.th}>Cédula</th>
+                  <th style={styles.th}>Curso</th>
+                  <th style={styles.th}>Paralelo</th>
+                  <th style={styles.th}>Saldo</th>
+                  <th style={styles.th}>Estado</th>
+                  <th style={styles.th}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {alumnosFiltrados.map((a) => {
+                  const activo = a.activo !== false;
+
+                  return (
+                    <tr key={a.id}>
+                      <td style={styles.td}>{a.id || "-"}</td>
+                      <td style={styles.td}>{a.nombres || "-"}</td>
+                      <td style={styles.td}>{a.apellidos || "-"}</td>
+                      <td style={styles.td}>{obtenerCedulaAlumno(a) || "-"}</td>
+                      <td style={styles.td}>{a.curso || "-"}</td>
+                      <td style={styles.td}>{a.paralelo || "-"}</td>
+                      <td style={styles.td}>{formatearMoneda(a.saldo)}</td>
+                      <td style={styles.td}>
+                        <span
+                          style={activo ? styles.badgeActive : styles.badgeInactive}
+                        >
+                          {activo ? "Activo" : "Inactivo"}
+                        </span>
+                      </td>
+
+                      <td style={styles.td}>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <button
+                            type="button"
+                            style={styles.smallDarkButton}
+                            onClick={() =>
+                              alert(
+                                `Alumno: ${a.nombres || ""} ${a.apellidos || ""}\nCédula: ${
+                                  obtenerCedulaAlumno(a) || "-"
+                                }\nSaldo: ${formatearMoneda(a.saldo)}`
+                              )
+                            }
+                            title="Ver alumno"
+                          >
+                            👁
+                          </button>
+
+                          <button
+                            type="button"
+                            style={styles.saveIconButton}
+                            onClick={() =>
+                              alert(
+                                `Recargas mensuales de ${a.nombres || ""} ${a.apellidos || ""} aún no implementadas.`
+                              )
+                            }
+                            title="Recargas mensuales"
+                          >
+                            📄
+                          </button>
+
+                          <button
+                            type="button"
+                            style={
+                              activo
+                                ? styles.editIconButton
+                                : styles.disabledIconButton
+                            }
+                            onClick={() => activo && iniciarEdicionAlumno(a)}
+                            disabled={!activo}
+                            title="Editar alumno"
+                          >
+                            ✏️
+                          </button>
+
+                          <button
+                            type="button"
+                            style={styles.moveIconButton}
+                            onClick={() =>
+                              alert(
+                                `Notificación de saldo bajo para ${a.nombres || ""} ${a.apellidos || ""} aún no implementada.`
+                              )
+                            }
+                            title="Enviar notificación saldo bajo"
+                          >
+                            📨
+                          </button>
+
+                          <button
+                            type="button"
+                            style={styles.outlineButton}
+                            onClick={() =>
+                              alert(
+                                `Vista de dispositivo para ${a.nombres || ""} ${a.apellidos || ""} aún no implementada.`
+                              )
+                            }
+                            title="Ver dispositivo"
+                          >
+                            💳
+                          </button>
+
+                          <button
+                            type="button"
+                            style={
+                              activo
+                                ? styles.deleteIconButton
+                                : styles.disabledIconButton
+                            }
+                            onClick={() => activo && eliminarAlumno(a)}
+                            disabled={!activo}
+                            title="Eliminar alumno"
+                          >
+                            🗑️
+                          </button>
+
+                          {!activo && (
+                            <button
+                              type="button"
+                              style={styles.restoreIconButton}
+                              onClick={() => restaurarAlumno(a)}
+                              title="Restaurar alumno"
+                            >
+                              ↩️
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
+      </div>
+    </div>
+  </>
+)}
 
         {vista === "inventario" && (
   <>
@@ -5648,17 +5747,6 @@ subMenuButton: {
   padding: "8px 10px",
   border: "none",
   background: "#e5e7eb",
-  borderRadius: 8,
-  cursor: "pointer",
-  textAlign: "left",
-  fontSize: 14,
-},
-
-subMenuButtonActive: {
-  padding: "8px 10px",
-  border: "none",
-  background: "#3b82f6",
-  color: "#fff",
   borderRadius: 8,
   cursor: "pointer",
   textAlign: "left",
