@@ -161,6 +161,29 @@ const [fechaNuevaOrden, setFechaNuevaOrden] = useState(
   new Date().toISOString().slice(0, 10)
 );
 
+//////////////////////////////
+// PROFESORES
+//////////////////////////////
+
+const [vistaProfesoresInterna, setVistaProfesoresInterna] = useState("profesores");
+
+const [profesores, setProfesores] = useState([]);
+
+const [filtroProfesores, setFiltroProfesores] = useState("todos");
+
+const [profesorForm, setProfesorForm] = useState({
+  cedula: "",
+  nombres: "",
+  apellidos: "",
+  email: "",
+  codigo: "",
+  telefono: "",
+  saldo: "",
+  es_profesor: true,
+});
+
+const [editandoProfesorId, setEditandoProfesorId] = useState(null);
+
    const [ventasFiltros, setVentasFiltros] = useState({
   tipo_fecha: "created_at",
   fecha_inicio: "",
@@ -2152,7 +2175,21 @@ const consultarProductosPorDia = () => {
   Alumnos
 </button>
 
-         <button
+<button
+  style={
+    vista === "profesores" || vista === "creditos_profesores"
+      ? styles.menuButtonActive
+      : styles.menuButton
+  }
+  onClick={() => {
+    setVista("profesores");
+    setVistaProfesoresInterna("profesores");
+  }}
+>
+  Profesores
+</button>
+
+<button
   style={vista === "recargas" ? styles.menuButtonActive : styles.menuButton}
   onClick={() => setVista("recargas")}
 >
@@ -3843,6 +3880,523 @@ const consultarProductosPorDia = () => {
   </>
 )}
 
+{vista === "profesores" && (
+  <>
+    <div style={styles.pageHeader}>
+      <div>
+        <h1 style={styles.dashboardTitle}>Profesores</h1>
+        <p style={styles.dashboardSubtitle}>
+          Gestión de profesores y créditos
+        </p>
+      </div>
+
+      <div style={styles.headerActions}>
+        <button
+          type="button"
+          style={
+            vistaProfesoresInterna === "profesores"
+              ? styles.ventasTabActive
+              : styles.ventasTab
+          }
+          onClick={() => setVistaProfesoresInterna("profesores")}
+        >
+          Profesores
+        </button>
+
+        <button
+          type="button"
+          style={
+            vistaProfesoresInterna === "creditos"
+              ? styles.ventasTabActive
+              : styles.ventasTab
+          }
+          onClick={() => setVistaProfesoresInterna("creditos")}
+        >
+          Créditos Profesores
+        </button>
+      </div>
+    </div>
+
+    {vistaProfesoresInterna === "profesores" && (
+      <div style={styles.twoColumn}>
+        <div style={styles.box}>
+          <h3>{editandoProfesorId ? "Editar profesor" : "Nuevo profesor"}</h3>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+
+              if (editandoProfesorId) {
+                setProfesores((prev) =>
+                  prev.map((p) =>
+                    p.id === editandoProfesorId
+                      ? { ...p, ...profesorForm }
+                      : p
+                  )
+                );
+              } else {
+                setProfesores((prev) => [
+                  {
+                    id: Date.now(),
+                    ...profesorForm,
+                    credito: Number(profesorForm.saldo || 0),
+                    activo: true,
+                  },
+                  ...prev,
+                ]);
+              }
+
+              setProfesorForm({
+                cedula: "",
+                nombres: "",
+                apellidos: "",
+                email: "",
+                codigo: "",
+                telefono: "",
+                saldo: "",
+                es_profesor: true,
+              });
+
+              setEditandoProfesorId(null);
+            }}
+            style={styles.form}
+          >
+            <input
+              type="text"
+              placeholder="Cédula / RUC"
+              value={profesorForm.cedula}
+              onChange={(e) =>
+                setProfesorForm({ ...profesorForm, cedula: e.target.value })
+              }
+              style={styles.input}
+              required
+            />
+
+            <input
+              type="text"
+              placeholder="Nombres"
+              value={profesorForm.nombres}
+              onChange={(e) =>
+                setProfesorForm({ ...profesorForm, nombres: e.target.value })
+              }
+              style={styles.input}
+              required
+            />
+
+            <input
+              type="text"
+              placeholder="Apellidos"
+              value={profesorForm.apellidos}
+              onChange={(e) =>
+                setProfesorForm({ ...profesorForm, apellidos: e.target.value })
+              }
+              style={styles.input}
+              required
+            />
+
+            <input
+              type="email"
+              placeholder="Email"
+              value={profesorForm.email}
+              onChange={(e) =>
+                setProfesorForm({ ...profesorForm, email: e.target.value })
+              }
+              style={styles.input}
+            />
+
+            <input
+              type="text"
+              placeholder="Código"
+              value={profesorForm.codigo}
+              onChange={(e) =>
+                setProfesorForm({ ...profesorForm, codigo: e.target.value })
+              }
+              style={styles.input}
+            />
+
+            <input
+              type="text"
+              placeholder="Teléfono"
+              value={profesorForm.telefono}
+              onChange={(e) =>
+                setProfesorForm({ ...profesorForm, telefono: e.target.value })
+              }
+              style={styles.input}
+            />
+
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Crédito"
+              value={profesorForm.saldo}
+              onChange={(e) =>
+                setProfesorForm({ ...profesorForm, saldo: e.target.value })
+              }
+              style={styles.input}
+            />
+
+            <button type="submit" style={styles.button}>
+              {editandoProfesorId ? "Actualizar profesor" : "Guardar profesor"}
+            </button>
+
+            {editandoProfesorId && (
+              <button
+                type="button"
+                style={styles.cancelButton}
+                onClick={() => {
+                  setEditandoProfesorId(null);
+                  setProfesorForm({
+                    cedula: "",
+                    nombres: "",
+                    apellidos: "",
+                    email: "",
+                    codigo: "",
+                    telefono: "",
+                    saldo: "",
+                    es_profesor: true,
+                  });
+                }}
+              >
+                Cancelar edición
+              </button>
+            )}
+          </form>
+        </div>
+
+        <div style={styles.box}>
+          <div style={styles.pageHeaderSmall}>
+            <h3 style={{ margin: 0 }}>Lista de profesores</h3>
+
+            <div style={styles.headerActions}>
+              <select
+                value={filtroProfesores}
+                onChange={(e) => setFiltroProfesores(e.target.value)}
+                style={styles.select}
+              >
+                <option value="todos">Todos</option>
+                <option value="activos">Activos</option>
+                <option value="inactivos">Inactivos</option>
+              </select>
+
+              <button
+                type="button"
+                style={styles.secondaryButton}
+                onClick={() => {
+                  const filas = [
+                    [
+                      "ID",
+                      "Nombre",
+                      "Apellido",
+                      "Cedula/Ruc",
+                      "Email",
+                      "Codigo",
+                      "Telefono",
+                      "Credito",
+                      "Estado",
+                    ],
+                    ...profesores.map((p) => [
+                      p.id || "",
+                      p.nombres || "",
+                      p.apellidos || "",
+                      p.cedula || "",
+                      p.email || "",
+                      p.codigo || "",
+                      p.telefono || "",
+                      Number(p.credito || p.saldo || 0).toFixed(2),
+                      p.activo !== false ? "Activo" : "Inactivo",
+                    ]),
+                  ];
+
+                  const csv = filas
+                    .map((fila) =>
+                      fila
+                        .map((valor) => `"${String(valor).replace(/"/g, '""')}"`)
+                        .join(",")
+                    )
+                    .join("\n");
+
+                  const blob = new Blob([csv], {
+                    type: "text/csv;charset=utf-8;",
+                  });
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement("a");
+                  link.href = url;
+                  link.download = "profesores.csv";
+                  link.click();
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                Exportar
+              </button>
+            </div>
+          </div>
+
+          {profesores.filter((p) => {
+            if (filtroProfesores === "todos") return true;
+            if (filtroProfesores === "inactivos") return p.activo === false;
+            return p.activo !== false;
+          }).length === 0 ? (
+            <p>No hay profesores para este filtro.</p>
+          ) : (
+            <div style={styles.tableWrap}>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>ID</th>
+                    <th style={styles.th}>Nombre</th>
+                    <th style={styles.th}>Apellido</th>
+                    <th style={styles.th}>Es profesor</th>
+                    <th style={styles.th}>Cédula/Ruc</th>
+                    <th style={styles.th}>Email</th>
+                    <th style={styles.th}>Código</th>
+                    <th style={styles.th}>Crédito</th>
+                    <th style={styles.th}>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {profesores
+                    .filter((p) => {
+                      if (filtroProfesores === "todos") return true;
+                      if (filtroProfesores === "inactivos") {
+                        return p.activo === false;
+                      }
+                      return p.activo !== false;
+                    })
+                    .map((p) => {
+                      const activo = p.activo !== false;
+
+                      return (
+                        <tr key={p.id}>
+                          <td style={styles.td}>{p.id || "-"}</td>
+                          <td style={styles.td}>{p.nombres || "-"}</td>
+                          <td style={styles.td}>{p.apellidos || "-"}</td>
+                          <td style={styles.td}>{p.es_profesor ? "Sí" : "No"}</td>
+                          <td style={styles.td}>{p.cedula || "-"}</td>
+                          <td style={styles.td}>{p.email || "-"}</td>
+                          <td style={styles.td}>{p.codigo || "-"}</td>
+                          <td style={styles.td}>
+                            {formatearMoneda(p.credito || p.saldo || 0)}
+                          </td>
+                          <td style={styles.td}>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              <button
+                                type="button"
+                                style={styles.smallDarkButton}
+                                onClick={() =>
+                                  alert(
+                                    `Profesor: ${p.nombres || ""} ${p.apellidos || ""}`
+                                  )
+                                }
+                                title="Ver"
+                              >
+                                👁
+                              </button>
+
+                              <button
+                                type="button"
+                                style={styles.editIconButton}
+                                onClick={() => {
+                                  setEditandoProfesorId(p.id);
+                                  setProfesorForm({
+                                    cedula: p.cedula || "",
+                                    nombres: p.nombres || "",
+                                    apellidos: p.apellidos || "",
+                                    email: p.email || "",
+                                    codigo: p.codigo || "",
+                                    telefono: p.telefono || "",
+                                    saldo: p.credito || p.saldo || "",
+                                    es_profesor: p.es_profesor !== false,
+                                  });
+                                }}
+                                title="Editar"
+                              >
+                                ✏️
+                              </button>
+
+                              <button
+                                type="button"
+                                style={styles.moveIconButton}
+                                onClick={() =>
+                                  alert(
+                                    `Notificación de saldo bajo para ${p.nombres || ""} ${p.apellidos || ""} aún no implementada.`
+                                  )
+                                }
+                                title="Saldo bajo"
+                              >
+                                📨
+                              </button>
+
+                              <button
+                                type="button"
+                                style={styles.outlineButton}
+                                onClick={() =>
+                                  alert(
+                                    `Ver dispositivo de ${p.nombres || ""} ${p.apellidos || ""} aún no implementado.`
+                                  )
+                                }
+                                title="Ver dispositivo"
+                              >
+                                💳
+                              </button>
+
+                              <button
+                                type="button"
+                                style={
+                                  activo
+                                    ? styles.deleteIconButton
+                                    : styles.disabledIconButton
+                                }
+                                onClick={() =>
+                                  activo &&
+                                  setProfesores((prev) =>
+                                    prev.map((item) =>
+                                      item.id === p.id
+                                        ? { ...item, activo: false }
+                                        : item
+                                    )
+                                  )
+                                }
+                                disabled={!activo}
+                                title="Eliminar"
+                              >
+                                🗑️
+                              </button>
+
+                              {!activo && (
+                                <button
+                                  type="button"
+                                  style={styles.restoreIconButton}
+                                  onClick={() =>
+                                    setProfesores((prev) =>
+                                      prev.map((item) =>
+                                        item.id === p.id
+                                          ? { ...item, activo: true }
+                                          : item
+                                      )
+                                    )
+                                  }
+                                  title="Restaurar"
+                                >
+                                  ↩️
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+
+    {vistaProfesoresInterna === "creditos" && (
+      <div style={styles.box}>
+        <div style={styles.pageHeaderSmall}>
+          <h3 style={{ margin: 0 }}>Créditos Profesores</h3>
+
+          <div style={styles.headerActions}>
+            <button
+              type="button"
+              style={styles.outlineButton}
+              onClick={() => setVistaProfesoresInterna("profesores")}
+            >
+              Volver a Profesores
+            </button>
+
+            <button
+              type="button"
+              style={styles.secondaryButton}
+              onClick={() => alert("Exportar créditos aún no implementado.")}
+            >
+              Exportar
+            </button>
+          </div>
+        </div>
+
+        <div style={styles.filtersGrid}>
+          <div style={styles.filterField}>
+            <label style={styles.label}>Fecha inicial</label>
+            <input type="date" style={styles.input} />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Fecha final</label>
+            <input type="date" style={styles.input} />
+          </div>
+
+          <div style={styles.filterFieldWide}>
+            <label style={styles.label}>Buscar</label>
+            <input
+              type="text"
+              placeholder="Buscar profesor"
+              style={styles.input}
+            />
+          </div>
+        </div>
+
+        <div style={styles.filterButtons}>
+          <button type="button" style={styles.button}>
+            Filtrar
+          </button>
+        </div>
+
+        <div style={{ marginTop: 20 }}>
+          <div style={styles.infoBox}>
+            Este módulo mostrará luego los pagos, consumos y movimientos de crédito
+            de profesores.
+          </div>
+        </div>
+
+        <div style={{ marginTop: 20 }}>
+          <div style={styles.tableWrap}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Profesor</th>
+                  <th style={styles.th}>Cédula</th>
+                  <th style={styles.th}>Crédito actual</th>
+                  <th style={styles.th}>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {profesores.length === 0 ? (
+                  <tr>
+                    <td style={styles.td} colSpan={4}>
+                      No hay profesores registrados.
+                    </td>
+                  </tr>
+                ) : (
+                  profesores.map((p) => (
+                    <tr key={p.id}>
+                      <td style={styles.td}>
+                        {`${p.nombres || ""} ${p.apellidos || ""}`}
+                      </td>
+                      <td style={styles.td}>{p.cedula || "-"}</td>
+                      <td style={styles.td}>
+                        {formatearMoneda(p.credito || p.saldo || 0)}
+                      </td>
+                      <td style={styles.td}>
+                        {p.activo !== false ? (
+                          <span style={styles.badgeActive}>Activo</span>
+                        ) : (
+                          <span style={styles.badgeInactive}>Inactivo</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    )}
+  </>
+)}
         {vista === "inventario" && (
   <>
     <div style={styles.pageHeader}>
