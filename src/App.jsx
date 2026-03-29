@@ -2118,20 +2118,23 @@ if (!usuario) {
             required
           />
 
-          <div style={styles.loginExtraRow}>
-            <button
-              type="button"
-              style={styles.linkButton}
-              onClick={() =>
-                alert(
-                  "La recuperación de contraseña aún no está implementada."
-                )
-              }
-            >
-              ¿Olvidaste tu contraseña?
-            </button>
-          </div>
+          <div style={{ textAlign: "center", marginTop: 10 }}>
+  <span style={{ color: "#475569", fontSize: 14 }}>
+    ¿No tienes cuenta?
+  </span>
+</div>
 
+<div style={styles.loginExtraRow}>
+  <button
+    type="button"
+    style={styles.linkButton}
+    onClick={() =>
+      alert("La creación de cuenta aún no está implementada.")
+    }
+  >
+    Crear cuenta
+  </button>
+</div>
           <button type="submit" style={styles.button} disabled={cargando}>
             {cargando ? "Ingresando..." : "Iniciar sesión"}
           </button>
