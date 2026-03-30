@@ -57,6 +57,20 @@ export default function App() {
   const [cargando, setCargando] = useState(false);
   const [loginInstitucionId, setLoginInstitucionId] = useState("");
 
+  const [mostrarCambiarAcceso, setMostrarCambiarAcceso] = useState(false);
+
+  const [cambiarAccesoForm, setCambiarAccesoForm] = useState({
+    institucion_id: "",
+    correo_actual: "",
+    password_actual: "",
+    nuevo_correo: "",
+    nueva_password: "",
+    confirmar_password: "",
+  });
+
+  const [mensajeCambiarAcceso, setMensajeCambiarAcceso] = useState("");
+  const [cargandoCambiarAcceso, setCargandoCambiarAcceso] = useState(false);
+
   const [usuario, setUsuario] = useState(() => {
     const guardado = localStorage.getItem("usuario");
     return guardado ? JSON.parse(guardado) : null;
@@ -2076,71 +2090,180 @@ if (!usuario) {
   return (
     <div style={styles.page}>
       <div style={styles.loginCard}>
-        <h1 style={styles.title}>¡Bienvenido a POSNUBE!</h1>
-        <p style={styles.subtitle}>
-          Selecciona la institución e inicia sesión
-        </p>
+        {!mostrarCambiarAcceso ? (
+          <>
+            <h1 style={styles.title}>¡Bienvenido a POSNUBE!</h1>
+            <p style={styles.subtitle}>
+              Selecciona la institución e inicia sesión
+            </p>
 
-        <form onSubmit={handleLogin} style={styles.form}>
-          <label style={styles.label}>Institución</label>
-          <select
-            value={loginInstitucionId}
-            onChange={(e) => setLoginInstitucionId(e.target.value)}
-            style={styles.input}
-            required
-          >
-            <option value="">Seleccione una institución</option>
+            <form onSubmit={handleLogin} style={styles.form}>
+              <label style={styles.label}>Institución</label>
+              <select
+                value={loginInstitucionId}
+                onChange={(e) => setLoginInstitucionId(e.target.value)}
+                style={styles.input}
+                required
+              >
+                <option value="">Seleccione una institución</option>
+                {INSTITUCIONES.map((inst) => (
+                  <option key={inst.id} value={inst.id}>
+                    {inst.nombre}
+                  </option>
+                ))}
+              </select>
 
-            {INSTITUCIONES.map((inst) => (
-              <option key={inst.id} value={inst.id}>
-                {inst.nombre}
-              </option>
-            ))}
-          </select>
+              <label style={styles.label}>Correo electrónico</label>
+              <input
+                type="email"
+                value={correo}
+                onChange={(e) => setCorreo(e.target.value)}
+                style={styles.input}
+                required
+              />
 
-          <label style={styles.label}>Correo electrónico</label>
-          <input
-            type="email"
-            placeholder="Coloca tu correo electrónico"
-            value={correo}
-            onChange={(e) => setCorreo(e.target.value)}
-            style={styles.input}
-            required
-          />
+              <label style={styles.label}>Contraseña</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                style={styles.input}
+                required
+              />
 
-          <label style={styles.label}>Contraseña</label>
-          <input
-            type="password"
-            placeholder="Coloca tu contraseña"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={styles.input}
-            required
-          />
+              <div style={styles.loginExtraRow}>
+                <button
+                  type="button"
+                  style={styles.linkButton}
+                  onClick={() => setMostrarCambiarAcceso(true)}
+                >
+                  Cambiar usuario / contraseña
+                </button>
+              </div>
 
-          <div style={{ textAlign: "center", marginTop: 10 }}>
-  <span style={{ color: "#475569", fontSize: 14 }}>
-    ¿No tienes cuenta?
-  </span>
-</div>
+              <button type="submit" style={styles.button} disabled={cargando}>
+                {cargando ? "Ingresando..." : "Iniciar sesión"}
+              </button>
+            </form>
 
-<div style={styles.loginExtraRow}>
-  <button
-    type="button"
-    style={styles.linkButton}
-    onClick={() =>
-      alert("La creación de cuenta aún no está implementada.")
-    }
-  >
-    Crear cuenta
-  </button>
-</div>
-          <button type="submit" style={styles.button} disabled={cargando}>
-            {cargando ? "Ingresando..." : "Iniciar sesión"}
-          </button>
-        </form>
+            {mensaje && <p style={styles.message}>{mensaje}</p>}
+          </>
+        ) : (
+          <>
+            <h1 style={styles.title}>Cambiar acceso</h1>
 
-        {mensaje && <p style={styles.message}>{mensaje}</p>}
+            <form onSubmit={handleCambiarAcceso} style={styles.form}>
+              <select
+                value={cambiarAccesoForm.institucion_id}
+                onChange={(e) =>
+                  setCambiarAccesoForm({
+                    ...cambiarAccesoForm,
+                    institucion_id: e.target.value,
+                  })
+                }
+                style={styles.input}
+                required
+              >
+                <option value="">Seleccione institución</option>
+                {INSTITUCIONES.map((inst) => (
+                  <option key={inst.id} value={inst.id}>
+                    {inst.nombre}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                type="email"
+                placeholder="Correo actual"
+                value={cambiarAccesoForm.correo_actual}
+                onChange={(e) =>
+                  setCambiarAccesoForm({
+                    ...cambiarAccesoForm,
+                    correo_actual: e.target.value,
+                  })
+                }
+                style={styles.input}
+                required
+              />
+
+              <input
+                type="password"
+                placeholder="Contraseña actual"
+                value={cambiarAccesoForm.password_actual}
+                onChange={(e) =>
+                  setCambiarAccesoForm({
+                    ...cambiarAccesoForm,
+                    password_actual: e.target.value,
+                  })
+                }
+                style={styles.input}
+                required
+              />
+
+              <input
+                type="email"
+                placeholder="Nuevo correo"
+                value={cambiarAccesoForm.nuevo_correo}
+                onChange={(e) =>
+                  setCambiarAccesoForm({
+                    ...cambiarAccesoForm,
+                    nuevo_correo: e.target.value,
+                  })
+                }
+                style={styles.input}
+                required
+              />
+
+              <input
+                type="password"
+                placeholder="Nueva contraseña"
+                value={cambiarAccesoForm.nueva_password}
+                onChange={(e) =>
+                  setCambiarAccesoForm({
+                    ...cambiarAccesoForm,
+                    nueva_password: e.target.value,
+                  })
+                }
+                style={styles.input}
+                required
+              />
+
+              <input
+                type="password"
+                placeholder="Confirmar contraseña"
+                value={cambiarAccesoForm.confirmar_password}
+                onChange={(e) =>
+                  setCambiarAccesoForm({
+                    ...cambiarAccesoForm,
+                    confirmar_password: e.target.value,
+                  })
+                }
+                style={styles.input}
+                required
+              />
+
+              <button
+                type="submit"
+                style={styles.button}
+                disabled={cargandoCambiarAcceso}
+              >
+                {cargandoCambiarAcceso ? "Guardando..." : "Guardar cambios"}
+              </button>
+
+              <button
+                type="button"
+                style={styles.outlineButton}
+                onClick={() => setMostrarCambiarAcceso(false)}
+              >
+                Volver
+              </button>
+            </form>
+
+            {mensajeCambiarAcceso && (
+              <p style={styles.message}>{mensajeCambiarAcceso}</p>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
