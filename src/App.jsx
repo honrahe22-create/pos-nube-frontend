@@ -2183,12 +2183,13 @@ if (!usuario) {
               <label style={styles.label}>Contraseña</label>
               <div style={styles.passwordWrap}>
                 <input
-                  type={verPasswordLogin ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  style={styles.inputPassword}
-                  required
-                />
+  type={verPasswordLogin ? "text" : "password"}
+  placeholder="Contraseña"
+  value={password}
+  onChange={(e) => setPassword(e.target.value)}
+  style={styles.inputPassword}
+  required
+/>
                 <button
                   type="button"
                   style={styles.eyeButton}
