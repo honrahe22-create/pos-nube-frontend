@@ -58,6 +58,17 @@ export default function App() {
   const [loginInstitucionId, setLoginInstitucionId] = useState("");
 
   const [mostrarCambiarAcceso, setMostrarCambiarAcceso] = useState(false);
+  const [mostrarCrearCuenta, setMostrarCrearCuenta] = useState(false);
+
+const [crearCuentaForm, setCrearCuentaForm] = useState({
+  institucion_id: "",
+  nombre: "",
+  correo: "",
+  password: "",
+  confirmar_password: "",
+});
+const [mensajeCrearCuenta, setMensajeCrearCuenta] = useState("");
+const [cargandoCrearCuenta, setCargandoCrearCuenta] = useState(false);
 
   const [cambiarAccesoForm, setCambiarAccesoForm] = useState({
     institucion_id: "",
@@ -984,6 +995,48 @@ const exportarVentasExcel = () => {
   institucion_id: Number(loginInstitucionId),
 }),
       });
+
+      const handleCrearCuenta = async (e) => {
+  e.preventDefault();
+  setMensajeCrearCuenta("");
+  setCargandoCrearCuenta(true);
+
+  if (crearCuentaForm.password !== crearCuentaForm.confirmar_password) {
+    setMensajeCrearCuenta("La confirmación de contraseña no coincide");
+    setCargandoCrearCuenta(false);
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_URL}/api/auth/crear-cuenta`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(crearCuentaForm),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      setMensajeCrearCuenta(data.message || "No se pudo crear la cuenta");
+      return;
+    }
+
+    setMensajeCrearCuenta("Cuenta creada correctamente");
+    setCrearCuentaForm({
+      institucion_id: "",
+      nombre: "",
+      correo: "",
+      password: "",
+      confirmar_password: "",
+    });
+  } catch (error) {
+    setMensajeCrearCuenta("No se pudo conectar con el servidor");
+  } finally {
+    setCargandoCrearCuenta(false);
+  }
+};
 
       const data = await res.json();
 
@@ -2090,11 +2143,11 @@ if (!usuario) {
   return (
     <div style={styles.page}>
       <div style={styles.loginCard}>
-        {!mostrarCambiarAcceso ? (
+        {!mostrarCambiarAcceso && !mostrarCrearCuenta ? (
           <>
             <h1 style={styles.title}>¡Bienvenido a POSNUBE!</h1>
             <p style={styles.subtitle}>
-              Selecciona la institución e inicia sesión
+              Selecciona la institución e inicia sesión.
             </p>
 
             <form onSubmit={handleLogin} style={styles.form}>
@@ -2123,21 +2176,44 @@ if (!usuario) {
               />
 
               <label style={styles.label}>Contraseña</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                style={styles.input}
-                required
-              />
+              <div style={styles.passwordWrap}>
+                <input
+                  type={verPasswordLogin ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  style={styles.inputPassword}
+                  required
+                />
+                <button
+                  type="button"
+                  style={styles.eyeButton}
+                  onClick={() => setVerPasswordLogin(!verPasswordLogin)}
+                >
+                  {verPasswordLogin ? "Ocultar" : "Ver"}
+                </button>
+              </div>
 
               <div style={styles.loginExtraRow}>
                 <button
                   type="button"
                   style={styles.linkButton}
-                  onClick={() => setMostrarCambiarAcceso(true)}
+                  onClick={() => {
+                    setMostrarCambiarAcceso(true);
+                    setMostrarCrearCuenta(false);
+                  }}
                 >
                   Cambiar usuario / contraseña
+                </button>
+
+                <button
+                  type="button"
+                  style={styles.linkButton}
+                  onClick={() => {
+                    setMostrarCrearCuenta(true);
+                    setMostrarCambiarAcceso(false);
+                  }}
+                >
+                  Crear cuenta
                 </button>
               </div>
 
@@ -2148,7 +2224,7 @@ if (!usuario) {
 
             {mensaje && <p style={styles.message}>{mensaje}</p>}
           </>
-        ) : (
+        ) : mostrarCambiarAcceso ? (
           <>
             <h1 style={styles.title}>Cambiar acceso</h1>
 
@@ -2186,19 +2262,28 @@ if (!usuario) {
                 required
               />
 
-              <input
-                type="password"
-                placeholder="Contraseña actual"
-                value={cambiarAccesoForm.password_actual}
-                onChange={(e) =>
-                  setCambiarAccesoForm({
-                    ...cambiarAccesoForm,
-                    password_actual: e.target.value,
-                  })
-                }
-                style={styles.input}
-                required
-              />
+              <div style={styles.passwordWrap}>
+                <input
+                  type={verPasswordActual ? "text" : "password"}
+                  placeholder="Contraseña actual"
+                  value={cambiarAccesoForm.password_actual}
+                  onChange={(e) =>
+                    setCambiarAccesoForm({
+                      ...cambiarAccesoForm,
+                      password_actual: e.target.value,
+                    })
+                  }
+                  style={styles.inputPassword}
+                  required
+                />
+                <button
+                  type="button"
+                  style={styles.eyeButton}
+                  onClick={() => setVerPasswordActual(!verPasswordActual)}
+                >
+                  {verPasswordActual ? "Ocultar" : "Ver"}
+                </button>
+              </div>
 
               <input
                 type="email"
@@ -2214,33 +2299,53 @@ if (!usuario) {
                 required
               />
 
-              <input
-                type="password"
-                placeholder="Nueva contraseña"
-                value={cambiarAccesoForm.nueva_password}
-                onChange={(e) =>
-                  setCambiarAccesoForm({
-                    ...cambiarAccesoForm,
-                    nueva_password: e.target.value,
-                  })
-                }
-                style={styles.input}
-                required
-              />
+              <div style={styles.passwordWrap}>
+                <input
+                  type={verPasswordNueva ? "text" : "password"}
+                  placeholder="Nueva contraseña"
+                  value={cambiarAccesoForm.nueva_password}
+                  onChange={(e) =>
+                    setCambiarAccesoForm({
+                      ...cambiarAccesoForm,
+                      nueva_password: e.target.value,
+                    })
+                  }
+                  style={styles.inputPassword}
+                  required
+                />
+                <button
+                  type="button"
+                  style={styles.eyeButton}
+                  onClick={() => setVerPasswordNueva(!verPasswordNueva)}
+                >
+                  {verPasswordNueva ? "Ocultar" : "Ver"}
+                </button>
+              </div>
 
-              <input
-                type="password"
-                placeholder="Confirmar contraseña"
-                value={cambiarAccesoForm.confirmar_password}
-                onChange={(e) =>
-                  setCambiarAccesoForm({
-                    ...cambiarAccesoForm,
-                    confirmar_password: e.target.value,
-                  })
-                }
-                style={styles.input}
-                required
-              />
+              <div style={styles.passwordWrap}>
+                <input
+                  type={verPasswordConfirmar ? "text" : "password"}
+                  placeholder="Confirmar contraseña"
+                  value={cambiarAccesoForm.confirmar_password}
+                  onChange={(e) =>
+                    setCambiarAccesoForm({
+                      ...cambiarAccesoForm,
+                      confirmar_password: e.target.value,
+                    })
+                  }
+                  style={styles.inputPassword}
+                  required
+                />
+                <button
+                  type="button"
+                  style={styles.eyeButton}
+                  onClick={() =>
+                    setVerPasswordConfirmar(!verPasswordConfirmar)
+                  }
+                >
+                  {verPasswordConfirmar ? "Ocultar" : "Ver"}
+                </button>
+              </div>
 
               <button
                 type="submit"
@@ -2253,7 +2358,10 @@ if (!usuario) {
               <button
                 type="button"
                 style={styles.outlineButton}
-                onClick={() => setMostrarCambiarAcceso(false)}
+                onClick={() => {
+                  setMostrarCambiarAcceso(false);
+                  setMensajeCambiarAcceso("");
+                }}
               >
                 Volver
               </button>
@@ -2261,6 +2369,130 @@ if (!usuario) {
 
             {mensajeCambiarAcceso && (
               <p style={styles.message}>{mensajeCambiarAcceso}</p>
+            )}
+          </>
+        ) : (
+          <>
+            <h1 style={styles.title}>Crear cuenta</h1>
+
+            <form onSubmit={handleCrearCuenta} style={styles.form}>
+              <select
+                value={crearCuentaForm.institucion_id}
+                onChange={(e) =>
+                  setCrearCuentaForm({
+                    ...crearCuentaForm,
+                    institucion_id: e.target.value,
+                  })
+                }
+                style={styles.input}
+                required
+              >
+                <option value="">Seleccione institución</option>
+                {INSTITUCIONES.map((inst) => (
+                  <option key={inst.id} value={inst.id}>
+                    {inst.nombre}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                type="text"
+                placeholder="Nombre"
+                value={crearCuentaForm.nombre}
+                onChange={(e) =>
+                  setCrearCuentaForm({
+                    ...crearCuentaForm,
+                    nombre: e.target.value,
+                  })
+                }
+                style={styles.input}
+                required
+              />
+
+              <input
+                type="email"
+                placeholder="Correo"
+                value={crearCuentaForm.correo}
+                onChange={(e) =>
+                  setCrearCuentaForm({
+                    ...crearCuentaForm,
+                    correo: e.target.value,
+                  })
+                }
+                style={styles.input}
+                required
+              />
+
+              <div style={styles.passwordWrap}>
+                <input
+                  type={verPasswordNueva ? "text" : "password"}
+                  placeholder="Contraseña"
+                  value={crearCuentaForm.password}
+                  onChange={(e) =>
+                    setCrearCuentaForm({
+                      ...crearCuentaForm,
+                      password: e.target.value,
+                    })
+                  }
+                  style={styles.inputPassword}
+                  required
+                />
+                <button
+                  type="button"
+                  style={styles.eyeButton}
+                  onClick={() => setVerPasswordNueva(!verPasswordNueva)}
+                >
+                  {verPasswordNueva ? "Ocultar" : "Ver"}
+                </button>
+              </div>
+
+              <div style={styles.passwordWrap}>
+                <input
+                  type={verPasswordConfirmar ? "text" : "password"}
+                  placeholder="Confirmar contraseña"
+                  value={crearCuentaForm.confirmar_password}
+                  onChange={(e) =>
+                    setCrearCuentaForm({
+                      ...crearCuentaForm,
+                      confirmar_password: e.target.value,
+                    })
+                  }
+                  style={styles.inputPassword}
+                  required
+                />
+                <button
+                  type="button"
+                  style={styles.eyeButton}
+                  onClick={() =>
+                    setVerPasswordConfirmar(!verPasswordConfirmar)
+                  }
+                >
+                  {verPasswordConfirmar ? "Ocultar" : "Ver"}
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                style={styles.button}
+                disabled={cargandoCrearCuenta}
+              >
+                {cargandoCrearCuenta ? "Creando..." : "Crear cuenta"}
+              </button>
+
+              <button
+                type="button"
+                style={styles.outlineButton}
+                onClick={() => {
+                  setMostrarCrearCuenta(false);
+                  setMensajeCrearCuenta("");
+                }}
+              >
+                Volver
+              </button>
+            </form>
+
+            {mensajeCrearCuenta && (
+              <p style={styles.message}>{mensajeCrearCuenta}</p>
             )}
           </>
         )}
