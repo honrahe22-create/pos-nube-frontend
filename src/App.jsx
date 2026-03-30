@@ -52,10 +52,15 @@ const formatearSoloHora = (valor) => {
 
 export default function App() {
   const [correo, setCorreo] = useState("");
-  const [password, setPassword] = useState("");
-  const [mensaje, setMensaje] = useState("");
-  const [cargando, setCargando] = useState(false);
-  const [loginInstitucionId, setLoginInstitucionId] = useState("");
+const [password, setPassword] = useState("");
+const [mensaje, setMensaje] = useState("");
+const [cargando, setCargando] = useState(false);
+const [loginInstitucionId, setLoginInstitucionId] = useState("");
+
+const [verPasswordLogin, setVerPasswordLogin] = useState(false);
+const [verPasswordActual, setVerPasswordActual] = useState(false);
+const [verPasswordNueva, setVerPasswordNueva] = useState(false);
+const [verPasswordConfirmar, setVerPasswordConfirmar] = useState(false);
 
   const [mostrarCambiarAcceso, setMostrarCambiarAcceso] = useState(false);
   const [mostrarCrearCuenta, setMostrarCrearCuenta] = useState(false);
