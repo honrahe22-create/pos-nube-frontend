@@ -872,7 +872,132 @@ const importarStockArchivo = async (event) => {
   const archivo = event.target.files?.[0];
   if (!archivo) return;
 
-  alert("Importador listo (siguiente paso: leer Excel real)");
+  const extension = archivo.name.split(".").pop()?.toLowerCase();
+
+  if (extension !== "csv") {
+    alert("Por ahora el importador real está habilitado para archivos CSV.");
+    event.target.value = "";
+    return;
+  }
+
+  try {
+    const texto = await archivo.text();
+
+    const lineas = texto
+      .split(/\r?\n/)
+      .map((linea) => linea.trim())
+      .filter(Boolean);
+
+    if (lineas.length < 2) {
+      alert("El archivo CSV no tiene datos para importar.");
+      event.target.value = "";
+      return;
+    }
+
+    const separarLineaCSV = (linea) => {
+      const resultado = [];
+      let actual = "";
+      let dentroDeComillas = false;
+
+      for (let i = 0; i < linea.length; i++) {
+        const char = linea[i];
+        const siguiente = linea[i + 1];
+
+        if (char === '"') {
+          if (dentroDeComillas && siguiente === '"') {
+            actual += '"';
+            i++;
+          } else {
+            dentroDeComillas = !dentroDeComillas;
+          }
+        } else if (char === "," && !dentroDeComillas) {
+          resultado.push(actual.trim());
+          actual = "";
+        } else {
+          actual += char;
+        }
+      }
+
+      resultado.push(actual.trim());
+      return resultado.map((valor) => valor.replace(/^"|"$/g, "").trim());
+    };
+
+    const encabezados = separarLineaCSV(lineas[0]).map((h) =>
+      String(h || "")
+        .toLowerCase()
+        .trim()
+    );
+
+    const idxCodigo = encabezados.findIndex((h) => h === "código" || h === "codigo");
+    const idxNombre = encabezados.findIndex((h) => h === "nombre");
+    const idxStock = encabezados.findIndex(
+      (h) =>
+        h === "stock" ||
+        h === "stock actual" ||
+        h === "stock real" ||
+        h === "nuevo stock"
+    );
+
+    if (idxStock === -1 || (idxCodigo === -1 && idxNombre === -1)) {
+      alert(
+        "El CSV debe tener al menos estas columnas: Nombre o Código, y una columna Stock."
+      );
+      event.target.value = "";
+      return;
+    }
+
+    const filas = lineas.slice(1).map(separarLineaCSV);
+
+    let actualizados = 0;
+
+    const mapaNuevoStock = {};
+
+    const nuevosProductos = productos.map((producto) => {
+      const fila = filas.find((cols) => {
+        const codigoArchivo = idxCodigo >= 0 ? String(cols[idxCodigo] || "").trim() : "";
+        const nombreArchivo = idxNombre >= 0 ? String(cols[idxNombre] || "").trim().toLowerCase() : "";
+
+        const coincideCodigo =
+          codigoArchivo &&
+          String(producto.codigo || "").trim().toLowerCase() === codigoArchivo.toLowerCase();
+
+        const coincideNombre =
+          nombreArchivo &&
+          String(producto.nombre || "").trim().toLowerCase() === nombreArchivo;
+
+        return coincideCodigo || coincideNombre;
+      });
+
+      if (!fila) return producto;
+
+      const stockLeido = Number(String(fila[idxStock] || "").replace(",", "."));
+
+      if (Number.isNaN(stockLeido)) return producto;
+
+      actualizados++;
+      mapaNuevoStock[producto.id] = String(stockLeido);
+
+      return {
+        ...producto,
+        stock: stockLeido,
+      };
+    });
+
+    setProductos(nuevosProductos);
+    setStockEditado((prev) => ({
+      ...prev,
+      ...mapaNuevoStock,
+    }));
+
+    if (!actualizados) {
+      alert("No se encontraron productos coincidentes para importar.");
+    } else {
+      alert(`Importación completada. Productos actualizados: ${actualizados}`);
+    }
+  } catch (error) {
+    console.error("Error importando stock:", error);
+    alert("No se pudo importar el archivo CSV.");
+  }
 
   event.target.value = "";
 };
@@ -3617,7 +3742,7 @@ if (!usuario) {
     </div>
   </div>
 )}
-        {vista === "productos" && (
+       {vista === "productos" && (
   <>
     <div style={styles.pageHeader}>
       <div>
@@ -3626,21 +3751,23 @@ if (!usuario) {
 
       <div style={styles.headerActions}>
         <button
+          type="button"
           style={styles.secondaryButton}
           onClick={() => {
             setProductoEditando(null);
-           setProductoForm({
-  nombre: "",
-  codigo: "",
-  precio: "",
-  categoria: "",
-  stock: "",
-  imagen: "",
-  activo: true,
-});
+            setProductoForm({
+              nombre: "",
+              codigo: "",
+              precio: "",
+              categoria: "",
+              stock: "",
+              imagen: "",
+              activo: true,
+            });
             setVista("productos");
             setMostrarFormularioProducto(true);
           }}
+          title="Crear alimento"
         >
           Crear alimento
         </button>
@@ -3655,20 +3782,22 @@ if (!usuario) {
           </h2>
 
           <button
+            type="button"
             style={styles.outlineButton}
             onClick={() => {
               setMostrarFormularioProducto(false);
               setProductoEditando(null);
               setProductoForm({
-  nombre: "",
-  codigo: "",
-  precio: "",
-  categoria: "",
-  stock: "",
-  imagen: "",
-  activo: true,
-});
+                nombre: "",
+                codigo: "",
+                precio: "",
+                categoria: "",
+                stock: "",
+                imagen: "",
+                activo: true,
+              });
             }}
+            title="Cerrar formulario"
           >
             Cerrar
           </button>
@@ -3744,20 +3873,20 @@ if (!usuario) {
           </div>
 
           <div style={styles.filterField}>
-  <label style={styles.label}>Imagen (URL)</label>
-  <input
-    type="text"
-    value={productoForm.imagen || ""}
-    onChange={(e) =>
-      setProductoForm({
-        ...productoForm,
-        imagen: e.target.value,
-      })
-    }
-    style={styles.input}
-    placeholder="https://..."
-  />
-</div>
+            <label style={styles.label}>Imagen (URL)</label>
+            <input
+              type="text"
+              value={productoForm.imagen || ""}
+              onChange={(e) =>
+                setProductoForm({
+                  ...productoForm,
+                  imagen: e.target.value,
+                })
+              }
+              style={styles.input}
+              placeholder="https://..."
+            />
+          </div>
 
           <div style={styles.filterButtons}>
             <button type="submit" style={styles.button}>
@@ -3795,7 +3924,9 @@ if (!usuario) {
           </select>
 
           <button
+            type="button"
             style={styles.button}
+            title="Exportar menú cafetería"
             onClick={() => {
               const filas = [
                 [
@@ -3836,7 +3967,9 @@ if (!usuario) {
 
               const csv = filas
                 .map((fila) =>
-                  fila.map((valor) => `"${String(valor).replace(/"/g, '""')}"`).join(",")
+                  fila
+                    .map((valor) => `"${String(valor).replace(/"/g, '""')}"`)
+                    .join(",")
                 )
                 .join("\n");
 
@@ -3845,7 +3978,9 @@ if (!usuario) {
               const link = document.createElement("a");
               link.href = url;
               link.download = "menu_cafeteria.csv";
+              document.body.appendChild(link);
               link.click();
+              document.body.removeChild(link);
               URL.revokeObjectURL(url);
             }}
           >
@@ -3916,25 +4051,35 @@ if (!usuario) {
                 return (
                   <tr key={producto.id}>
                     <td style={styles.td}>
-                      <input type="checkbox" />
+                      <input
+                        type="checkbox"
+                        title={`Seleccionar ${producto.nombre}`}
+                        onClick={(e) => e.stopPropagation()}
+                      />
                     </td>
+
                     <td style={styles.td}>{producto.nombre}</td>
                     <td style={styles.td}>{producto.codigo || ""}</td>
                     <td style={styles.td}>{precio.toFixed(4)}</td>
                     <td style={styles.td}>{impuesto.toFixed(4)}</td>
                     <td style={styles.td}>{precioFinal.toFixed(2)}</td>
                     <td style={styles.td}>{producto.categoria || ""}</td>
+
                     <td style={styles.td}>
                       <div style={{ display: "flex", gap: 10 }}>
                         <button
+                          type="button"
                           style={styles.smallDarkButton}
+                          title="Ver detalle"
                           onClick={() => alert(`Producto: ${producto.nombre}`)}
                         >
                           ◉
                         </button>
 
                         <button
+                          type="button"
                           style={styles.editIconButton}
+                          title="Editar producto"
                           onClick={() => {
                             editarProducto(producto);
                             setProductoEditando(producto);
@@ -3945,7 +4090,9 @@ if (!usuario) {
                         </button>
 
                         <button
+                          type="button"
                           style={styles.deleteIconButton}
+                          title="Eliminar o desactivar producto"
                           onClick={() => desactivarProducto(producto.id)}
                         >
                           🗑
