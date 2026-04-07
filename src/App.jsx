@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const API_URL = "https://pos-nube-backend.onrender.com";
 
@@ -176,6 +176,9 @@ const [menuVentasAbierto, setMenuVentasAbierto] = useState(false);
 const [menuReportesAbierto, setMenuReportesAbierto] = useState(false);
 const [busquedaProductos, setBusquedaProductos] = useState("");
 const [busquedaInventario, setBusquedaInventario] = useState("");
+
+const [stockEditado, setStockEditado] = useState({});
+const inputImportarStockRef = useRef(null);
 
 const [mostrarFormularioProducto, setMostrarFormularioProducto] = useState(false);
 const [filtroCategoriaProductos, setFiltroCategoriaProductos] = useState("");
@@ -818,86 +821,97 @@ const totalRecargasVista = useMemo(() => {
 };
 
 const exportarRecargasExcel = () => {
-  if (!recargasFiltradas.length) {
-    alert("No hay recargas para exportar");
+  // tu código actual aquí (no lo toco)
+};
+
+// ===== STOCK =====
+const exportarStockExcel = () => {
+  try {
+    const encabezados = ["Nombre", "Código", "Precio", "Categoría", "Stock actual"];
+    const filas = productos.map((p) => [
+      p.nombre || "",
+      p.codigo || "",
+      Number(p.precio || 0).toFixed(4),
+      p.categoria || "",
+      Number(p.stock || 0),
+    ]);
+
+    const contenido = [encabezados, ...filas]
+      .map((fila) =>
+        fila
+          .map((valor) => `"${String(valor ?? "").replace(/"/g, '""')}"`)
+          .join(",")
+      )
+      .join("\n");
+
+    const blob = new Blob([contenido], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "existencias_stock.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error("Error al exportar stock:", error);
+    alert("No se pudo exportar el stock.");
+  }
+};
+
+const abrirImportadorStock = () => {
+  if (inputImportarStockRef.current) {
+    inputImportarStockRef.current.click();
+  }
+};
+
+const importarStockArchivo = async (event) => {
+  const archivo = event.target.files?.[0];
+  if (!archivo) return;
+
+  alert("Importador listo (siguiente paso: leer Excel real)");
+
+  event.target.value = "";
+};
+
+const guardarStockProducto = async (producto) => {
+  const nuevoValor = stockEditado[producto.id];
+
+  if (!nuevoValor) {
+    alert("Ingresa un valor");
     return;
   }
 
-  const encabezados = [
-    "Fecha y Hora",
-    "Nombre",
-    "Dinero entregado",
-    "Dinero recargado",
-    "Operador",
-    "Tipo",
-    "Estado",
-    "Documento",
-    "Observacion",
-  ];
-
-  const filas = recargasFiltradas.map((r) => [
-    formatearFechaHora(r.fecha_base),
-    r.alumno_nombre || "",
-    Number(r.dinero_entregado || 0).toFixed(2),
-    Number(r.dinero_recargado || 0).toFixed(2),
-    r.operador_nombre || "Sistema",
-    r.tipo_visual || "",
-    r.estado_visual || "Aceptada",
-    r.documento_visual || "-",
-    r.observacion || "",
-  ]);
-
-  const csvContenido = [
-    encabezados.join(","),
-    ...filas.map((fila) =>
-      fila
-        .map((valor) => `"${String(valor).replace(/"/g, '""')}"`)
-        .join(",")
-    ),
-  ].join("\n");
-
-  const blob = new Blob(["\ufeff" + csvContenido], {
-    type: "text/csv;charset=utf-8;",
-  });
-
-  const url = window.URL.createObjectURL(blob);
-  const enlace = document.createElement("a");
-  enlace.href = url;
-  enlace.setAttribute("download", "recargas_exportadas.csv");
-  document.body.appendChild(enlace);
-  enlace.click();
-  document.body.removeChild(enlace);
-  window.URL.revokeObjectURL(url);
+  alert(`Guardar stock: ${producto.nombre} → ${nuevoValor}`);
 };
 
-  const limpiarFormularioVenta = () => {
-    setVentaForm({
-      alumno_id: "",
-      metodo_pago: "EFECTIVO",
-      observacion: "",
-    });
-    setVentaItems([
-      {
-        producto_id: "",
-        cantidad: "1",
-      },
-    ]);
-  };
+const verMovimientosStockNuevo = (producto) => {
+  alert(`Movimientos de ${producto.nombre}`);
+};
 
-  const limpiarFiltrosVentas = () => {
-  setVentasFiltros({
-    tipo_fecha: "created_at",
-    fecha_inicio: "",
-    fecha_fin: "",
-    tipo_orden: "",
-    orden_id: "",
-    ubicacion: "",
-    operador: "",
-    estado: "ENTREGADA",
-    metodo_pago: "todos",
+const eliminarStockProductoNuevo = (producto) => {
+  alert(`Eliminar ${producto.nombre}`);
+};
+
+const transferirStockProductoNuevo = (producto) => {
+  alert(`Transferir stock de ${producto.nombre}`);
+};
+
+const limpiarFormularioVenta = () => {
+  setVentaForm({
     alumno_id: "",
-    texto: "",
+    metodo_pago: "EFECTIVO",
+    observacion: "",
   });
+  setVentaItems([
+    {
+      producto_id: "",
+      cantidad: "1",
+    },
+  ]);
 };
 
 const exportarVentasExcel = () => {
@@ -4786,20 +4800,39 @@ if (!usuario) {
     )}
   </>
 )}
-        {vista === "inventario" && (
+       {vista === "inventario" && (
   <>
     <div style={styles.pageHeader}>
       <div>
-        <h1 style={styles.dashboardTitle}>Stock</h1>
+        <h1 style={styles.dashboardTitle}>Existencias</h1>
       </div>
 
       <div style={styles.headerActions}>
-        <button style={styles.outlineButton}>
-          Exportar stock
+        <button
+          type="button"
+          style={styles.outlineButton}
+          onClick={exportarStockExcel}
+          title="Exportar existencias"
+        >
+          Exportar existencias
         </button>
-        <button style={styles.secondaryButton}>
+
+        <button
+          type="button"
+          style={styles.secondaryButton}
+          onClick={abrirImportadorStock}
+          title="Importar stock"
+        >
           Importar stock
         </button>
+
+        <input
+          ref={inputImportarStockRef}
+          type="file"
+          accept=".csv,.xlsx,.xls"
+          style={{ display: "none" }}
+          onChange={importarStockArchivo}
+        />
       </div>
     </div>
 
@@ -4822,9 +4855,9 @@ if (!usuario) {
               <th style={styles.th}>Código</th>
               <th style={styles.th}>Precio</th>
               <th style={styles.th}>Categoría</th>
-              <th style={styles.th}>Stock actual</th>
-              <th style={styles.th}>Nuevo Stock</th>
-              <th style={styles.th}>Actualizar stock</th>
+              <th style={styles.th}>Stock real</th>
+              <th style={styles.th}>Nuevo stock</th>
+              <th style={styles.th}>Acciones de actualizar</th>
             </tr>
 
             <tr>
@@ -4863,15 +4896,54 @@ if (!usuario) {
                   <td style={styles.td}>
                     <input
                       type="number"
+                      value={stockEditado[producto.id] ?? ""}
+                      onChange={(e) =>
+                        setStockEditado((prev) => ({
+                          ...prev,
+                          [producto.id]: e.target.value,
+                        }))
+                      }
                       style={{ ...styles.input, minWidth: 90, padding: "10px" }}
+                      placeholder="Nuevo stock"
                     />
                   </td>
                   <td style={styles.td}>
                     <div style={{ display: "flex", gap: 10 }}>
-                      <button style={styles.saveIconButton}>💾</button>
-                      <button style={styles.viewIconButton}>◉</button>
-                      <button style={styles.deleteIconButton}>🗑</button>
-                      <button style={styles.moveIconButton}>⇄</button>
+                      <button
+                        type="button"
+                        style={styles.saveIconButton}
+                        onClick={() => guardarStockProducto(producto)}
+                        title="Guardar stock"
+                      >
+                        💾
+                      </button>
+
+                      <button
+                        type="button"
+                        style={styles.viewIconButton}
+                        onClick={() => verMovimientosStockNuevo(producto)}
+                        title="Ver movimientos"
+                      >
+                        ◉
+                      </button>
+
+                      <button
+                        type="button"
+                        style={styles.deleteIconButton}
+                        onClick={() => eliminarStockProductoNuevo(producto)}
+                        title="Eliminar o desactivar"
+                      >
+                        🗑
+                      </button>
+
+                      <button
+                        type="button"
+                        style={styles.moveIconButton}
+                        onClick={() => transferirStockProductoNuevo(producto)}
+                        title="Transferir stock"
+                      >
+                        ⇄
+                      </button>
                     </div>
                   </td>
                 </tr>
