@@ -177,6 +177,7 @@ const [menuVentasAbierto, setMenuVentasAbierto] = useState(false);
 const [menuReportesAbierto, setMenuReportesAbierto] = useState(false);
 const [busquedaProductos, setBusquedaProductos] = useState("");
 const [busquedaInventario, setBusquedaInventario] = useState("");
+const [productoDetalle, setProductoDetalle] = useState(null);
 
 const [stockEditado, setStockEditado] = useState({});
 const inputImportarStockRef = useRef(null);
