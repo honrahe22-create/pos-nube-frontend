@@ -869,7 +869,7 @@ const abrirImportadorStock = () => {
   }
 };
 
-const importarStockArchivo = async (event) => {
+const importarStockArchivo = (event) => {
   const archivo = event.target.files?.[0];
   if (!archivo) return;
 
@@ -888,7 +888,7 @@ const importarStockArchivo = async (event) => {
       return;
     }
 
-    const encabezados = filasCrudas[0].map((h) => normalizarTexto(h));
+    const encabezados = (filasCrudas[0] || []).map((h) => normalizarTexto(h));
 
     const idxCodigo = encabezados.findIndex(
       (h) => h === "codigo" || h === "código"
@@ -903,9 +903,7 @@ const importarStockArchivo = async (event) => {
     );
 
     if (idxStock === -1 || (idxCodigo === -1 && idxNombre === -1)) {
-      alert(
-        "El archivo debe tener al menos estas columnas: Nombre o Código, y Stock."
-      );
+      alert("El archivo debe tener al menos estas columnas: Nombre o Código, y Stock.");
       return;
     }
 
@@ -913,7 +911,7 @@ const importarStockArchivo = async (event) => {
     const mapaNuevoStock = {};
 
     const nuevosProductos = productos.map((producto) => {
-      const fila = filasCrudas.slice(1).find((cols) => {
+      const filaEncontrada = filasCrudas.slice(1).find((cols) => {
         const codigoArchivo =
           idxCodigo >= 0 ? normalizarTexto(cols[idxCodigo]) : "";
         const nombreArchivo =
@@ -928,9 +926,12 @@ const importarStockArchivo = async (event) => {
         );
       });
 
-      if (!fila) return producto;
+      if (!filaEncontrada) return producto;
 
-      const stockLeido = Number(String(fila[idxStock] || "").replace(",", "."));
+      const stockLeido = Number(
+        String(filaEncontrada[idxStock] || "").replace(",", ".")
+      );
+
       if (Number.isNaN(stockLeido)) return producto;
 
       actualizados += 1;
@@ -956,9 +957,7 @@ const importarStockArchivo = async (event) => {
     alert(`Importación completada. Productos actualizados: ${actualizados}`);
   };
 
-  const parsearCSV = async (file) => {
-    const texto = await file.text();
-
+  const parsearCSVTexto = (texto) => {
     const lineas = texto
       .split(/\r?\n/)
       .map((linea) => linea.trim())
@@ -976,7 +975,7 @@ const importarStockArchivo = async (event) => {
         if (char === '"') {
           if (dentroDeComillas && siguiente === '"') {
             actual += '"';
-            i++;
+            i += 1;
           } else {
             dentroDeComillas = !dentroDeComillas;
           }
@@ -989,7 +988,10 @@ const importarStockArchivo = async (event) => {
       }
 
       resultado.push(actual.trim());
-      return resultado.map((valor) => valor.replace(/^"|"$/g, "").trim());
+
+      return resultado.map((valor) =>
+        String(valor || "").replace(/^"|"$/g, "").trim()
+      );
     };
 
     return lineas.map(separarLineaCSV);
@@ -997,39 +999,64 @@ const importarStockArchivo = async (event) => {
 
   try {
     if (extension === "csv") {
-      const filasCSV = await parsearCSV(archivo);
-      procesarFilasImportadas(filasCSV);
-      event.target.value = "";
+      const reader = new FileReader();
+
+      reader.onload = (e) => {
+        try {
+          const texto = String(e.target?.result || "");
+          const filasCSV = parsearCSVTexto(texto);
+          procesarFilasImportadas(filasCSV);
+        } catch (error) {
+          console.error("Error importando CSV:", error);
+          alert("No se pudo importar el archivo CSV.");
+        }
+        event.target.value = "";
+      };
+
+      reader.onerror = () => {
+        alert("No se pudo leer el archivo CSV.");
+        event.target.value = "";
+      };
+
+      reader.readAsText(archivo);
       return;
     }
 
     if (extension === "xlsx" || extension === "xls") {
-      if (typeof XLSX === "undefined") {
-        alert(
-          "Falta instalar la librería XLSX. Ejecuta: npm install xlsx"
-        );
+      const reader = new FileReader();
+
+      reader.onload = (e) => {
+        try {
+          const data = e.target?.result;
+          const workbook = XLSX.read(data, { type: "array" });
+          const primeraHoja = workbook.SheetNames[0];
+
+          if (!primeraHoja) {
+            alert("El archivo Excel no contiene hojas.");
+            event.target.value = "";
+            return;
+          }
+
+          const worksheet = workbook.Sheets[primeraHoja];
+          const filasExcel = XLSX.utils.sheet_to_json(worksheet, {
+            header: 1,
+            defval: "",
+          });
+
+          procesarFilasImportadas(filasExcel);
+        } catch (error) {
+          console.error("Error importando Excel:", error);
+          alert("No se pudo importar el archivo Excel.");
+        }
         event.target.value = "";
-        return;
-      }
+      };
 
-      const buffer = await archivo.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: "array" });
-      const primeraHoja = workbook.SheetNames[0];
-
-      if (!primeraHoja) {
-        alert("El archivo Excel no contiene hojas.");
+      reader.onerror = () => {
+        alert("No se pudo leer el archivo Excel.");
         event.target.value = "";
-        return;
-      }
+      };
 
-      const worksheet = workbook.Sheets[primeraHoja];
-      const filasExcel = XLSX.utils.sheet_to_json(worksheet, {
-        header: 1,
-        defval: "",
-      });
-
-      procesarFilasImportadas(filasExcel);
-      event.target.value = "";
+      reader.readAsArrayBuffer(archivo);
       return;
     }
 
@@ -1041,129 +1068,7 @@ const importarStockArchivo = async (event) => {
 
   event.target.value = "";
 };
-
-  try {
-    const texto = await archivo.text();
-
-    const lineas = texto
-      .split(/\r?\n/)
-      .map((linea) => linea.trim())
-      .filter(Boolean);
-
-    if (lineas.length < 2) {
-      alert("El archivo CSV no tiene datos para importar.");
-      event.target.value = "";
-      return;
-    }
-
-    const separarLineaCSV = (linea) => {
-      const resultado = [];
-      let actual = "";
-      let dentroDeComillas = false;
-
-      for (let i = 0; i < linea.length; i++) {
-        const char = linea[i];
-        const siguiente = linea[i + 1];
-
-        if (char === '"') {
-          if (dentroDeComillas && siguiente === '"') {
-            actual += '"';
-            i++;
-          } else {
-            dentroDeComillas = !dentroDeComillas;
-          }
-        } else if (char === "," && !dentroDeComillas) {
-          resultado.push(actual.trim());
-          actual = "";
-        } else {
-          actual += char;
-        }
-      }
-
-      resultado.push(actual.trim());
-      return resultado.map((valor) => valor.replace(/^"|"$/g, "").trim());
-    };
-
-    const encabezados = separarLineaCSV(lineas[0]).map((h) =>
-      String(h || "")
-        .toLowerCase()
-        .trim()
-    );
-
-    const idxCodigo = encabezados.findIndex((h) => h === "código" || h === "codigo");
-    const idxNombre = encabezados.findIndex((h) => h === "nombre");
-    const idxStock = encabezados.findIndex(
-      (h) =>
-        h === "stock" ||
-        h === "stock actual" ||
-        h === "stock real" ||
-        h === "nuevo stock"
-    );
-
-    if (idxStock === -1 || (idxCodigo === -1 && idxNombre === -1)) {
-      alert(
-        "El CSV debe tener al menos estas columnas: Nombre o Código, y una columna Stock."
-      );
-      event.target.value = "";
-      return;
-    }
-
-    const filas = lineas.slice(1).map(separarLineaCSV);
-
-    let actualizados = 0;
-
-    const mapaNuevoStock = {};
-
-    const nuevosProductos = productos.map((producto) => {
-      const fila = filas.find((cols) => {
-        const codigoArchivo = idxCodigo >= 0 ? String(cols[idxCodigo] || "").trim() : "";
-        const nombreArchivo = idxNombre >= 0 ? String(cols[idxNombre] || "").trim().toLowerCase() : "";
-
-        const coincideCodigo =
-          codigoArchivo &&
-          String(producto.codigo || "").trim().toLowerCase() === codigoArchivo.toLowerCase();
-
-        const coincideNombre =
-          nombreArchivo &&
-          String(producto.nombre || "").trim().toLowerCase() === nombreArchivo;
-
-        return coincideCodigo || coincideNombre;
-      });
-
-      if (!fila) return producto;
-
-      const stockLeido = Number(String(fila[idxStock] || "").replace(",", "."));
-
-      if (Number.isNaN(stockLeido)) return producto;
-
-      actualizados++;
-      mapaNuevoStock[producto.id] = String(stockLeido);
-
-      return {
-        ...producto,
-        stock: stockLeido,
-      };
-    });
-
-    setProductos(nuevosProductos);
-    setStockEditado((prev) => ({
-      ...prev,
-      ...mapaNuevoStock,
-    }));
-
-    if (!actualizados) {
-      alert("No se encontraron productos coincidentes para importar.");
-    } else {
-      alert(`Importación completada. Productos actualizados: ${actualizados}`);
-    }
-  } catch (error) {
-    console.error("Error importando stock:", error);
-    alert("No se pudo importar el archivo CSV.");
-  }
-
-  event.target.value = "";
-};
-
+  
 const guardarStockProducto = async (producto) => {
   const nuevoValor = stockEditado[producto.id];
 
