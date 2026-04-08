@@ -1,3 +1,4 @@
+import * as XLSX from "xlsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const API_URL = "https://pos-nube-backend.onrender.com";
@@ -874,11 +875,172 @@ const importarStockArchivo = async (event) => {
 
   const extension = archivo.name.split(".").pop()?.toLowerCase();
 
-  if (extension !== "csv") {
-    alert("Por ahora el importador real está habilitado para archivos CSV.");
-    event.target.value = "";
-    return;
+  const normalizarTexto = (valor) =>
+    String(valor || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toLowerCase();
+
+  const procesarFilasImportadas = (filasCrudas) => {
+    if (!Array.isArray(filasCrudas) || filasCrudas.length < 2) {
+      alert("El archivo no tiene datos para importar.");
+      return;
+    }
+
+    const encabezados = filasCrudas[0].map((h) => normalizarTexto(h));
+
+    const idxCodigo = encabezados.findIndex(
+      (h) => h === "codigo" || h === "código"
+    );
+    const idxNombre = encabezados.findIndex((h) => h === "nombre");
+    const idxStock = encabezados.findIndex(
+      (h) =>
+        h === "stock" ||
+        h === "stock actual" ||
+        h === "stock real" ||
+        h === "nuevo stock"
+    );
+
+    if (idxStock === -1 || (idxCodigo === -1 && idxNombre === -1)) {
+      alert(
+        "El archivo debe tener al menos estas columnas: Nombre o Código, y Stock."
+      );
+      return;
+    }
+
+    let actualizados = 0;
+    const mapaNuevoStock = {};
+
+    const nuevosProductos = productos.map((producto) => {
+      const fila = filasCrudas.slice(1).find((cols) => {
+        const codigoArchivo =
+          idxCodigo >= 0 ? normalizarTexto(cols[idxCodigo]) : "";
+        const nombreArchivo =
+          idxNombre >= 0 ? normalizarTexto(cols[idxNombre]) : "";
+
+        const codigoProducto = normalizarTexto(producto.codigo);
+        const nombreProducto = normalizarTexto(producto.nombre);
+
+        return (
+          (codigoArchivo && codigoArchivo === codigoProducto) ||
+          (nombreArchivo && nombreArchivo === nombreProducto)
+        );
+      });
+
+      if (!fila) return producto;
+
+      const stockLeido = Number(String(fila[idxStock] || "").replace(",", "."));
+      if (Number.isNaN(stockLeido)) return producto;
+
+      actualizados += 1;
+      mapaNuevoStock[producto.id] = String(stockLeido);
+
+      return {
+        ...producto,
+        stock: stockLeido,
+      };
+    });
+
+    setProductos(nuevosProductos);
+    setStockEditado((prev) => ({
+      ...prev,
+      ...mapaNuevoStock,
+    }));
+
+    if (!actualizados) {
+      alert("No se encontraron productos coincidentes para importar.");
+      return;
+    }
+
+    alert(`Importación completada. Productos actualizados: ${actualizados}`);
+  };
+
+  const parsearCSV = async (file) => {
+    const texto = await file.text();
+
+    const lineas = texto
+      .split(/\r?\n/)
+      .map((linea) => linea.trim())
+      .filter(Boolean);
+
+    const separarLineaCSV = (linea) => {
+      const resultado = [];
+      let actual = "";
+      let dentroDeComillas = false;
+
+      for (let i = 0; i < linea.length; i++) {
+        const char = linea[i];
+        const siguiente = linea[i + 1];
+
+        if (char === '"') {
+          if (dentroDeComillas && siguiente === '"') {
+            actual += '"';
+            i++;
+          } else {
+            dentroDeComillas = !dentroDeComillas;
+          }
+        } else if (char === "," && !dentroDeComillas) {
+          resultado.push(actual.trim());
+          actual = "";
+        } else {
+          actual += char;
+        }
+      }
+
+      resultado.push(actual.trim());
+      return resultado.map((valor) => valor.replace(/^"|"$/g, "").trim());
+    };
+
+    return lineas.map(separarLineaCSV);
+  };
+
+  try {
+    if (extension === "csv") {
+      const filasCSV = await parsearCSV(archivo);
+      procesarFilasImportadas(filasCSV);
+      event.target.value = "";
+      return;
+    }
+
+    if (extension === "xlsx" || extension === "xls") {
+      if (typeof XLSX === "undefined") {
+        alert(
+          "Falta instalar la librería XLSX. Ejecuta: npm install xlsx"
+        );
+        event.target.value = "";
+        return;
+      }
+
+      const buffer = await archivo.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const primeraHoja = workbook.SheetNames[0];
+
+      if (!primeraHoja) {
+        alert("El archivo Excel no contiene hojas.");
+        event.target.value = "";
+        return;
+      }
+
+      const worksheet = workbook.Sheets[primeraHoja];
+      const filasExcel = XLSX.utils.sheet_to_json(worksheet, {
+        header: 1,
+        defval: "",
+      });
+
+      procesarFilasImportadas(filasExcel);
+      event.target.value = "";
+      return;
+    }
+
+    alert("Formato no soportado. Usa CSV, XLSX o XLS.");
+  } catch (error) {
+    console.error("Error importando stock:", error);
+    alert("No se pudo importar el archivo.");
   }
+
+  event.target.value = "";
+};
 
   try {
     const texto = await archivo.text();
