@@ -1072,24 +1072,164 @@ const importarStockArchivo = (event) => {
 const guardarStockProducto = async (producto) => {
   const nuevoValor = stockEditado[producto.id];
 
-  if (!nuevoValor) {
-    alert("Ingresa un valor");
+  if (nuevoValor === undefined || nuevoValor === null || nuevoValor === "") {
+    alert("Ingresa un valor en Nuevo stock.");
     return;
   }
 
-  alert(`Guardar stock: ${producto.nombre} → ${nuevoValor}`);
+  const stockNumero = Number(nuevoValor);
+
+  if (Number.isNaN(stockNumero) || stockNumero < 0) {
+    alert("El stock debe ser un número válido mayor o igual a 0.");
+    return;
+  }
+
+  try {
+    const token = localStorage.getItem("token");
+
+    const res = await fetch(`${API_URL}/api/productos/${producto.id}/stock`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        stock: stockNumero,
+      }),
+    });
+
+    if (!res.ok) {
+      const texto = await res.text();
+      throw new Error(texto || "No se pudo actualizar el stock en el backend.");
+    }
+
+    setProductos((prev) =>
+      prev.map((p) =>
+        p.id === producto.id
+          ? { ...p, stock: stockNumero }
+          : p
+      )
+    );
+
+    setStockEditado((prev) => ({
+      ...prev,
+      [producto.id]: String(stockNumero),
+    }));
+
+    alert(`Stock actualizado correctamente para ${producto.nombre}.`);
+  } catch (error) {
+    console.error("Error actualizando stock:", error);
+
+    setProductos((prev) =>
+      prev.map((p) =>
+        p.id === producto.id
+          ? { ...p, stock: stockNumero }
+          : p
+      )
+    );
+
+    setStockEditado((prev) => ({
+      ...prev,
+      [producto.id]: String(stockNumero),
+    }));
+
+    alert(
+      `No se pudo confirmar en el servidor, pero el stock quedó actualizado en pantalla para ${producto.nombre}.`
+    );
+  }
 };
 
 const verMovimientosStockNuevo = (producto) => {
-  alert(`Movimientos de ${producto.nombre}`);
+  const stockActual = Number(producto.stock || 0);
+  const stockPendiente = stockEditado[producto.id] ?? "";
+
+  alert(
+    `Detalle del producto\n\n` +
+      `Nombre: ${producto.nombre}\n` +
+      `Código: ${producto.codigo || "-"}\n` +
+      `Categoría: ${producto.categoria || "-"}\n` +
+      `Precio: ${Number(producto.precio || 0).toFixed(2)}\n` +
+      `Stock actual: ${stockActual}\n` +
+      `Nuevo stock ingresado: ${stockPendiente === "" ? "-" : stockPendiente}`
+  );
 };
 
-const eliminarStockProductoNuevo = (producto) => {
-  alert(`Eliminar ${producto.nombre}`);
+const eliminarStockProductoNuevo = async (producto) => {
+  const confirmado = window.confirm(
+    `¿Deseas desactivar o eliminar ${producto.nombre}?`
+  );
+
+  if (!confirmado) return;
+
+  try {
+    const token = localStorage.getItem("token");
+
+    const res = await fetch(`${API_URL}/api/productos/${producto.id}/desactivar`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+
+    if (!res.ok) {
+      const texto = await res.text();
+      throw new Error(texto || "No se pudo desactivar el producto.");
+    }
+
+    setProductos((prev) => prev.filter((p) => p.id !== producto.id));
+
+    alert(`${producto.nombre} fue desactivado correctamente.`);
+  } catch (error) {
+    console.error("Error desactivando producto:", error);
+    alert(
+      `No se pudo desactivar ${producto.nombre} en el servidor. Revisa si existe la ruta /desactivar en backend.`
+    );
+  }
 };
 
 const transferirStockProductoNuevo = (producto) => {
-  alert(`Transferir stock de ${producto.nombre}`);
+  const cantidadTexto = window.prompt(
+    `Ingresa la cantidad a transferir de ${producto.nombre}:`,
+    "1"
+  );
+
+  if (cantidadTexto === null) return;
+
+  const cantidad = Number(cantidadTexto);
+  const stockActual = Number(producto.stock || 0);
+
+  if (Number.isNaN(cantidad) || cantidad <= 0) {
+    alert("Ingresa una cantidad válida mayor a 0.");
+    return;
+  }
+
+  if (cantidad > stockActual) {
+    alert("No puedes transferir más stock del disponible.");
+    return;
+  }
+
+  const nuevoStock = stockActual - cantidad;
+
+  setProductos((prev) =>
+    prev.map((p) =>
+      p.id === producto.id
+        ? { ...p, stock: nuevoStock }
+        : p
+    )
+  );
+
+  setStockEditado((prev) => ({
+    ...prev,
+    [producto.id]: String(nuevoStock),
+  }));
+
+  alert(
+    `Transferencia registrada localmente.\n\n` +
+      `Producto: ${producto.nombre}\n` +
+      `Cantidad transferida: ${cantidad}\n` +
+      `Stock restante: ${nuevoStock}`
+  );
 };
 
 const limpiarFormularioVenta = () => {
@@ -4040,7 +4180,10 @@ if (!usuario) {
                 )
                 .join("\n");
 
-              const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+              const blob = new Blob([csv], {
+                type: "text/csv;charset=utf-8;",
+              });
+
               const url = URL.createObjectURL(blob);
               const link = document.createElement("a");
               link.href = url;
@@ -4138,7 +4281,11 @@ if (!usuario) {
                           type="button"
                           style={styles.smallDarkButton}
                           title="Ver detalle"
-                          onClick={() => alert(`Producto: ${producto.nombre}`)}
+                          onClick={() => {
+                            alert(
+                              `Producto: ${producto.nombre}\nCódigo: ${producto.codigo || "-"}\nPrecio: ${precio.toFixed(2)}\nCategoría: ${producto.categoria || "-"}`
+                            );
+                          }}
                         >
                           ◉
                         </button>
@@ -4148,8 +4295,17 @@ if (!usuario) {
                           style={styles.editIconButton}
                           title="Editar producto"
                           onClick={() => {
-                            editarProducto(producto);
                             setProductoEditando(producto);
+                            setProductoForm({
+                              nombre: producto.nombre || "",
+                              codigo: producto.codigo || "",
+                              precio: producto.precio ?? "",
+                              categoria: producto.categoria || "",
+                              stock: producto.stock ?? "",
+                              imagen: producto.imagen || "",
+                              activo: producto.activo !== false,
+                            });
+                            setVista("productos");
                             setMostrarFormularioProducto(true);
                           }}
                         >
@@ -4160,7 +4316,13 @@ if (!usuario) {
                           type="button"
                           style={styles.deleteIconButton}
                           title="Eliminar o desactivar producto"
-                          onClick={() => desactivarProducto(producto.id)}
+                          onClick={() => {
+                            const confirmado = window.confirm(
+                              `¿Deseas desactivar el producto ${producto.nombre}?`
+                            );
+                            if (!confirmado) return;
+                            desactivarProducto(producto.id);
+                          }}
                         >
                           🗑
                         </button>
