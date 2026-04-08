@@ -3961,6 +3961,7 @@ if (!usuario) {
           type="button"
           style={styles.secondaryButton}
           onClick={() => {
+            setProductoDetalle(null);
             setProductoEditando(null);
             setProductoForm({
               nombre: "",
@@ -3980,6 +3981,126 @@ if (!usuario) {
         </button>
       </div>
     </div>
+
+    {productoDetalle && (
+      <div style={{ ...styles.box, marginBottom: 20 }}>
+        <div style={styles.pageHeaderSmall}>
+          <h2 style={{ margin: 0 }}>Detalle del alimento</h2>
+
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              type="button"
+              style={styles.outlineButton}
+              onClick={() => {
+                setProductoEditando(productoDetalle);
+                setProductoForm({
+                  nombre: productoDetalle.nombre || "",
+                  codigo: productoDetalle.codigo || "",
+                  precio: productoDetalle.precio ?? "",
+                  categoria: productoDetalle.categoria || "",
+                  stock: productoDetalle.stock ?? "",
+                  imagen: productoDetalle.imagen || "",
+                  activo: productoDetalle.activo !== false,
+                });
+                setMostrarFormularioProducto(true);
+                setProductoDetalle(null);
+              }}
+            >
+              Editar
+            </button>
+
+            <button
+              type="button"
+              style={styles.outlineButton}
+              onClick={() => setProductoDetalle(null)}
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        <div style={styles.filtersGrid}>
+          <div style={styles.filterField}>
+            <label style={styles.label}>Nombre</label>
+            <input
+              type="text"
+              value={productoDetalle.nombre || ""}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Código</label>
+            <input
+              type="text"
+              value={productoDetalle.codigo || ""}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Precio</label>
+            <input
+              type="text"
+              value={Number(productoDetalle.precio || 0).toFixed(2)}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Categoría</label>
+            <input
+              type="text"
+              value={productoDetalle.categoria || ""}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Stock</label>
+            <input
+              type="text"
+              value={String(productoDetalle.stock ?? "")}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Estado</label>
+            <input
+              type="text"
+              value={productoDetalle.activo === false ? "Inactivo" : "Activo"}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+        </div>
+
+        {!!productoDetalle.imagen && (
+          <div style={{ marginTop: 16 }}>
+            <label style={styles.label}>Imagen</label>
+            <div style={{ marginTop: 8 }}>
+              <img
+                src={productoDetalle.imagen}
+                alt={productoDetalle.nombre || "Producto"}
+                style={{
+                  width: 140,
+                  height: 140,
+                  objectFit: "cover",
+                  borderRadius: 12,
+                  border: "1px solid #d1d5db",
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    )}
 
     {mostrarFormularioProducto && (
       <div style={{ ...styles.box, marginBottom: 20 }}>
@@ -4143,6 +4264,7 @@ if (!usuario) {
                   "% impuestos",
                   "Precio final",
                   "Categoría",
+                  "Estado",
                 ],
                 ...productos
                   .filter((p) => {
@@ -4168,6 +4290,7 @@ if (!usuario) {
                       impuesto.toFixed(2),
                       precioFinal.toFixed(2),
                       p.categoria || "",
+                      p.activo === false ? "Inactivo" : "Activo",
                     ];
                   }),
               ];
@@ -4257,9 +4380,20 @@ if (!usuario) {
                 const precio = Number(producto.precio || 0);
                 const impuesto = Number(producto.impuesto || 0);
                 const precioFinal = precio + precio * (impuesto / 100);
+                const estaInactivo = producto.activo === false;
 
                 return (
-                  <tr key={producto.id}>
+                  <tr
+                    key={producto.id}
+                    style={
+                      estaInactivo
+                        ? {
+                            opacity: 0.6,
+                            backgroundColor: "#f3f4f6",
+                          }
+                        : {}
+                    }
+                  >
                     <td style={styles.td}>
                       <input
                         type="checkbox"
@@ -4268,12 +4402,19 @@ if (!usuario) {
                       />
                     </td>
 
-                    <td style={styles.td}>{producto.nombre}</td>
+                    <td style={styles.td}>
+                      {producto.nombre}
+                      {estaInactivo ? " 🔒" : ""}
+                    </td>
+
                     <td style={styles.td}>{producto.codigo || ""}</td>
                     <td style={styles.td}>{precio.toFixed(4)}</td>
                     <td style={styles.td}>{impuesto.toFixed(4)}</td>
                     <td style={styles.td}>{precioFinal.toFixed(2)}</td>
-                    <td style={styles.td}>{producto.categoria || ""}</td>
+                    <td style={styles.td}>
+                      {producto.categoria || ""}
+                      {estaInactivo ? " (Inactivo)" : ""}
+                    </td>
 
                     <td style={styles.td}>
                       <div style={{ display: "flex", gap: 10 }}>
@@ -4282,9 +4423,8 @@ if (!usuario) {
                           style={styles.smallDarkButton}
                           title="Ver detalle"
                           onClick={() => {
-                            alert(
-                              `Producto: ${producto.nombre}\nCódigo: ${producto.codigo || "-"}\nPrecio: ${precio.toFixed(2)}\nCategoría: ${producto.categoria || "-"}`
-                            );
+                            setProductoDetalle(producto);
+                            setMostrarFormularioProducto(false);
                           }}
                         >
                           ◉
@@ -4295,6 +4435,7 @@ if (!usuario) {
                           style={styles.editIconButton}
                           title="Editar producto"
                           onClick={() => {
+                            setProductoDetalle(null);
                             setProductoEditando(producto);
                             setProductoForm({
                               nombre: producto.nombre || "",
@@ -4315,16 +4456,45 @@ if (!usuario) {
                         <button
                           type="button"
                           style={styles.deleteIconButton}
-                          title="Eliminar o desactivar producto"
-                          onClick={() => {
+                          title={
+                            estaInactivo
+                              ? "Producto desactivado"
+                              : "Desactivar producto"
+                          }
+                          onClick={async () => {
+                            if (estaInactivo) return;
+
                             const confirmado = window.confirm(
                               `¿Deseas desactivar el producto ${producto.nombre}?`
                             );
                             if (!confirmado) return;
-                            desactivarProducto(producto.id);
+
+                            try {
+                              await desactivarProducto(producto.id);
+                            } catch (error) {
+                              console.error(error);
+                            }
+
+                            setProductos((prev) =>
+                              prev.map((p) =>
+                                p.id === producto.id
+                                  ? { ...p, activo: false }
+                                  : p
+                              )
+                            );
+
+                            if (
+                              productoDetalle &&
+                              Number(productoDetalle.id) === Number(producto.id)
+                            ) {
+                              setProductoDetalle({
+                                ...producto,
+                                activo: false,
+                              });
+                            }
                           }}
                         >
-                          🗑
+                          {estaInactivo ? "🔒" : "🗑"}
                         </button>
                       </div>
                     </td>
