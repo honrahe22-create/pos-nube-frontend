@@ -4396,12 +4396,19 @@ if (!usuario) {
                     }
                   >
                     <td style={styles.td}>
-                      <input
-                        type="checkbox"
-                        title={`Seleccionar ${producto.nombre}`}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </td>
+  <input
+    type="checkbox"
+    checked={!!productosSeleccionados[producto.id]}
+    onChange={(e) =>
+      setProductosSeleccionados((prev) => ({
+        ...prev,
+        [producto.id]: e.target.checked,
+      }))
+    }
+    title={`Seleccionar ${producto.nombre}`}
+    onClick={(e) => e.stopPropagation()}
+  />
+</td>
 
                     <td style={styles.td}>
                       {producto.nombre}
@@ -4454,49 +4461,74 @@ if (!usuario) {
                           ✎
                         </button>
 
-                        <button
-                          type="button"
-                          style={styles.deleteIconButton}
-                          title={
-                            estaInactivo
-                              ? "Producto desactivado"
-                              : "Desactivar producto"
-                          }
-                          onClick={async () => {
-                            if (estaInactivo) return;
+                       <button
+  type="button"
+  style={styles.deleteIconButton}
+  title={estaInactivo ? "Reactivar producto" : "Desactivar producto"}
+  onClick={async () => {
+    try {
+      if (estaInactivo) {
+        const confirmado = window.confirm(
+          `¿Deseas reactivar el producto ${producto.nombre}?`
+        );
+        if (!confirmado) return;
 
-                            const confirmado = window.confirm(
-                              `¿Deseas desactivar el producto ${producto.nombre}?`
-                            );
-                            if (!confirmado) return;
+        setProductos((prev) =>
+          prev.map((p) =>
+            p.id === producto.id
+              ? { ...p, activo: true }
+              : p
+          )
+        );
 
-                            try {
-                              await desactivarProducto(producto.id);
-                            } catch (error) {
-                              console.error(error);
-                            }
+        if (
+          productoDetalle &&
+          Number(productoDetalle.id) === Number(producto.id)
+        ) {
+          setProductoDetalle({
+            ...producto,
+            activo: true,
+          });
+        }
 
-                            setProductos((prev) =>
-                              prev.map((p) =>
-                                p.id === producto.id
-                                  ? { ...p, activo: false }
-                                  : p
-                              )
-                            );
+        return;
+      }
 
-                            if (
-                              productoDetalle &&
-                              Number(productoDetalle.id) === Number(producto.id)
-                            ) {
-                              setProductoDetalle({
-                                ...producto,
-                                activo: false,
-                              });
-                            }
-                          }}
-                        >
-                          {estaInactivo ? "🔒" : "🗑"}
-                        </button>
+      const confirmado = window.confirm(
+        `¿Deseas desactivar el producto ${producto.nombre}?`
+      );
+      if (!confirmado) return;
+
+      try {
+        await desactivarProducto(producto.id);
+      } catch (error) {
+        console.error(error);
+      }
+
+      setProductos((prev) =>
+        prev.map((p) =>
+          p.id === producto.id
+            ? { ...p, activo: false }
+            : p
+        )
+      );
+
+      if (
+        productoDetalle &&
+        Number(productoDetalle.id) === Number(producto.id)
+      ) {
+        setProductoDetalle({
+          ...producto,
+          activo: false,
+        });
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  }}
+>
+  {estaInactivo ? "🔓" : "🗑"}
+</button>
                       </div>
                     </td>
                   </tr>
@@ -5347,7 +5379,7 @@ if (!usuario) {
     )}
   </>
 )}
-       {vista === "inventario" && (
+      {vista === "inventario" && (
   <>
     <div style={styles.pageHeader}>
       <div>
@@ -5383,6 +5415,203 @@ if (!usuario) {
       </div>
     </div>
 
+    {stockDetalle && (
+      <div style={{ ...styles.box, marginBottom: 20 }}>
+        <div style={styles.pageHeaderSmall}>
+          <h2 style={{ margin: 0 }}>Detalle de existencias</h2>
+
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={() => setStockDetalle(null)}
+          >
+            Cerrar
+          </button>
+        </div>
+
+        <div style={styles.filtersGrid}>
+          <div style={styles.filterField}>
+            <label style={styles.label}>Nombre</label>
+            <input
+              type="text"
+              value={stockDetalle.nombre || ""}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Código</label>
+            <input
+              type="text"
+              value={stockDetalle.codigo || ""}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Categoría</label>
+            <input
+              type="text"
+              value={stockDetalle.categoria || ""}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Precio</label>
+            <input
+              type="text"
+              value={Number(stockDetalle.precio || 0).toFixed(2)}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Stock actual</label>
+            <input
+              type="text"
+              value={String(stockDetalle.stock ?? 0)}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Nuevo stock ingresado</label>
+            <input
+              type="text"
+              value={
+                stockEditado[stockDetalle.id] === undefined ||
+                stockEditado[stockDetalle.id] === ""
+                  ? "-"
+                  : String(stockEditado[stockDetalle.id])
+              }
+              style={styles.input}
+              readOnly
+            />
+          </div>
+        </div>
+      </div>
+    )}
+
+    {stockTransferencia && (
+      <div style={{ ...styles.box, marginBottom: 20 }}>
+        <div style={styles.pageHeaderSmall}>
+          <h2 style={{ margin: 0 }}>Transferencia de stock</h2>
+
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={() => setStockTransferencia(null)}
+          >
+            Cerrar
+          </button>
+        </div>
+
+        <div style={styles.filtersGrid}>
+          <div style={styles.filterField}>
+            <label style={styles.label}>Producto</label>
+            <input
+              type="text"
+              value={stockTransferencia.nombre || ""}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Código</label>
+            <input
+              type="text"
+              value={stockTransferencia.codigo || ""}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Stock disponible</label>
+            <input
+              type="text"
+              value={String(stockTransferencia.stock ?? 0)}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Cantidad a transferir</label>
+            <input
+              type="number"
+              min="1"
+              value={stockTransferencia.cantidad ?? "1"}
+              onChange={(e) =>
+                setStockTransferencia((prev) => ({
+                  ...prev,
+                  cantidad: e.target.value,
+                }))
+              }
+              style={styles.input}
+            />
+          </div>
+        </div>
+
+        <div style={styles.filterButtons}>
+          <button
+            type="button"
+            style={styles.button}
+            onClick={() => {
+              const cantidad = Number(stockTransferencia.cantidad || 0);
+              const stockActual = Number(stockTransferencia.stock || 0);
+
+              if (Number.isNaN(cantidad) || cantidad <= 0) {
+                alert("Ingresa una cantidad válida mayor a 0.");
+                return;
+              }
+
+              if (cantidad > stockActual) {
+                alert("No puedes transferir más stock del disponible.");
+                return;
+              }
+
+              const nuevoStock = stockActual - cantidad;
+
+              setProductos((prev) =>
+                prev.map((p) =>
+                  p.id === stockTransferencia.id
+                    ? { ...p, stock: nuevoStock }
+                    : p
+                )
+              );
+
+              setStockEditado((prev) => ({
+                ...prev,
+                [stockTransferencia.id]: String(nuevoStock),
+              }));
+
+              setStockDetalle((prev) =>
+                prev && Number(prev.id) === Number(stockTransferencia.id)
+                  ? { ...prev, stock: nuevoStock }
+                  : prev
+              );
+
+              alert(
+                `Transferencia registrada.\n\nProducto: ${stockTransferencia.nombre}\nCantidad transferida: ${cantidad}\nStock restante: ${nuevoStock}`
+              );
+
+              setStockTransferencia(null);
+            }}
+          >
+            Confirmar transferencia
+          </button>
+        </div>
+      </div>
+    )}
+
     <div style={styles.box}>
       <div style={styles.pageHeaderSmall}>
         <input
@@ -5404,7 +5633,7 @@ if (!usuario) {
               <th style={styles.th}>Categoría</th>
               <th style={styles.th}>Stock real</th>
               <th style={styles.th}>Nuevo stock</th>
-              <th style={styles.th}>Acciones de actualizar</th>
+              <th style={styles.th}>Acciones de actualización</th>
             </tr>
 
             <tr>
@@ -5501,7 +5730,6 @@ if (!usuario) {
     </div>
   </>
 )}
-
        {vista === "recargas" && (
   <>
     <div style={styles.pageHeader}>
