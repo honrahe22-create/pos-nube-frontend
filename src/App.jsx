@@ -1143,6 +1143,58 @@ const guardarStockProducto = async (producto) => {
   }
 };
 
+const desactivarProducto = async (productoId) => {
+  try {
+    const token = localStorage.getItem("token");
+
+    const res = await fetch(`${API_URL}/api/productos/${productoId}/desactivar`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+
+    if (!res.ok) {
+      const texto = await res.text();
+      console.warn("No se pudo desactivar en backend:", texto);
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error desactivando producto:", error);
+    return false;
+  }
+};
+
+const reactivarProducto = async (productoId) => {
+  try {
+    const token = localStorage.getItem("token");
+
+    const res = await fetch(`${API_URL}/api/productos/${productoId}/reactivar`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+
+    if (!res.ok) {
+      const texto = await res.text();
+      console.warn("No se pudo reactivar en backend:", texto);
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error reactivando producto:", error);
+    return false;
+  }
+};
+
+const limpiarFiltrosVentas = () => {
+  setVistaVentasInterna("consultar");
+};
+
 const verMovimientosStockNuevo = (producto) => {
   const stockActual = Number(producto.stock || 0);
   const stockPendiente = stockEditado[producto.id] ?? "";
