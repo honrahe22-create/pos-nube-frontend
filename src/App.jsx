@@ -178,6 +178,9 @@ const [menuReportesAbierto, setMenuReportesAbierto] = useState(false);
 const [busquedaProductos, setBusquedaProductos] = useState("");
 const [busquedaInventario, setBusquedaInventario] = useState("");
 const [productoDetalle, setProductoDetalle] = useState(null);
+const [productosSeleccionados, setProductosSeleccionados] = useState({});
+const [stockDetalle, setStockDetalle] = useState(null);
+const [stockTransferencia, setStockTransferencia] = useState(null);
 
 const [stockEditado, setStockEditado] = useState({});
 const inputImportarStockRef = useRef(null);
