@@ -887,79 +887,137 @@ const importarStockArchivo = (event) => {
       .toLowerCase();
 
   const procesarFilasImportadas = (filasCrudas) => {
-    if (!Array.isArray(filasCrudas) || filasCrudas.length < 2) {
-      alert("El archivo no tiene datos para importar.");
-      return;
-    }
+  if (!Array.isArray(filasCrudas) || filasCrudas.length < 2) {
+    alert("El archivo no tiene datos para importar.");
+    return;
+  }
 
-    const encabezados = (filasCrudas[0] || []).map((h) => normalizarTexto(h));
+  const encabezados = (filasCrudas[0] || []).map((h) => normalizarTexto(h));
 
-    const idxCodigo = encabezados.findIndex(
-      (h) => h === "codigo" || h === "código"
+  const idxNombre = encabezados.findIndex((h) => h === "nombre");
+  const idxCodigo = encabezados.findIndex(
+    (h) => h === "codigo" || h === "código"
+  );
+  const idxPrecio = encabezados.findIndex((h) => h === "precio");
+  const idxCategoria = encabezados.findIndex(
+    (h) => h === "categoria" || h === "categoría"
+  );
+  const idxStock = encabezados.findIndex(
+    (h) =>
+      h === "stock" ||
+      h === "stock actual" ||
+      h === "stock real" ||
+      h === "nuevo stock"
+  );
+
+  if (idxNombre === -1 || idxPrecio === -1 || idxCategoria === -1 || idxStock === -1) {
+    alert(
+      "El archivo debe tener estas columnas: nombre, precio, categoria y stock. Código es opcional."
     );
-    const idxNombre = encabezados.findIndex((h) => h === "nombre");
-    const idxStock = encabezados.findIndex(
-      (h) =>
-        h === "stock" ||
-        h === "stock actual" ||
-        h === "stock real" ||
-        h === "nuevo stock"
-    );
+    return;
+  }
 
-    if (idxStock === -1 || (idxCodigo === -1 && idxNombre === -1)) {
-      alert("El archivo debe tener al menos estas columnas: Nombre o Código, y Stock.");
-      return;
-    }
+  const filasValidas = filasCrudas
+    .slice(1)
+    .map((cols) => {
+      const nombre = String(cols[idxNombre] || "").trim();
+      const codigo = idxCodigo >= 0 ? String(cols[idxCodigo] || "").trim() : "";
+      const precio = Number(String(cols[idxPrecio] || "").replace(",", "."));
+      const categoria = String(cols[idxCategoria] || "").trim();
+      const stock = Number(String(cols[idxStock] || "").replace(",", "."));
 
-    let actualizados = 0;
-    const mapaNuevoStock = {};
-
-    const nuevosProductos = productos.map((producto) => {
-      const filaEncontrada = filasCrudas.slice(1).find((cols) => {
-        const codigoArchivo =
-          idxCodigo >= 0 ? normalizarTexto(cols[idxCodigo]) : "";
-        const nombreArchivo =
-          idxNombre >= 0 ? normalizarTexto(cols[idxNombre]) : "";
-
-        const codigoProducto = normalizarTexto(producto.codigo);
-        const nombreProducto = normalizarTexto(producto.nombre);
-
-        return (
-          (codigoArchivo && codigoArchivo === codigoProducto) ||
-          (nombreArchivo && nombreArchivo === nombreProducto)
-        );
-      });
-
-      if (!filaEncontrada) return producto;
-
-      const stockLeido = Number(
-        String(filaEncontrada[idxStock] || "").replace(",", ".")
-      );
-
-      if (Number.isNaN(stockLeido)) return producto;
-
-      actualizados += 1;
-      mapaNuevoStock[producto.id] = String(stockLeido);
+      if (!nombre) return null;
+      if (Number.isNaN(precio)) return null;
+      if (Number.isNaN(stock)) return null;
 
       return {
-        ...producto,
-        stock: stockLeido,
+        nombre,
+        codigo,
+        precio,
+        categoria,
+        stock,
       };
+    })
+    .filter(Boolean);
+
+  if (!filasValidas.length) {
+    alert("No hay filas válidas para importar.");
+    return;
+  }
+
+  const normalizar = (valor) =>
+    String(valor || "")
+      .trim()
+      .toLowerCase();
+
+  let actualizados = 0;
+  let nuevos = 0;
+
+  const productosActuales = Array.isArray(productos) ? [...productos] : [];
+  const mapaStockEditado = {};
+  let maxId = productosActuales.reduce((max, p) => {
+    const idNum = Number(p.id || 0);
+    return idNum > max ? idNum : max;
+  }, 0);
+
+  filasValidas.forEach((fila) => {
+    const indiceExistente = productosActuales.findIndex((producto) => {
+      const mismoCodigo =
+        fila.codigo &&
+        normalizar(producto.codigo) === normalizar(fila.codigo);
+
+      const mismoNombre =
+        normalizar(producto.nombre) === normalizar(fila.nombre);
+
+      return mismoCodigo || mismoNombre;
     });
 
-    setProductos(nuevosProductos);
-    setStockEditado((prev) => ({
-      ...prev,
-      ...mapaNuevoStock,
-    }));
+    if (indiceExistente >= 0) {
+      const productoActual = productosActuales[indiceExistente];
 
-    if (!actualizados) {
-      alert("No se encontraron productos coincidentes para importar.");
-      return;
+      productosActuales[indiceExistente] = {
+        ...productoActual,
+        nombre: fila.nombre,
+        codigo: fila.codigo || productoActual.codigo || "",
+        precio: fila.precio,
+        categoria: fila.categoria,
+        stock: fila.stock,
+        activo: productoActual.activo !== false,
+      };
+
+      mapaStockEditado[productoActual.id] = String(fila.stock);
+      actualizados += 1;
+    } else {
+      maxId += 1;
+
+      const nuevoProducto = {
+        id: maxId,
+        nombre: fila.nombre,
+        codigo: fila.codigo || "",
+        precio: fila.precio,
+        categoria: fila.categoria,
+        stock: fila.stock,
+        impuesto: 0,
+        activo: true,
+        imagen: "",
+      };
+
+      productosActuales.push(nuevoProducto);
+      mapaStockEditado[nuevoProducto.id] = String(fila.stock);
+      nuevos += 1;
     }
+  });
 
-    alert(`Importación completada. Productos actualizados: ${actualizados}`);
-  };
+  setProductos(productosActuales);
+  setStockEditado((prev) => ({
+    ...prev,
+    ...mapaStockEditado,
+  }));
+
+  alert(
+    `Importación completada.\n\nProductos actualizados: ${actualizados}\nProductos nuevos: ${nuevos}`
+  );
+};
 
   const parsearCSVTexto = (texto) => {
     const lineas = texto
@@ -5407,14 +5465,14 @@ if (!usuario) {
           Exportar existencias
         </button>
 
-        <button
-          type="button"
-          style={styles.secondaryButton}
-          onClick={abrirImportadorStock}
-          title="Importar stock"
-        >
-          Importar stock
-        </button>
+       <button
+  type="button"
+  style={styles.secondaryButton}
+  onClick={abrirImportadorStock}
+  title="Importar productos"
+>
+  Importar productos
+</button>
 
         <input
           ref={inputImportarStockRef}
