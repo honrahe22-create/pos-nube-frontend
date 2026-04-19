@@ -1144,6 +1144,20 @@ const guardarStockProducto = async (producto) => {
 };
 
 const desactivarProducto = async (productoId) => {
+  setProductos((prev) =>
+    prev.map((p) =>
+      Number(p.id) === Number(productoId)
+        ? { ...p, activo: false }
+        : p
+    )
+  );
+
+  setProductoDetalle((prev) =>
+    prev && Number(prev.id) === Number(productoId)
+      ? { ...prev, activo: false }
+      : prev
+  );
+
   try {
     const token = localStorage.getItem("token");
 
@@ -1159,15 +1173,28 @@ const desactivarProducto = async (productoId) => {
       const texto = await res.text();
       console.warn("No se pudo desactivar en backend:", texto);
     }
-
-    return true;
   } catch (error) {
     console.error("Error desactivando producto:", error);
-    return false;
   }
+
+  return true;
 };
 
 const reactivarProducto = async (productoId) => {
+  setProductos((prev) =>
+    prev.map((p) =>
+      Number(p.id) === Number(productoId)
+        ? { ...p, activo: true }
+        : p
+    )
+  );
+
+  setProductoDetalle((prev) =>
+    prev && Number(prev.id) === Number(productoId)
+      ? { ...prev, activo: true }
+      : prev
+  );
+
   try {
     const token = localStorage.getItem("token");
 
@@ -1183,12 +1210,11 @@ const reactivarProducto = async (productoId) => {
       const texto = await res.text();
       console.warn("No se pudo reactivar en backend:", texto);
     }
-
-    return true;
   } catch (error) {
     console.error("Error reactivando producto:", error);
-    return false;
   }
+
+  return true;
 };
 
 const limpiarFiltrosVentas = () => {
@@ -1196,18 +1222,8 @@ const limpiarFiltrosVentas = () => {
 };
 
 const verMovimientosStockNuevo = (producto) => {
-  const stockActual = Number(producto.stock || 0);
-  const stockPendiente = stockEditado[producto.id] ?? "";
-
-  alert(
-    `Detalle del producto\n\n` +
-      `Nombre: ${producto.nombre}\n` +
-      `Código: ${producto.codigo || "-"}\n` +
-      `Categoría: ${producto.categoria || "-"}\n` +
-      `Precio: ${Number(producto.precio || 0).toFixed(2)}\n` +
-      `Stock actual: ${stockActual}\n` +
-      `Nuevo stock ingresado: ${stockPendiente === "" ? "-" : stockPendiente}`
-  );
+  setStockTransferencia(null);
+  setStockDetalle(producto);
 };
 
 const eliminarStockProductoNuevo = async (producto) => {
@@ -1230,62 +1246,33 @@ const eliminarStockProductoNuevo = async (producto) => {
 
     if (!res.ok) {
       const texto = await res.text();
-      throw new Error(texto || "No se pudo desactivar el producto.");
+      console.warn("No se pudo desactivar en backend:", texto);
     }
-
-    setProductos((prev) => prev.filter((p) => p.id !== producto.id));
-
-    alert(`${producto.nombre} fue desactivado correctamente.`);
   } catch (error) {
     console.error("Error desactivando producto:", error);
-    alert(
-      `No se pudo desactivar ${producto.nombre} en el servidor. Revisa si existe la ruta /desactivar en backend.`
-    );
   }
-};
-
-const transferirStockProductoNuevo = (producto) => {
-  const cantidadTexto = window.prompt(
-    `Ingresa la cantidad a transferir de ${producto.nombre}:`,
-    "1"
-  );
-
-  if (cantidadTexto === null) return;
-
-  const cantidad = Number(cantidadTexto);
-  const stockActual = Number(producto.stock || 0);
-
-  if (Number.isNaN(cantidad) || cantidad <= 0) {
-    alert("Ingresa una cantidad válida mayor a 0.");
-    return;
-  }
-
-  if (cantidad > stockActual) {
-    alert("No puedes transferir más stock del disponible.");
-    return;
-  }
-
-  const nuevoStock = stockActual - cantidad;
 
   setProductos((prev) =>
     prev.map((p) =>
-      p.id === producto.id
-        ? { ...p, stock: nuevoStock }
+      Number(p.id) === Number(producto.id)
+        ? { ...p, activo: false }
         : p
     )
   );
 
-  setStockEditado((prev) => ({
-    ...prev,
-    [producto.id]: String(nuevoStock),
-  }));
-
-  alert(
-    `Transferencia registrada localmente.\n\n` +
-      `Producto: ${producto.nombre}\n` +
-      `Cantidad transferida: ${cantidad}\n` +
-      `Stock restante: ${nuevoStock}`
+  setStockDetalle((prev) =>
+    prev && Number(prev.id) === Number(producto.id)
+      ? { ...prev, activo: false }
+      : prev
   );
+};
+
+const transferirStockProductoNuevo = (producto) => {
+  setStockDetalle(null);
+  setStockTransferencia({
+    ...producto,
+    cantidad: "1",
+  });
 };
 
 const limpiarFormularioVenta = () => {
@@ -4516,74 +4503,32 @@ if (!usuario) {
                           ✎
                         </button>
 
-                       <button
+                      <button
   type="button"
   style={styles.deleteIconButton}
   title={estaInactivo ? "Reactivar producto" : "Desactivar producto"}
-  onClick={async () => {
-    try {
-      if (estaInactivo) {
-        const confirmado = window.confirm(
-          `¿Deseas reactivar el producto ${producto.nombre}?`
-        );
-        if (!confirmado) return;
-
-        setProductos((prev) =>
-          prev.map((p) =>
-            p.id === producto.id
-              ? { ...p, activo: true }
-              : p
-          )
-        );
-
-        if (
-          productoDetalle &&
-          Number(productoDetalle.id) === Number(producto.id)
-        ) {
-          setProductoDetalle({
-            ...producto,
-            activo: true,
-          });
-        }
-
-        return;
-      }
-
+  onClick={() => {
+    if (estaInactivo) {
       const confirmado = window.confirm(
-        `¿Deseas desactivar el producto ${producto.nombre}?`
+        `¿Deseas reactivar el producto ${producto.nombre}?`
       );
       if (!confirmado) return;
 
-      try {
-        await desactivarProducto(producto.id);
-      } catch (error) {
-        console.error(error);
-      }
-
-      setProductos((prev) =>
-        prev.map((p) =>
-          p.id === producto.id
-            ? { ...p, activo: false }
-            : p
-        )
-      );
-
-      if (
-        productoDetalle &&
-        Number(productoDetalle.id) === Number(producto.id)
-      ) {
-        setProductoDetalle({
-          ...producto,
-          activo: false,
-        });
-      }
-    } catch (error) {
-      console.error(error);
+      reactivarProducto(producto.id);
+      return;
     }
+
+    const confirmado = window.confirm(
+      `¿Deseas desactivar el producto ${producto.nombre}?`
+    );
+    if (!confirmado) return;
+
+    desactivarProducto(producto.id);
   }}
 >
   {estaInactivo ? "🔓" : "🗑"}
 </button>
+
                       </div>
                     </td>
                   </tr>
@@ -5637,7 +5582,7 @@ if (!usuario) {
 
               setProductos((prev) =>
                 prev.map((p) =>
-                  p.id === stockTransferencia.id
+                  Number(p.id) === Number(stockTransferencia.id)
                     ? { ...p, stock: nuevoStock }
                     : p
                 )
@@ -5652,10 +5597,6 @@ if (!usuario) {
                 prev && Number(prev.id) === Number(stockTransferencia.id)
                   ? { ...prev, stock: nuevoStock }
                   : prev
-              );
-
-              alert(
-                `Transferencia registrada.\n\nProducto: ${stockTransferencia.nombre}\nCantidad transferida: ${cantidad}\nStock restante: ${nuevoStock}`
               );
 
               setStockTransferencia(null);
