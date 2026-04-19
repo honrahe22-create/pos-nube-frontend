@@ -1501,31 +1501,42 @@ if (institucionIdLogin) {
   };
 
   const cargarProductos = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const institucionId = obtenerInstitucionActivaId();
+  try {
+    const token = localStorage.getItem("token");
+    const institucionId = obtenerInstitucionActivaId();
 
-      if (!token || !institucionId) return;
-
-      const res = await fetch(
-        `${API_URL}/api/productos?institucion_id=${institucionId}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-
-      const data = await res.json();
-
-      if (res.ok) {
-        setProductos(Array.isArray(data) ? data : []);
-      } else {
-        setProductos([]);
-      }
-    } catch (error) {
-      console.error("Error cargando productos:", error);
+    if (!token || !institucionId) {
       setProductos([]);
+      return;
     }
-  };
+
+    const res = await fetch(
+      `${API_URL}/api/productos?institucion_id=${institucionId}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      console.error("Error backend productos:", data);
+      setProductos([]);
+      return;
+    }
+
+    const listaProductos = Array.isArray(data)
+      ? data
+      : Array.isArray(data.productos)
+      ? data.productos
+      : [];
+
+    setProductos(listaProductos);
+  } catch (error) {
+    console.error("Error cargando productos:", error);
+    setProductos([]);
+  }
+};
 
   const cargarAlumnos = async () => {
   try {
@@ -5707,7 +5718,7 @@ if (!usuario) {
                       >
                         🗑
                       </button>
-
+const verMovimientosStockNuevo = ...
                       <button
                         type="button"
                         style={styles.moveIconButton}
