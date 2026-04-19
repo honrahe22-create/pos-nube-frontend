@@ -5718,7 +5718,7 @@ if (!usuario) {
                       >
                         🗑
                       </button>
-const verMovimientosStockNuevo = ...
+
                       <button
                         type="button"
                         style={styles.moveIconButton}
