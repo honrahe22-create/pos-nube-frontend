@@ -886,7 +886,7 @@ const importarStockArchivo = (event) => {
       .trim()
       .toLowerCase();
 
-  const procesarFilasImportadas = (filasCrudas) => {
+  const procesarFilasImportadas = async (filasCrudas) => {
   if (!Array.isArray(filasCrudas) || filasCrudas.length < 2) {
     alert("El archivo no tiene datos para importar.");
     return;
@@ -945,23 +945,27 @@ const importarStockArchivo = (event) => {
     return;
   }
 
+  const token = localStorage.getItem("token");
+  const institucionId = obtenerInstitucionActivaId();
+
+  if (!token || !institucionId) {
+    alert("Tu sesión no es válida. Vuelve a iniciar sesión.");
+    return;
+  }
+
   const normalizar = (valor) =>
     String(valor || "")
       .trim()
       .toLowerCase();
 
+  const productosActuales = Array.isArray(productos) ? [...productos] : [];
+
   let actualizados = 0;
   let nuevos = 0;
+  let errores = 0;
 
-  const productosActuales = Array.isArray(productos) ? [...productos] : [];
-  const mapaStockEditado = {};
-  let maxId = productosActuales.reduce((max, p) => {
-    const idNum = Number(p.id || 0);
-    return idNum > max ? idNum : max;
-  }, 0);
-
-  filasValidas.forEach((fila) => {
-    const indiceExistente = productosActuales.findIndex((producto) => {
+  for (const fila of filasValidas) {
+    const existente = productosActuales.find((producto) => {
       const mismoCodigo =
         fila.codigo &&
         normalizar(producto.codigo) === normalizar(fila.codigo);
@@ -972,50 +976,83 @@ const importarStockArchivo = (event) => {
       return mismoCodigo || mismoNombre;
     });
 
-    if (indiceExistente >= 0) {
-      const productoActual = productosActuales[indiceExistente];
+    try {
+      if (existente) {
+        const res = await fetch(`${API_URL}/api/productos/${existente.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            institucion_id: institucionId,
+            nombre: fila.nombre,
+            codigo: fila.codigo || existente.codigo || "",
+            descripcion: existente.descripcion || "",
+            precio: fila.precio,
+            stock: fila.stock,
+            stock_minimo: existente.stock_minimo || 0,
+            categoria: fila.categoria,
+            activo: existente.activo !== false,
+          }),
+        });
 
-      productosActuales[indiceExistente] = {
-        ...productoActual,
-        nombre: fila.nombre,
-        codigo: fila.codigo || productoActual.codigo || "",
-        precio: fila.precio,
-        categoria: fila.categoria,
-        stock: fila.stock,
-        activo: productoActual.activo !== false,
-      };
+        if (!res.ok) {
+          throw new Error(`Error actualizando ${fila.nombre}`);
+        }
 
-      mapaStockEditado[productoActual.id] = String(fila.stock);
-      actualizados += 1;
-    } else {
-      maxId += 1;
+        const productoActualizado = await res.json();
 
-      const nuevoProducto = {
-        id: maxId,
-        nombre: fila.nombre,
-        codigo: fila.codigo || "",
-        precio: fila.precio,
-        categoria: fila.categoria,
-        stock: fila.stock,
-        impuesto: 0,
-        activo: true,
-        imagen: "",
-      };
+        const idx = productosActuales.findIndex((p) => Number(p.id) === Number(existente.id));
+        if (idx >= 0) {
+          productosActuales[idx] = productoActualizado;
+        }
 
-      productosActuales.push(nuevoProducto);
-      mapaStockEditado[nuevoProducto.id] = String(fila.stock);
-      nuevos += 1;
+        actualizados += 1;
+      } else {
+        const res = await fetch(`${API_URL}/api/productos`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            institucion_id: institucionId,
+            nombre: fila.nombre,
+            codigo: fila.codigo || "",
+            descripcion: "",
+            precio: fila.precio,
+            stock: fila.stock,
+            stock_minimo: 0,
+            categoria: fila.categoria,
+          }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`Error creando ${fila.nombre}`);
+        }
+
+        const productoNuevo = await res.json();
+        productosActuales.push(productoNuevo);
+        nuevos += 1;
+      }
+    } catch (error) {
+      console.error("Error importando producto:", fila.nombre, error);
+      errores += 1;
     }
-  });
+  }
 
   setProductos(productosActuales);
-  setStockEditado((prev) => ({
-    ...prev,
-    ...mapaStockEditado,
-  }));
+  setStockEditado((prev) => {
+    const copia = { ...prev };
+    productosActuales.forEach((p) => {
+      copia[p.id] = String(p.stock ?? 0);
+    });
+    return copia;
+  });
 
   alert(
-    `Importación completada.\n\nProductos actualizados: ${actualizados}\nProductos nuevos: ${nuevos}`
+    `Importación completada.\n\nProductos actualizados: ${actualizados}\nProductos nuevos: ${nuevos}\nErrores: ${errores}`
   );
 };
 
