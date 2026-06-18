@@ -1185,27 +1185,38 @@ const guardarStockProducto = async (producto) => {
 
   try {
     const token = localStorage.getItem("token");
+    const institucionId = obtenerInstitucionActivaId();
 
-    const res = await fetch(`${API_URL}/api/productos/${producto.id}/stock`, {
+    const res = await fetch(`${API_URL}/api/productos/${producto.id}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({
+        institucion_id: institucionId,
+        nombre: producto.nombre,
+        codigo: producto.codigo || "",
+        descripcion: producto.descripcion || "",
+        precio: Number(producto.precio || 0),
         stock: stockNumero,
+        stock_minimo: Number(producto.stock_minimo || 0),
+        categoria: producto.categoria || "",
+        activo: producto.activo !== false,
       }),
     });
 
     if (!res.ok) {
       const texto = await res.text();
-      throw new Error(texto || "No se pudo actualizar el stock en el backend.");
+      throw new Error(texto || "No se pudo actualizar el stock.");
     }
+
+    const productoActualizado = await res.json();
 
     setProductos((prev) =>
       prev.map((p) =>
-        p.id === producto.id
-          ? { ...p, stock: stockNumero }
+        Number(p.id) === Number(producto.id)
+          ? productoActualizado
           : p
       )
     );
@@ -1218,23 +1229,7 @@ const guardarStockProducto = async (producto) => {
     alert(`Stock actualizado correctamente para ${producto.nombre}.`);
   } catch (error) {
     console.error("Error actualizando stock:", error);
-
-    setProductos((prev) =>
-      prev.map((p) =>
-        p.id === producto.id
-          ? { ...p, stock: stockNumero }
-          : p
-      )
-    );
-
-    setStockEditado((prev) => ({
-      ...prev,
-      [producto.id]: String(stockNumero),
-    }));
-
-    alert(
-      `No se pudo confirmar en el servidor, pero el stock quedó actualizado en pantalla para ${producto.nombre}.`
-    );
+    alert("No se pudo actualizar el stock en el servidor.");
   }
 };
 
