@@ -4650,7 +4650,7 @@ if (!usuario) {
       <div>
         <h1 style={styles.dashboardTitle}>Alumnos</h1>
         <p style={styles.dashboardSubtitle}>
-          Ficha principal del alumno, saldo, consumo, recargas y acciones
+          Ficha central del alumno, saldo, órdenes y recargas
         </p>
       </div>
 
@@ -4679,7 +4679,8 @@ if (!usuario) {
               {alumnoDetalle.nombres || ""} {alumnoDetalle.apellidos || ""}
             </h2>
             <p style={{ margin: "6px 0 0", color: "#6b7280" }}>
-              Ficha del alumno / usuario
+              Cédula: {obtenerCedulaAlumno(alumnoDetalle) || "-"} | Saldo:{" "}
+              {formatearMoneda(alumnoDetalle.saldo)}
             </p>
           </div>
 
@@ -4695,53 +4696,23 @@ if (!usuario) {
         <div style={styles.filtersGrid}>
           <div style={styles.filterField}>
             <label style={styles.label}>Cédula / Código</label>
-            <input
-              value={obtenerCedulaAlumno(alumnoDetalle) || ""}
-              style={styles.input}
-              readOnly
-            />
+            <input value={obtenerCedulaAlumno(alumnoDetalle) || ""} style={styles.input} readOnly />
           </div>
 
           <div style={styles.filterField}>
             <label style={styles.label}>Curso</label>
-            <input
-              value={alumnoDetalle.curso || ""}
-              style={styles.input}
-              readOnly
-            />
+            <input value={alumnoDetalle.curso || ""} style={styles.input} readOnly />
           </div>
 
           <div style={styles.filterField}>
             <label style={styles.label}>Paralelo</label>
-            <input
-              value={alumnoDetalle.paralelo || ""}
-              style={styles.input}
-              readOnly
-            />
-          </div>
-
-          <div style={styles.filterField}>
-            <label style={styles.label}>Saldo actual</label>
-            <input
-              value={formatearMoneda(alumnoDetalle.saldo)}
-              style={styles.input}
-              readOnly
-            />
+            <input value={alumnoDetalle.paralelo || ""} style={styles.input} readOnly />
           </div>
 
           <div style={styles.filterField}>
             <label style={styles.label}>Estado</label>
             <input
               value={alumnoDetalle.activo !== false ? "Activo" : "Inactivo"}
-              style={styles.input}
-              readOnly
-            />
-          </div>
-
-          <div style={styles.filterField}>
-            <label style={styles.label}>Correo</label>
-            <input
-              value={alumnoDetalle.correo || ""}
               style={styles.input}
               readOnly
             />
@@ -4755,10 +4726,15 @@ if (!usuario) {
             onClick={() => {
               setVista("ventas");
               setVistaVentasInterna("registrar");
+              setModoNuevaOrden("consumidor_final");
               setVentaForm((prev) => ({
                 ...prev,
                 alumno_id: alumnoDetalle.id,
+                metodo_pago: "RECARGA",
               }));
+              setBusquedaUsuarioNuevaOrden(
+                `${alumnoDetalle.nombres || ""} ${alumnoDetalle.apellidos || ""}`
+              );
             }}
           >
             Crear orden
@@ -4789,27 +4765,15 @@ if (!usuario) {
             Editar perfil
           </button>
 
-          <button
-            type="button"
-            style={styles.outlineButton}
-            onClick={() => setVistaAlumnoDetalle("ordenes")}
-          >
+          <button type="button" style={styles.outlineButton} onClick={() => setVistaAlumnoDetalle("ordenes")}>
             Órdenes
           </button>
 
-          <button
-            type="button"
-            style={styles.outlineButton}
-            onClick={() => setVistaAlumnoDetalle("recargas")}
-          >
+          <button type="button" style={styles.outlineButton} onClick={() => setVistaAlumnoDetalle("recargas")}>
             Recargas
           </button>
 
-          <button
-            type="button"
-            style={styles.outlineButton}
-            onClick={() => setVistaAlumnoDetalle("dispositivo")}
-          >
+          <button type="button" style={styles.outlineButton} onClick={() => setVistaAlumnoDetalle("dispositivo")}>
             Dispositivo
           </button>
         </div>
@@ -4817,20 +4781,19 @@ if (!usuario) {
         <div style={{ marginTop: 18 }}>
           {vistaAlumnoDetalle === "datos" && (
             <div style={styles.infoBox}>
-              <strong>Resumen:</strong> Desde esta ficha se debe controlar saldo,
-              órdenes, recargas, dispositivo y consumos del alumno.
+              <strong>Datos del alumno:</strong> saldo, curso, código, estado y acciones principales.
             </div>
           )}
 
           {vistaAlumnoDetalle === "ordenes" && (
             <div style={styles.infoBox}>
-              Historial de órdenes del alumno. En la siguiente fase conectamos esta pestaña con ventas reales.
+              Historial de órdenes del alumno. En la siguiente fase lo conectamos con ventas reales.
             </div>
           )}
 
           {vistaAlumnoDetalle === "recargas" && (
             <div style={styles.infoBox}>
-              Historial de recargas del alumno. En la siguiente fase conectamos esta pestaña con recargas reales.
+              Historial de recargas del alumno. En la siguiente fase lo conectamos con recargas reales.
             </div>
           )}
 
@@ -4847,84 +4810,20 @@ if (!usuario) {
       <div style={styles.box}>
         <h3>{editandoAlumnoId ? "Editar alumno" : "Nuevo alumno"}</h3>
 
-        <form
-          onSubmit={editandoAlumnoId ? actualizarAlumno : crearAlumno}
-          style={styles.form}
-        >
-          <input
-            type="text"
-            placeholder="Cédula"
-            value={alumnoForm.cedula}
-            onChange={(e) =>
-              setAlumnoForm({ ...alumnoForm, cedula: e.target.value })
-            }
-            style={styles.input}
-            required
-          />
-
-          <input
-            type="text"
-            placeholder="Nombres"
-            value={alumnoForm.nombres}
-            onChange={(e) =>
-              setAlumnoForm({ ...alumnoForm, nombres: e.target.value })
-            }
-            style={styles.input}
-            required
-          />
-
-          <input
-            type="text"
-            placeholder="Apellidos"
-            value={alumnoForm.apellidos}
-            onChange={(e) =>
-              setAlumnoForm({ ...alumnoForm, apellidos: e.target.value })
-            }
-            style={styles.input}
-            required
-          />
-
-          <input
-            type="text"
-            placeholder="Curso"
-            value={alumnoForm.curso}
-            onChange={(e) =>
-              setAlumnoForm({ ...alumnoForm, curso: e.target.value })
-            }
-            style={styles.input}
-          />
-
-          <input
-            type="text"
-            placeholder="Paralelo"
-            value={alumnoForm.paralelo}
-            onChange={(e) =>
-              setAlumnoForm({ ...alumnoForm, paralelo: e.target.value })
-            }
-            style={styles.input}
-          />
-
-          <input
-            type="number"
-            step="0.01"
-            placeholder="Saldo inicial"
-            value={alumnoForm.saldo}
-            onChange={(e) =>
-              setAlumnoForm({ ...alumnoForm, saldo: e.target.value })
-            }
-            style={styles.input}
-          />
+        <form onSubmit={editandoAlumnoId ? actualizarAlumno : crearAlumno} style={styles.form}>
+          <input type="text" placeholder="Cédula" value={alumnoForm.cedula} onChange={(e) => setAlumnoForm({ ...alumnoForm, cedula: e.target.value })} style={styles.input} required />
+          <input type="text" placeholder="Nombres" value={alumnoForm.nombres} onChange={(e) => setAlumnoForm({ ...alumnoForm, nombres: e.target.value })} style={styles.input} required />
+          <input type="text" placeholder="Apellidos" value={alumnoForm.apellidos} onChange={(e) => setAlumnoForm({ ...alumnoForm, apellidos: e.target.value })} style={styles.input} required />
+          <input type="text" placeholder="Curso" value={alumnoForm.curso} onChange={(e) => setAlumnoForm({ ...alumnoForm, curso: e.target.value })} style={styles.input} />
+          <input type="text" placeholder="Paralelo" value={alumnoForm.paralelo} onChange={(e) => setAlumnoForm({ ...alumnoForm, paralelo: e.target.value })} style={styles.input} />
+          <input type="number" step="0.01" placeholder="Saldo inicial" value={alumnoForm.saldo} onChange={(e) => setAlumnoForm({ ...alumnoForm, saldo: e.target.value })} style={styles.input} />
 
           <button type="submit" style={styles.button}>
             {editandoAlumnoId ? "Actualizar alumno" : "Guardar alumno"}
           </button>
 
           {editandoAlumnoId && (
-            <button
-              type="button"
-              style={styles.cancelButton}
-              onClick={limpiarFormularioAlumno}
-            >
+            <button type="button" style={styles.cancelButton} onClick={limpiarFormularioAlumno}>
               Cancelar edición
             </button>
           )}
@@ -4949,16 +4848,7 @@ if (!usuario) {
             style={styles.secondaryButton}
             onClick={() => {
               const filas = [
-                [
-                  "ID",
-                  "Nombres",
-                  "Apellidos",
-                  "Cédula",
-                  "Curso",
-                  "Paralelo",
-                  "Saldo",
-                  "Estado",
-                ],
+                ["ID", "Nombres", "Apellidos", "Cédula", "Curso", "Paralelo", "Saldo", "Estado"],
                 ...alumnosFiltrados.map((a) => [
                   a.id || "",
                   a.nombres || "",
@@ -4972,11 +4862,7 @@ if (!usuario) {
               ];
 
               const csv = filas
-                .map((fila) =>
-                  fila
-                    .map((valor) => `"${String(valor).replace(/"/g, '""')}"`)
-                    .join(",")
-                )
+                .map((fila) => fila.map((valor) => `"${String(valor).replace(/"/g, '""')}"`).join(","))
                 .join("\n");
 
               const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -5025,9 +4911,7 @@ if (!usuario) {
                       <td style={styles.td}>{a.paralelo || "-"}</td>
                       <td style={styles.td}>{formatearMoneda(a.saldo)}</td>
                       <td style={styles.td}>
-                        <span
-                          style={activo ? styles.badgeActive : styles.badgeInactive}
-                        >
+                        <span style={activo ? styles.badgeActive : styles.badgeInactive}>
                           {activo ? "Activo" : "Inactivo"}
                         </span>
                       </td>
@@ -5060,11 +4944,7 @@ if (!usuario) {
 
                           <button
                             type="button"
-                            style={
-                              activo
-                                ? styles.editIconButton
-                                : styles.disabledIconButton
-                            }
+                            style={activo ? styles.editIconButton : styles.disabledIconButton}
                             onClick={() => activo && iniciarEdicionAlumno(a)}
                             disabled={!activo}
                             title="Editar alumno"
@@ -5098,11 +4978,7 @@ if (!usuario) {
 
                           <button
                             type="button"
-                            style={
-                              activo
-                                ? styles.deleteIconButton
-                                : styles.disabledIconButton
-                            }
+                            style={activo ? styles.deleteIconButton : styles.disabledIconButton}
                             onClick={() => activo && eliminarAlumno(a)}
                             disabled={!activo}
                             title="Eliminar alumno"
