@@ -130,6 +130,8 @@ const [cargandoCrearCuenta, setCargandoCrearCuenta] = useState(false);
   });
   const [editandoAlumnoId, setEditandoAlumnoId] = useState(null);
   const [filtroAlumnos, setFiltroAlumnos] = useState("todos");
+  const [alumnoDetalle, setAlumnoDetalle] = useState(null);
+const [vistaAlumnoDetalle, setVistaAlumnoDetalle] = useState("datos");
 
   const [inventarioFiltro, setInventarioFiltro] = useState("todos");
   const [inventarioBusqueda, setInventarioBusqueda] = useState("");
@@ -4642,13 +4644,13 @@ if (!usuario) {
   </>
 )}
 
-        {vista === "alumnos" && (
+       {vista === "alumnos" && (
   <>
     <div style={styles.pageHeader}>
       <div>
         <h1 style={styles.dashboardTitle}>Alumnos</h1>
         <p style={styles.dashboardSubtitle}>
-          Crear y visualizar alumnos de la institución
+          Ficha principal del alumno, saldo, consumo, recargas y acciones
         </p>
       </div>
 
@@ -4668,6 +4670,178 @@ if (!usuario) {
         </button>
       </div>
     </div>
+
+    {alumnoDetalle && (
+      <div style={{ ...styles.box, marginBottom: 20 }}>
+        <div style={styles.pageHeaderSmall}>
+          <div>
+            <h2 style={{ margin: 0 }}>
+              {alumnoDetalle.nombres || ""} {alumnoDetalle.apellidos || ""}
+            </h2>
+            <p style={{ margin: "6px 0 0", color: "#6b7280" }}>
+              Ficha del alumno / usuario
+            </p>
+          </div>
+
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={() => setAlumnoDetalle(null)}
+          >
+            Cerrar
+          </button>
+        </div>
+
+        <div style={styles.filtersGrid}>
+          <div style={styles.filterField}>
+            <label style={styles.label}>Cédula / Código</label>
+            <input
+              value={obtenerCedulaAlumno(alumnoDetalle) || ""}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Curso</label>
+            <input
+              value={alumnoDetalle.curso || ""}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Paralelo</label>
+            <input
+              value={alumnoDetalle.paralelo || ""}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Saldo actual</label>
+            <input
+              value={formatearMoneda(alumnoDetalle.saldo)}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Estado</label>
+            <input
+              value={alumnoDetalle.activo !== false ? "Activo" : "Inactivo"}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Correo</label>
+            <input
+              value={alumnoDetalle.correo || ""}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
+          <button
+            type="button"
+            style={styles.button}
+            onClick={() => {
+              setVista("ventas");
+              setVistaVentasInterna("registrar");
+              setVentaForm((prev) => ({
+                ...prev,
+                alumno_id: alumnoDetalle.id,
+              }));
+            }}
+          >
+            Crear orden
+          </button>
+
+          <button
+            type="button"
+            style={styles.secondaryButton}
+            onClick={() => {
+              setVista("recargas");
+              setRecargaForm((prev) => ({
+                ...prev,
+                alumno_id: alumnoDetalle.id,
+              }));
+            }}
+          >
+            Recargar efectivo
+          </button>
+
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={() => {
+              iniciarEdicionAlumno(alumnoDetalle);
+              setAlumnoDetalle(null);
+            }}
+          >
+            Editar perfil
+          </button>
+
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={() => setVistaAlumnoDetalle("ordenes")}
+          >
+            Órdenes
+          </button>
+
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={() => setVistaAlumnoDetalle("recargas")}
+          >
+            Recargas
+          </button>
+
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={() => setVistaAlumnoDetalle("dispositivo")}
+          >
+            Dispositivo
+          </button>
+        </div>
+
+        <div style={{ marginTop: 18 }}>
+          {vistaAlumnoDetalle === "datos" && (
+            <div style={styles.infoBox}>
+              <strong>Resumen:</strong> Desde esta ficha se debe controlar saldo,
+              órdenes, recargas, dispositivo y consumos del alumno.
+            </div>
+          )}
+
+          {vistaAlumnoDetalle === "ordenes" && (
+            <div style={styles.infoBox}>
+              Historial de órdenes del alumno. En la siguiente fase conectamos esta pestaña con ventas reales.
+            </div>
+          )}
+
+          {vistaAlumnoDetalle === "recargas" && (
+            <div style={styles.infoBox}>
+              Historial de recargas del alumno. En la siguiente fase conectamos esta pestaña con recargas reales.
+            </div>
+          )}
+
+          {vistaAlumnoDetalle === "dispositivo" && (
+            <div style={styles.infoBox}>
+              Dispositivo / tarjeta / código asignado al alumno.
+            </div>
+          )}
+        </div>
+      </div>
+    )}
 
     <div style={styles.twoColumn}>
       <div style={styles.box}>
@@ -4799,7 +4973,9 @@ if (!usuario) {
 
               const csv = filas
                 .map((fila) =>
-                  fila.map((valor) => `"${String(valor).replace(/"/g, '""')}"`).join(",")
+                  fila
+                    .map((valor) => `"${String(valor).replace(/"/g, '""')}"`)
+                    .join(",")
                 )
                 .join("\n");
 
@@ -4834,6 +5010,7 @@ if (!usuario) {
                   <th style={styles.th}>Acciones</th>
                 </tr>
               </thead>
+
               <tbody>
                 {alumnosFiltrados.map((a) => {
                   const activo = a.activo !== false;
@@ -4860,13 +5037,10 @@ if (!usuario) {
                           <button
                             type="button"
                             style={styles.smallDarkButton}
-                            onClick={() =>
-                              alert(
-                                `Alumno: ${a.nombres || ""} ${a.apellidos || ""}\nCédula: ${
-                                  obtenerCedulaAlumno(a) || "-"
-                                }\nSaldo: ${formatearMoneda(a.saldo)}`
-                              )
-                            }
+                            onClick={() => {
+                              setAlumnoDetalle(a);
+                              setVistaAlumnoDetalle("datos");
+                            }}
                             title="Ver alumno"
                           >
                             👁
@@ -4875,11 +5049,10 @@ if (!usuario) {
                           <button
                             type="button"
                             style={styles.saveIconButton}
-                            onClick={() =>
-                              alert(
-                                `Recargas mensuales de ${a.nombres || ""} ${a.apellidos || ""} aún no implementadas.`
-                              )
-                            }
+                            onClick={() => {
+                              setAlumnoDetalle(a);
+                              setVistaAlumnoDetalle("recargas");
+                            }}
                             title="Recargas mensuales"
                           >
                             📄
@@ -4902,11 +5075,10 @@ if (!usuario) {
                           <button
                             type="button"
                             style={styles.moveIconButton}
-                            onClick={() =>
-                              alert(
-                                `Notificación de saldo bajo para ${a.nombres || ""} ${a.apellidos || ""} aún no implementada.`
-                              )
-                            }
+                            onClick={() => {
+                              setAlumnoDetalle(a);
+                              setVistaAlumnoDetalle("datos");
+                            }}
                             title="Enviar notificación saldo bajo"
                           >
                             📨
@@ -4915,11 +5087,10 @@ if (!usuario) {
                           <button
                             type="button"
                             style={styles.outlineButton}
-                            onClick={() =>
-                              alert(
-                                `Vista de dispositivo para ${a.nombres || ""} ${a.apellidos || ""} aún no implementada.`
-                              )
-                            }
+                            onClick={() => {
+                              setAlumnoDetalle(a);
+                              setVistaAlumnoDetalle("dispositivo");
+                            }}
                             title="Ver dispositivo"
                           >
                             💳
