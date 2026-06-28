@@ -132,6 +132,8 @@ const [cargandoCrearCuenta, setCargandoCrearCuenta] = useState(false);
   const [filtroAlumnos, setFiltroAlumnos] = useState("todos");
   const [alumnoDetalle, setAlumnoDetalle] = useState(null);
 const [vistaAlumnoDetalle, setVistaAlumnoDetalle] = useState("datos");
+const [historialVentasAlumno, setHistorialVentasAlumno] = useState([]);
+const [historialRecargasAlumno, setHistorialRecargasAlumno] = useState([]);
 
   const [inventarioFiltro, setInventarioFiltro] = useState("todos");
   const [inventarioBusqueda, setInventarioBusqueda] = useState("");
@@ -4721,24 +4723,26 @@ if (!usuario) {
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
           <button
-            type="button"
-            style={styles.button}
-            onClick={() => {
-              setVista("ventas");
-              setVistaVentasInterna("registrar");
-              setModoNuevaOrden("consumidor_final");
-              setVentaForm((prev) => ({
-                ...prev,
-                alumno_id: alumnoDetalle.id,
-                metodo_pago: "RECARGA",
-              }));
-              setBusquedaUsuarioNuevaOrden(
-                `${alumnoDetalle.nombres || ""} ${alumnoDetalle.apellidos || ""}`
-              );
-            }}
-          >
-            Crear orden
-          </button>
+  type="button"
+  style={styles.button}
+  onClick={() => {
+    setVista("ventas");
+    setVistaVentasInterna("registrar");
+    setModoNuevaOrden("consumidor_final");
+
+    setVentaForm((prev) => ({
+      ...prev,
+      alumno_id: alumnoDetalle.id,
+      metodo_pago: "RECARGA",
+    }));
+
+    setBusquedaUsuarioNuevaOrden(
+      `${alumnoDetalle.nombres || ""} ${alumnoDetalle.apellidos || ""}`
+    );
+  }}
+>
+  Crear orden
+</button>
 
           <button
             type="button"
@@ -4786,16 +4790,74 @@ if (!usuario) {
           )}
 
           {vistaAlumnoDetalle === "ordenes" && (
-            <div style={styles.infoBox}>
-              Historial de órdenes del alumno. En la siguiente fase lo conectamos con ventas reales.
-            </div>
-          )}
+  <div style={styles.infoBox}>
+    <h4>Historial de Órdenes</h4>
+
+    {historialVentasAlumno.length === 0 ? (
+      <p>No existen órdenes registradas.</p>
+    ) : (
+      <table style={styles.table}>
+        <thead>
+          <tr>
+            <th style={styles.th}>ID</th>
+            <th style={styles.th}>Fecha</th>
+            <th style={styles.th}>Total</th>
+            <th style={styles.th}>Método</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {historialVentasAlumno.map((v) => (
+            <tr key={v.id}>
+              <td style={styles.td}>{v.id}</td>
+              <td style={styles.td}>
+                {new Date(v.created_at).toLocaleString()}
+              </td>
+              <td style={styles.td}>
+                {formatearMoneda(v.total)}
+              </td>
+              <td style={styles.td}>{v.metodo_pago}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )}
+  </div>
+)}
 
           {vistaAlumnoDetalle === "recargas" && (
-            <div style={styles.infoBox}>
-              Historial de recargas del alumno. En la siguiente fase lo conectamos con recargas reales.
-            </div>
-          )}
+  <div style={styles.infoBox}>
+    <h4>Historial de Recargas</h4>
+
+    {historialRecargasAlumno.length === 0 ? (
+      <p>No existen recargas registradas.</p>
+    ) : (
+      <table style={styles.table}>
+        <thead>
+          <tr>
+            <th style={styles.th}>Fecha</th>
+            <th style={styles.th}>Monto</th>
+            <th style={styles.th}>Método</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {historialRecargasAlumno.map((r) => (
+            <tr key={r.id}>
+              <td style={styles.td}>
+                {new Date(r.created_at).toLocaleString()}
+              </td>
+              <td style={styles.td}>
+                {formatearMoneda(r.monto)}
+              </td>
+              <td style={styles.td}>{r.metodo_pago}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )}
+  </div>
+)}
 
           {vistaAlumnoDetalle === "dispositivo" && (
             <div style={styles.infoBox}>
@@ -4921,10 +4983,47 @@ if (!usuario) {
                           <button
                             type="button"
                             style={styles.smallDarkButton}
-                            onClick={() => {
-                              setAlumnoDetalle(a);
-                              setVistaAlumnoDetalle("datos");
-                            }}
+                            onClick={async () => {
+  setAlumnoDetalle(a);
+  setVistaAlumnoDetalle("datos");
+
+  try {
+    const token = localStorage.getItem("token");
+    const institucionId = obtenerInstitucionActivaId();
+
+    const [ventasRes, recargasRes] = await Promise.all([
+      fetch(
+        `${API_URL}/api/ventas?institucion_id=${institucionId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      ),
+      fetch(
+        `${API_URL}/api/recargas?institucion_id=${institucionId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      ),
+    ]);
+
+    const ventas = await ventasRes.json();
+    const recargas = await recargasRes.json();
+
+    setHistorialVentasAlumno(
+      (ventas || []).filter(
+        (v) => Number(v.alumno_id) === Number(a.id)
+      )
+    );
+
+    setHistorialRecargasAlumno(
+      (recargas || []).filter(
+        (r) => Number(r.alumno_id) === Number(a.id)
+      )
+    );
+  } catch (error) {
+    console.error(error);
+  }
+}}
                             title="Ver alumno"
                           >
                             👁
@@ -6169,6 +6268,20 @@ if (!usuario) {
       </div>
     </div>
 
+    {alumnoVentaSeleccionado && (
+      <div style={{ ...styles.infoBox, marginBottom: 20 }}>
+        <strong>Alumno seleccionado:</strong>{" "}
+        {alumnoVentaSeleccionado.nombres || ""}{" "}
+        {alumnoVentaSeleccionado.apellidos || ""}
+        {" | "}
+        <strong>Cédula:</strong>{" "}
+        {obtenerCedulaAlumno(alumnoVentaSeleccionado) || "-"}
+        {" | "}
+        <strong>Saldo:</strong>{" "}
+        {formatearMoneda(alumnoVentaSeleccionado.saldo)}
+      </div>
+    )}
+    
     {modoNuevaOrden === "identificar" && (
       <div style={{ ...styles.box, marginBottom: 20, padding: 20 }}>
         <div style={styles.filtersGrid}>
