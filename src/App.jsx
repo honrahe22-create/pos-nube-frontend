@@ -135,6 +135,7 @@ const [vistaAlumnoDetalle, setVistaAlumnoDetalle] = useState("datos");
 const [historialVentasAlumno, setHistorialVentasAlumno] = useState([]);
 const [historialRecargasAlumno, setHistorialRecargasAlumno] = useState([]);
 const [historialConsumoAlumno, setHistorialConsumoAlumno] = useState([]);
+const [ordenDetalleAlumno, setOrdenDetalleAlumno] = useState(null);
 
   const [inventarioFiltro, setInventarioFiltro] = useState("todos");
   const [inventarioBusqueda, setInventarioBusqueda] = useState("");
@@ -4809,7 +4810,20 @@ if (!usuario) {
 
         <tbody>
           {historialVentasAlumno.map((v) => (
-            <tr key={v.id}>
+            <tr
+  key={v.id}
+  style={{ cursor: "pointer" }}
+  onClick={() => {
+    const detalleOrden = historialConsumoAlumno.filter(
+      (c) => Number(c.venta_id) === Number(v.id)
+    );
+
+    setOrdenDetalleAlumno({
+      ...v,
+      detalle: detalleOrden,
+    });
+  }}
+>
               <td style={styles.td}>{v.id}</td>
               <td style={styles.td}>
                 {new Date(v.created_at).toLocaleString()}
@@ -4822,6 +4836,54 @@ if (!usuario) {
           ))}
         </tbody>
       </table>
+    )}
+  </div>
+)}
+{ordenDetalleAlumno && (
+  <div style={{ ...styles.box, marginTop: 16 }}>
+    <div style={styles.pageHeaderSmall}>
+      <h4 style={{ margin: 0 }}>Detalle de orden #{ordenDetalleAlumno.id}</h4>
+
+      <button
+        type="button"
+        style={styles.outlineButton}
+        onClick={() => setOrdenDetalleAlumno(null)}
+      >
+        Cerrar detalle
+      </button>
+    </div>
+
+    <p>
+      <strong>Fecha:</strong>{" "}
+      {new Date(ordenDetalleAlumno.created_at).toLocaleString()} |{" "}
+      <strong>Método:</strong> {ordenDetalleAlumno.metodo_pago} |{" "}
+      <strong>Total:</strong> {formatearMoneda(ordenDetalleAlumno.total)}
+    </p>
+
+    {ordenDetalleAlumno.detalle?.length ? (
+      <table style={styles.table}>
+        <thead>
+          <tr>
+            <th style={styles.th}>Producto</th>
+            <th style={styles.th}>Cantidad</th>
+            <th style={styles.th}>Precio</th>
+            <th style={styles.th}>Total</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {ordenDetalleAlumno.detalle.map((d, index) => (
+            <tr key={`${d.producto_id}-${index}`}>
+              <td style={styles.td}>{d.producto_nombre}</td>
+              <td style={styles.td}>{d.cantidad}</td>
+              <td style={styles.td}>{formatearMoneda(d.precio_unitario)}</td>
+              <td style={styles.td}>{formatearMoneda(d.total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    ) : (
+      <p>No hay detalle de productos para esta orden.</p>
     )}
   </div>
 )}
