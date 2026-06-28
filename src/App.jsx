@@ -134,6 +134,7 @@ const [cargandoCrearCuenta, setCargandoCrearCuenta] = useState(false);
 const [vistaAlumnoDetalle, setVistaAlumnoDetalle] = useState("datos");
 const [historialVentasAlumno, setHistorialVentasAlumno] = useState([]);
 const [historialRecargasAlumno, setHistorialRecargasAlumno] = useState([]);
+const [historialConsumoAlumno, setHistorialConsumoAlumno] = useState([]);
 
   const [inventarioFiltro, setInventarioFiltro] = useState("todos");
   const [inventarioBusqueda, setInventarioBusqueda] = useState("");
@@ -4859,6 +4860,59 @@ if (!usuario) {
   </div>
 )}
 
+{vistaAlumnoDetalle === "consumo" && (
+  <div style={styles.infoBox}>
+    <h4 style={{ marginTop: 0 }}>Consumo detallado</h4>
+
+    {historialConsumoAlumno.length === 0 ? (
+      <p>No existen consumos registrados.</p>
+    ) : (
+      <table style={styles.table}>
+        <thead>
+          <tr>
+            <th style={styles.th}>Fecha</th>
+            <th style={styles.th}>Orden</th>
+            <th style={styles.th}>Producto</th>
+            <th style={styles.th}>Cantidad</th>
+            <th style={styles.th}>Precio</th>
+            <th style={styles.th}>Total</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {historialConsumoAlumno.map((c, index) => (
+            <tr key={`${c.venta_id}-${c.producto_id}-${index}`}>
+              <td style={styles.td}>
+                {new Date(c.created_at).toLocaleString()}
+              </td>
+
+              <td style={styles.td}>
+                #{c.venta_id}
+              </td>
+
+              <td style={styles.td}>
+                {c.producto_nombre}
+              </td>
+
+              <td style={styles.td}>
+                {c.cantidad}
+              </td>
+
+              <td style={styles.td}>
+                {formatearMoneda(c.precio_unitario)}
+              </td>
+
+              <td style={styles.td}>
+                {formatearMoneda(c.total)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )}
+  </div>
+)}
+
           {vistaAlumnoDetalle === "dispositivo" && (
             <div style={styles.infoBox}>
               Dispositivo / tarjeta / código asignado al alumno.
@@ -4991,35 +5045,46 @@ if (!usuario) {
     const token = localStorage.getItem("token");
     const institucionId = obtenerInstitucionActivaId();
 
-    const [ventasRes, recargasRes] = await Promise.all([
-      fetch(
-        `${API_URL}/api/ventas?institucion_id=${institucionId}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      ),
-      fetch(
-        `${API_URL}/api/recargas?institucion_id=${institucionId}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      ),
-    ]);
+   const [ventasRes, recargasRes, consumoRes] = await Promise.all([
+  fetch(
+    `${API_URL}/api/ventas?institucion_id=${institucionId}`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  ),
+  fetch(
+    `${API_URL}/api/recargas?institucion_id=${institucionId}`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  ),
+  fetch(
+    `${API_URL}/api/ventas/alumno/${a.id}/detalle?institucion_id=${institucionId}`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  ),
+]);
 
-    const ventas = await ventasRes.json();
-    const recargas = await recargasRes.json();
+const ventas = await ventasRes.json();
+const recargas = await recargasRes.json();
+const consumo = await consumoRes.json();
 
-    setHistorialVentasAlumno(
-      (ventas || []).filter(
-        (v) => Number(v.alumno_id) === Number(a.id)
-      )
-    );
+setHistorialVentasAlumno(
+  (ventas || []).filter(
+    (v) => Number(v.alumno_id) === Number(a.id)
+  )
+);
 
-    setHistorialRecargasAlumno(
-      (recargas || []).filter(
-        (r) => Number(r.alumno_id) === Number(a.id)
-      )
-    );
+setHistorialRecargasAlumno(
+  (recargas || []).filter(
+    (r) => Number(r.alumno_id) === Number(a.id)
+  )
+);
+
+setHistorialConsumoAlumno(
+  Array.isArray(consumo) ? consumo : []
+);
   } catch (error) {
     console.error(error);
   }
@@ -5062,6 +5127,14 @@ if (!usuario) {
                           >
                             📨
                           </button>
+
+<button
+  type="button"
+  style={styles.outlineButton}
+  onClick={() => setVistaAlumnoDetalle("consumo")}
+>
+  Consumo
+</button>
 
                           <button
                             type="button"
