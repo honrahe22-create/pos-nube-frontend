@@ -170,12 +170,7 @@ const [recargasFiltros, setRecargasFiltros] = useState({
     metodo_pago: "EFECTIVO",
     observacion: "",
   });
-  const [ventaItems, setVentaItems] = useState([
-    {
-      producto_id: "",
-      cantidad: "1",
-    },
-  ]);
+ const [ventaItems, setVentaItems] = useState([]);
 
   const [vistaVentasInterna, setVistaVentasInterna] = useState("consultar");
 const [menuComidasAbierto, setMenuComidasAbierto] = useState(true);
@@ -1377,12 +1372,16 @@ const limpiarFormularioVenta = () => {
     metodo_pago: "EFECTIVO",
     observacion: "",
   });
-  setVentaItems([
-    {
-      producto_id: "",
-      cantidad: "1",
-    },
-  ]);
+
+  setVentaItems([]);
+  setCodigoBarraNuevaOrden("");
+  setBusquedaProductoNuevaOrden("");
+  setCategoriaNuevaOrden("TODOS");
+  setModoNuevaOrden("consumidor_final");
+  setTipoUsuarioNuevaOrden("TODOS");
+  setBusquedaUsuarioNuevaOrden("");
+  setLocalNuevaOrden("PRINCIPAL");
+  setFechaNuevaOrden(new Date().toISOString().slice(0, 10));
 };
 
 const exportarVentasExcel = () => {
@@ -1453,11 +1452,8 @@ const exportarVentasExcel = () => {
   };
 
   const eliminarItemVenta = (index) => {
-    setVentaItems((prev) => {
-      if (prev.length === 1) return prev;
-      return prev.filter((_, i) => i !== index);
-    });
-  };
+  setVentaItems((prev) => prev.filter((_, i) => i !== index));
+};
 
   const actualizarItemVenta = (index, campo, valor) => {
     setVentaItems((prev) =>
@@ -2406,140 +2402,154 @@ const consultarProductosPorDia = () => {
   };
 
   const crearVenta = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
 
-    try {
-      const token = localStorage.getItem("token");
-      const institucionId = obtenerInstitucionActivaId();
+  try {
+    const token = localStorage.getItem("token");
+    const institucionId = obtenerInstitucionActivaId();
 
-      if (!token || !institucionId) {
-        alert("Sesión o institución no válida");
+    if (!token || !institucionId) {
+      alert("Sesión o institución no válida");
+      return;
+    }
+
+    const itemsLimpios = ventaItems
+      .map((item) => ({
+        producto_id: Number(item.producto_id),
+        cantidad: Number(item.cantidad || 0),
+      }))
+      .filter(
+        (item) =>
+          item.producto_id > 0 &&
+          item.cantidad > 0
+      );
+
+    if (itemsLimpios.length === 0) {
+      alert("Debes agregar al menos un producto válido");
+      return;
+    }
+
+    // Validar stock
+    for (const item of itemsLimpios) {
+      const producto = productosActivos.find(
+        (p) => Number(p.id) === Number(item.producto_id)
+      );
+
+      if (!producto) {
+        alert("Uno de los productos ya no existe.");
         return;
       }
 
-      const itemsLimpios = ventaItems
-        .map((item) => ({
-          producto_id: Number(item.producto_id),
-          cantidad: Number(item.cantidad || 0),
-        }))
-        .filter((item) => item.producto_id && item.cantidad > 0);
+      const stockDisponible = Number(producto.stock || 0);
 
-      if (itemsLimpios.length === 0) {
-        alert("Debes agregar al menos un producto válido");
+      if (item.cantidad > stockDisponible) {
+        alert(
+          `${producto.nombre}: solo hay ${stockDisponible} unidades disponibles`
+        );
         return;
       }
+    }
 
-      if (ventaForm.metodo_pago === "RECARGA" && !ventaForm.alumno_id) {
-        alert("Debes seleccionar un alumno para venta por recarga");
+    const pagaConSaldo =
+      ventaForm.metodo_pago === "RECARGA";
+
+    if (pagaConSaldo && !ventaForm.alumno_id) {
+      alert("Debes seleccionar un alumno.");
+      return;
+    }
+
+    // Validar saldo
+    if (pagaConSaldo && alumnoVentaSeleccionado) {
+      const saldo = Number(
+        alumnoVentaSeleccionado.saldo || 0
+      );
+
+      if (totalVentaCalculado > saldo) {
+        alert(
+          `Saldo insuficiente.\nDisponible: ${formatearMoneda(
+            saldo
+          )}`
+        );
         return;
       }
+    }
 
-      const payload = {
-        institucion_id: Number(institucionId),
-        alumno_id:
-          ventaForm.metodo_pago === "RECARGA" ? Number(ventaForm.alumno_id) : null,
-        metodo_pago: ventaForm.metodo_pago === "RECARGA" ? "SALDO" : ventaForm.metodo_pago,
-        items: itemsLimpios,
-        observacion: ventaForm.observacion,
-      };
+    const payload = {
+      institucion_id: Number(institucionId),
+      alumno_id: pagaConSaldo
+        ? Number(ventaForm.alumno_id)
+        : null,
+      metodo_pago: pagaConSaldo
+        ? "SALDO"
+        : ventaForm.metodo_pago,
+      items: itemsLimpios,
+      observacion: ventaForm.observacion?.trim() || "",
+    };
 
-      const res = await fetch(`${API_URL}/api/ventas`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
+    const res = await fetch(`${API_URL}/api/ventas`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert(
+        data.error ||
+          data.message ||
+          "Error creando venta"
+      );
+      return;
+    }
+
+    // Actualizar datos
+    await Promise.all([
+      cargarVentas(),
+      cargarProductos(),
+      cargarAlumnos(),
+      cargarResumen(),
+    ]);
+
+    // Si la venta fue desde la ficha del alumno
+    if (
+      alumnoDetalle &&
+      Number(alumnoDetalle.id) ===
+        Number(ventaForm.alumno_id)
+    ) {
+      setAlumnoDetalle((prev) => {
+        if (!prev) return prev;
+
+        return {
+          ...prev,
+          saldo:
+            pagaConSaldo
+              ? Math.max(
+                  0,
+                  Number(prev.saldo || 0) -
+                    Number(totalVentaCalculado || 0)
+                )
+              : Number(prev.saldo || 0),
+        };
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        alert(data.error || data.message || "Error creando venta");
-        return;
-      }
-
-      limpiarFormularioVenta();
+      setVista("alumnos");
+      setVistaAlumnoDetalle("datos");
+    } else {
       setVistaVentasInterna("consultar");
-      await cargarVentas();
-      await cargarProductos();
-      await cargarAlumnos();
-      await cargarResumen();
-      alert("Venta registrada correctamente");
-    } catch (error) {
-      console.error("Error creando venta:", error);
-      alert("No se pudo registrar la venta");
     }
-  };
 
-  const guardarCuentaInstitucion = async (e) => {
-    e.preventDefault();
+    limpiarFormularioVenta();
 
-    try {
-      const token = localStorage.getItem("token");
-
-      if (!token) {
-        alert("Sesión no válida");
-        return;
-      }
-
-      if (!institucionSeleccionadaId) {
-        alert("Debes seleccionar una institución");
-        return;
-      }
-
-      setGuardandoCuenta(true);
-
-      const payload = {
-        correo: cuentaForm.correo,
-        password_actual: cuentaForm.password_actual,
-        nueva_password: cuentaForm.nueva_password,
-        confirmar_password: cuentaForm.confirmar_password,
-      };
-
-      const res = await fetch(`${API_URL}/api/auth/me`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        alert(data.message || "Error actualizando cuenta");
-        return;
-      }
-
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("usuario", JSON.stringify(data.usuario));
-      localStorage.setItem("institucionSeleccionadaId", String(institucionSeleccionadaId));
-
-      setUsuario(data.usuario);
-      setCuentaForm((prev) => ({
-        ...prev,
-        correo: data.usuario?.correo || "",
-        password_actual: "",
-        nueva_password: "",
-        confirmar_password: "",
-      }));
-
-      await cargarResumen();
-      await cargarProductos();
-      await cargarAlumnos();
-      await cargarRecargas();
-      await cargarVentas();
-
-      alert("Cuenta e institución actualizadas correctamente");
-    } catch (error) {
-      console.error("Error actualizando cuenta:", error);
-      alert("No se pudo actualizar la cuenta");
-    } finally {
-      setGuardandoCuenta(false);
-    }
-  };
+    alert("Venta registrada correctamente");
+  } catch (error) {
+    console.error("Error creando venta:", error);
+    alert("No se pudo registrar la venta");
+  }
+};
 
   useEffect(() => {
     if (usuario) {
@@ -4689,42 +4699,6 @@ if (!usuario) {
           </div>
 
           <button
-            type="button"
-            style={styles.outlineButton}
-            onClick={() => setAlumnoDetalle(null)}
-          >
-            Cerrar
-          </button>
-        </div>
-
-        <div style={styles.filtersGrid}>
-          <div style={styles.filterField}>
-            <label style={styles.label}>Cédula / Código</label>
-            <input value={obtenerCedulaAlumno(alumnoDetalle) || ""} style={styles.input} readOnly />
-          </div>
-
-          <div style={styles.filterField}>
-            <label style={styles.label}>Curso</label>
-            <input value={alumnoDetalle.curso || ""} style={styles.input} readOnly />
-          </div>
-
-          <div style={styles.filterField}>
-            <label style={styles.label}>Paralelo</label>
-            <input value={alumnoDetalle.paralelo || ""} style={styles.input} readOnly />
-          </div>
-
-          <div style={styles.filterField}>
-            <label style={styles.label}>Estado</label>
-            <input
-              value={alumnoDetalle.activo !== false ? "Activo" : "Inactivo"}
-              style={styles.input}
-              readOnly
-            />
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
-          <button
   type="button"
   style={styles.button}
   onClick={() => {
@@ -4732,15 +4706,25 @@ if (!usuario) {
     setVistaVentasInterna("registrar");
     setModoNuevaOrden("consumidor_final");
 
-    setVentaForm((prev) => ({
-      ...prev,
+    // Vaciar carrito anterior
+    setVentaItems([]);
+
+    // Preparar nueva venta
+    setVentaForm({
       alumno_id: alumnoDetalle.id,
       metodo_pago: "RECARGA",
-    }));
+      observacion: "",
+    });
 
+    // Mostrar el alumno seleccionado
     setBusquedaUsuarioNuevaOrden(
-      `${alumnoDetalle.nombres || ""} ${alumnoDetalle.apellidos || ""}`
+      `${alumnoDetalle.nombres || ""} ${alumnoDetalle.apellidos || ""}`.trim()
     );
+
+    // Limpiar búsqueda de productos
+    setBusquedaProductoNuevaOrden("");
+    setCodigoBarraNuevaOrden("");
+    setCategoriaNuevaOrden("TODOS");
   }}
 >
   Crear orden
@@ -6382,9 +6366,45 @@ setHistorialConsumoAlumno(
         flexWrap: "wrap",
       }}
     >
-      <h2 style={{ margin: 0, fontSize: "24px" }}>Nueva Orden</h2>
+      <div>
+        <h2 style={{ margin: 0, fontSize: "24px" }}>Nueva Orden</h2>
+
+        {alumnoDetalle &&
+          Number(ventaForm.alumno_id) === Number(alumnoDetalle.id) && (
+            <div style={{ marginTop: 8, fontSize: 14 }}>
+              Orden para:{" "}
+              <strong>
+                {alumnoDetalle.nombres || ""}{" "}
+                {alumnoDetalle.apellidos || ""}
+              </strong>
+            </div>
+          )}
+      </div>
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        {alumnoDetalle &&
+          Number(ventaForm.alumno_id) === Number(alumnoDetalle.id) && (
+            <button
+              type="button"
+              style={styles.outlineButton}
+              onClick={() => {
+                const confirmar =
+                  ventaItems.length === 0 ||
+                  window.confirm(
+                    "¿Deseas regresar al alumno? Los productos agregados se eliminarán."
+                  );
+
+                if (!confirmar) return;
+
+                limpiarFormularioVenta();
+                setVistaAlumnoDetalle("datos");
+                setVista("alumnos");
+              }}
+            >
+              ← Regresar al alumno
+            </button>
+          )}
+
         <button
           type="button"
           style={styles.secondaryButton}
@@ -6396,9 +6416,22 @@ setHistorialConsumoAlumno(
         <button
           type="button"
           style={styles.outlineButton}
-          onClick={() => setModoNuevaOrden("consumidor_final")}
+          onClick={() => {
+            setModoNuevaOrden("consumidor_final");
+
+            setVentaForm((prev) => ({
+              ...prev,
+              alumno_id: "",
+              metodo_pago:
+                prev.metodo_pago === "RECARGA"
+                  ? "EFECTIVO"
+                  : prev.metodo_pago,
+            }));
+
+            setBusquedaUsuarioNuevaOrden("");
+          }}
         >
-          Consumidor Final
+          Consumidor final
         </button>
       </div>
     </div>
@@ -6413,18 +6446,21 @@ setHistorialConsumoAlumno(
         {obtenerCedulaAlumno(alumnoVentaSeleccionado) || "-"}
         {" | "}
         <strong>Saldo:</strong>{" "}
-        {formatearMoneda(alumnoVentaSeleccionado.saldo)}
+        {formatearMoneda(alumnoVentaSeleccionado.saldo || 0)}
       </div>
     )}
-    
+
     {modoNuevaOrden === "identificar" && (
       <div style={{ ...styles.box, marginBottom: 20, padding: 20 }}>
         <div style={styles.filtersGrid}>
           <div style={styles.filterField}>
             <label style={styles.label}>Tipo de usuario</label>
+
             <select
               value={tipoUsuarioNuevaOrden}
-              onChange={(e) => setTipoUsuarioNuevaOrden(e.target.value)}
+              onChange={(e) =>
+                setTipoUsuarioNuevaOrden(e.target.value)
+              }
               style={styles.input}
             >
               <option value="TODOS">Todos</option>
@@ -6435,11 +6471,16 @@ setHistorialConsumoAlumno(
           </div>
 
           <div style={styles.filterFieldWide}>
-            <label style={styles.label}>Buscar usuario / código</label>
+            <label style={styles.label}>
+              Buscar usuario / código
+            </label>
+
             <input
               type="text"
               value={busquedaUsuarioNuevaOrden}
-              onChange={(e) => setBusquedaUsuarioNuevaOrden(e.target.value)}
+              onChange={(e) =>
+                setBusquedaUsuarioNuevaOrden(e.target.value)
+              }
               style={styles.input}
               placeholder="Buscar usuario / código"
             />
@@ -6448,13 +6489,25 @@ setHistorialConsumoAlumno(
 
         <div style={{ marginTop: 16 }}>
           {alumnosActivos.filter((a) => {
-            const texto = busquedaUsuarioNuevaOrden.toLowerCase();
-            const nombre = `${a.nombres || ""} ${a.apellidos || ""}`.toLowerCase();
-            const codigo = String(a.codigo || a.cedula || "").toLowerCase();
+            const texto =
+              busquedaUsuarioNuevaOrden.trim().toLowerCase();
 
-            return !texto || nombre.includes(texto) || codigo.includes(texto);
+            const nombre =
+              `${a.nombres || ""} ${a.apellidos || ""}`.toLowerCase();
+
+            const codigo = String(
+              a.codigo || a.cedula || ""
+            ).toLowerCase();
+
+            return (
+              !texto ||
+              nombre.includes(texto) ||
+              codigo.includes(texto)
+            );
           }).length === 0 ? (
-            <p style={{ color: "#6b7280", margin: 0 }}>No se encontraron resultados.</p>
+            <p style={{ color: "#6b7280", margin: 0 }}>
+              No se encontraron resultados.
+            </p>
           ) : (
             <div style={styles.tableWrap}>
               <table style={styles.table}>
@@ -6466,30 +6519,66 @@ setHistorialConsumoAlumno(
                     <th style={styles.th}>Acción</th>
                   </tr>
                 </thead>
+
                 <tbody>
                   {alumnosActivos
                     .filter((a) => {
-                      const texto = busquedaUsuarioNuevaOrden.toLowerCase();
-                      const nombre = `${a.nombres || ""} ${a.apellidos || ""}`.toLowerCase();
-                      const codigo = String(a.codigo || a.cedula || "").toLowerCase();
+                      const texto =
+                        busquedaUsuarioNuevaOrden
+                          .trim()
+                          .toLowerCase();
 
-                      return !texto || nombre.includes(texto) || codigo.includes(texto);
+                      const nombre =
+                        `${a.nombres || ""} ${
+                          a.apellidos || ""
+                        }`.toLowerCase();
+
+                      const codigo = String(
+                        a.codigo || a.cedula || ""
+                      ).toLowerCase();
+
+                      return (
+                        !texto ||
+                        nombre.includes(texto) ||
+                        codigo.includes(texto)
+                      );
                     })
                     .slice(0, 10)
                     .map((a) => (
                       <tr key={a.id}>
-                        <td style={styles.td}>{`${a.nombres || ""} ${a.apellidos || ""}`}</td>
-                        <td style={styles.td}>{a.codigo || a.cedula || "-"}</td>
-                        <td style={styles.td}>{formatearMoneda(a.saldo || 0)}</td>
+                        <td style={styles.td}>
+                          {`${a.nombres || ""} ${
+                            a.apellidos || ""
+                          }`}
+                        </td>
+
+                        <td style={styles.td}>
+                          {a.codigo || a.cedula || "-"}
+                        </td>
+
+                        <td style={styles.td}>
+                          {formatearMoneda(a.saldo || 0)}
+                        </td>
+
                         <td style={styles.td}>
                           <button
                             type="button"
                             style={styles.button}
                             onClick={() => {
-                              setVentaForm({
-                                ...ventaForm,
+                              setAlumnoDetalle(a);
+
+                              setVentaForm((prev) => ({
+                                ...prev,
                                 alumno_id: a.id,
-                              });
+                                metodo_pago: "RECARGA",
+                              }));
+
+                              setBusquedaUsuarioNuevaOrden(
+                                `${a.nombres || ""} ${
+                                  a.apellidos || ""
+                                }`
+                              );
+
                               setModoNuevaOrden("consumidor_final");
                             }}
                           >
@@ -6506,14 +6595,26 @@ setHistorialConsumoAlumno(
       </div>
     )}
 
-    <div style={styles.twoColumnWide}>
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "minmax(260px, 320px) minmax(0, 1fr)",
+        gap: 20,
+        alignItems: "start",
+      }}
+    >
       <div style={styles.box}>
-        <label style={styles.label}>Escanea el código de barras</label>
+        <label style={styles.label}>
+          Escanea el código de barras
+        </label>
+
         <input
           type="text"
           placeholder="Código de barras"
           value={codigoBarraNuevaOrden}
-          onChange={(e) => setCodigoBarraNuevaOrden(e.target.value)}
+          onChange={(e) =>
+            setCodigoBarraNuevaOrden(e.target.value)
+          }
           style={styles.input}
         />
 
@@ -6523,7 +6624,9 @@ setHistorialConsumoAlumno(
           type="text"
           placeholder="Busca productos"
           value={busquedaProductoNuevaOrden}
-          onChange={(e) => setBusquedaProductoNuevaOrden(e.target.value)}
+          onChange={(e) =>
+            setBusquedaProductoNuevaOrden(e.target.value)
+          }
           style={styles.input}
         />
 
@@ -6531,7 +6634,13 @@ setHistorialConsumoAlumno(
 
         <h3 style={{ marginTop: 0 }}>Categorías</h3>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+          }}
+        >
           <button
             type="button"
             style={
@@ -6541,25 +6650,31 @@ setHistorialConsumoAlumno(
             }
             onClick={() => setCategoriaNuevaOrden("TODOS")}
           >
-            Más vendidos
+            Todos los productos
           </button>
 
-          {[...new Set(productosActivos.map((p) => p.categoria).filter(Boolean))].map(
-            (categoria) => (
-              <button
-                key={categoria}
-                type="button"
-                style={
-                  categoriaNuevaOrden === categoria
-                    ? styles.ventasTabActive
-                    : styles.ventasTab
-                }
-                onClick={() => setCategoriaNuevaOrden(categoria)}
-              >
-                {categoria}
-              </button>
-            )
-          )}
+          {[
+            ...new Set(
+              productosActivos
+                .map((p) => p.categoria)
+                .filter(Boolean)
+            ),
+          ].map((categoria) => (
+            <button
+              key={categoria}
+              type="button"
+              style={
+                categoriaNuevaOrden === categoria
+                  ? styles.ventasTabActive
+                  : styles.ventasTab
+              }
+              onClick={() =>
+                setCategoriaNuevaOrden(categoria)
+              }
+            >
+              {categoria}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -6572,7 +6687,7 @@ setHistorialConsumoAlumno(
             marginTop: 0,
           }}
         >
-          Configura la compra, da click en los productos para seleccionarlos o escanéa el código de barras
+          Configura la compra y agrega los productos a la orden
         </p>
 
         <div
@@ -6582,15 +6697,19 @@ setHistorialConsumoAlumno(
             padding: 16,
             marginBottom: 20,
             display: "grid",
-            gridTemplateColumns: "1fr 1fr",
+            gridTemplateColumns:
+              "repeat(auto-fit, minmax(220px, 1fr))",
             gap: 16,
           }}
         >
           <div>
             <label style={styles.label}>Local</label>
+
             <select
               value={localNuevaOrden}
-              onChange={(e) => setLocalNuevaOrden(e.target.value)}
+              onChange={(e) =>
+                setLocalNuevaOrden(e.target.value)
+              }
               style={styles.input}
             >
               <option value="PRINCIPAL">PRINCIPAL</option>
@@ -6598,11 +6717,16 @@ setHistorialConsumoAlumno(
           </div>
 
           <div>
-            <label style={styles.label}>Fecha de la orden</label>
+            <label style={styles.label}>
+              Fecha de la orden
+            </label>
+
             <input
               type="date"
               value={fechaNuevaOrden}
-              onChange={(e) => setFechaNuevaOrden(e.target.value)}
+              onChange={(e) =>
+                setFechaNuevaOrden(e.target.value)
+              }
               style={styles.input}
             />
           </div>
@@ -6611,117 +6735,185 @@ setHistorialConsumoAlumno(
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            gridTemplateColumns:
+              "repeat(auto-fit, minmax(260px, 1fr))",
             gap: 18,
           }}
         >
           {productosActivos
             .filter((p) => {
-              const coincideTexto = String(p.nombre || "")
-                .toLowerCase()
-                .includes(busquedaProductoNuevaOrden.toLowerCase());
+              const texto =
+                busquedaProductoNuevaOrden
+                  .trim()
+                  .toLowerCase();
+
+              const coincideTexto =
+                String(p.nombre || "")
+                  .toLowerCase()
+                  .includes(texto) ||
+                String(p.codigo || "")
+                  .toLowerCase()
+                  .includes(texto);
 
               const coincideCategoria =
                 categoriaNuevaOrden === "TODOS" ||
                 !categoriaNuevaOrden ||
-                String(p.categoria || "") === categoriaNuevaOrden;
+                String(p.categoria || "") ===
+                  String(categoriaNuevaOrden);
 
               return coincideTexto && coincideCategoria;
             })
-            .map((producto) => (
-              <div
-                key={producto.id}
-                style={{
-                  borderRadius: 16,
-                  background: "#fff",
-                  boxShadow: "0 8px 20px rgba(0,0,0,0.06)",
-                  padding: 16,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 12,
-                }}
-              >
-                <div style={{ display: "flex", gap: 14 }}>
-                 <div
-  style={{
-    width: 110,
-    height: 90,
-    borderRadius: 14,
-    background: "#eee",
-    overflow: "hidden",
-  }}
->
-  <img
-    src={
-      producto.imagen ||
-      "https://cdn-icons-png.flaticon.com/512/1046/1046784.png"
-    }
-    alt=""
-    style={{
-      width: "100%",
-      height: "100%",
-      objectFit: "cover",
-    }}
-  />
-</div>
+            .map((producto) => {
+              const stockDisponible = Number(
+                producto.stock || 0
+              );
 
-                  <div style={{ flex: 1 }}>
-                    <strong style={{ display: "block", marginBottom: 6 }}>
-                      {producto.nombre}
-                    </strong>
-                    <div style={{ marginBottom: 6 }}>
-                      Costo: {formatearMoneda(producto.precio)}
-                    </div>
-                    <div
-                      style={{
-                        display: "inline-block",
-                        padding: "6px 10px",
-                        borderRadius: 999,
-                        background:
-                          Number(producto.stock || 0) > 3 ? "#d1fae5" : "#fee2e2",
-                        color:
-                          Number(producto.stock || 0) > 3 ? "#065f46" : "#991b1b",
-                        fontWeight: "bold",
-                        fontSize: "13px",
-                      }}
-                    >
-                      Stock: {Number(producto.stock || 0)}
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  style={styles.button}
-                  onClick={() => {
-                    const existe = ventaForm.items.find(
-                      (i) => Number(i.producto_id) === Number(producto.id)
-                    );
-
-                    if (existe) {
-                      setVentaForm({
-                        ...ventaForm,
-                        items: ventaForm.items.map((i) =>
-                          Number(i.producto_id) === Number(producto.id)
-                            ? { ...i, cantidad: Number(i.cantidad || 0) + 1 }
-                            : i
-                        ),
-                      });
-                    } else {
-                      setVentaForm({
-                        ...ventaForm,
-                        items: [
-                          ...ventaForm.items,
-                          { producto_id: producto.id, cantidad: 1 },
-                        ],
-                      });
-                    }
+              return (
+                <div
+                  key={producto.id}
+                  style={{
+                    borderRadius: 16,
+                    background: "#fff",
+                    boxShadow:
+                      "0 8px 20px rgba(0,0,0,0.06)",
+                    padding: 16,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 12,
                   }}
                 >
-                  Agregar producto
-                </button>
-              </div>
-            ))}
+                  <div style={{ display: "flex", gap: 14 }}>
+                    <div
+                      style={{
+                        width: 110,
+                        height: 90,
+                        borderRadius: 14,
+                        background: "#eee",
+                        overflow: "hidden",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <img
+                        src={
+                          producto.imagen ||
+                          "https://cdn-icons-png.flaticon.com/512/1046/1046784.png"
+                        }
+                        alt={producto.nombre || "Producto"}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ flex: 1 }}>
+                      <strong
+                        style={{
+                          display: "block",
+                          marginBottom: 6,
+                        }}
+                      >
+                        {producto.nombre}
+                      </strong>
+
+                      <div style={{ marginBottom: 6 }}>
+                        Costo:{" "}
+                        {formatearMoneda(producto.precio)}
+                      </div>
+
+                      <div
+                        style={{
+                          display: "inline-block",
+                          padding: "6px 10px",
+                          borderRadius: 999,
+                          background:
+                            stockDisponible > 3
+                              ? "#d1fae5"
+                              : "#fee2e2",
+                          color:
+                            stockDisponible > 3
+                              ? "#065f46"
+                              : "#991b1b",
+                          fontWeight: "bold",
+                          fontSize: "13px",
+                        }}
+                      >
+                        Stock: {stockDisponible}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={stockDisponible <= 0}
+                    style={{
+                      ...styles.button,
+                      opacity:
+                        stockDisponible <= 0 ? 0.55 : 1,
+                      cursor:
+                        stockDisponible <= 0
+                          ? "not-allowed"
+                          : "pointer",
+                    }}
+                    onClick={() => {
+                      if (stockDisponible <= 0) {
+                        alert(
+                          "Este producto no tiene stock disponible"
+                        );
+                        return;
+                      }
+
+                      setVentaItems((prev) => {
+                        const existe = prev.find(
+                          (item) =>
+                            Number(item.producto_id) ===
+                            Number(producto.id)
+                        );
+
+                        if (existe) {
+                          const cantidadActual = Number(
+                            existe.cantidad || 0
+                          );
+
+                          if (
+                            cantidadActual >= stockDisponible
+                          ) {
+                            alert(
+                              `No puedes agregar más unidades. Stock disponible: ${stockDisponible}`
+                            );
+                            return prev;
+                          }
+
+                          return prev.map((item) =>
+                            Number(item.producto_id) ===
+                            Number(producto.id)
+                              ? {
+                                  ...item,
+                                  cantidad:
+                                    cantidadActual + 1,
+                                }
+                              : item
+                          );
+                        }
+
+                        return [
+                          ...prev,
+                          {
+                            producto_id: producto.id,
+                            cantidad: 1,
+                          },
+                        ];
+                      });
+                    }}
+                  >
+                    {stockDisponible <= 0
+                      ? "Sin stock"
+                      : "Agregar producto"}
+                  </button>
+                </div>
+              );
+            })}
         </div>
 
         <div style={{ height: 20 }} />
@@ -6732,32 +6924,101 @@ setHistorialConsumoAlumno(
           {ventaItemsCalculados.length === 0 ? (
             <p>No hay productos agregados.</p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              }}
+            >
               {ventaItemsCalculados.map((item, index) => (
-                <div key={index} style={styles.itemVentaCard}>
+                <div
+                  key={`${item.producto_id}-${index}`}
+                  style={styles.itemVentaCard}
+                >
                   <div style={styles.itemVentaResumen}>
                     <span>{item.nombre || "Producto"}</span>
-                    <span>Cant: {item.cantidad}</span>
-                    <span>Total: {formatearMoneda(item.total)}</span>
+                    <span>
+                      Cantidad: {Number(item.cantidad || 0)}
+                    </span>
+                    <span>
+                      Total: {formatearMoneda(item.total)}
+                    </span>
                   </div>
 
-                  <div style={{ display: "flex", gap: 10 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                    }}
+                  >
                     <button
                       type="button"
                       style={styles.outlineButton}
-                      onClick={() =>
-                        actualizarItemVenta(index, "cantidad", Math.max(1, Number(item.cantidad || 1) - 1))
-                      }
+                      onClick={() => {
+                        const nuevaCantidad =
+                          Number(item.cantidad || 1) - 1;
+
+                        if (nuevaCantidad <= 0) {
+                          eliminarItemVenta(index);
+                          return;
+                        }
+
+                        actualizarItemVenta(
+                          index,
+                          "cantidad",
+                          nuevaCantidad
+                        );
+                      }}
                     >
-                      -
+                      −
                     </button>
+
+                    <strong
+                      style={{
+                        minWidth: 35,
+                        textAlign: "center",
+                        fontSize: 16,
+                      }}
+                    >
+                      {Number(item.cantidad || 0)}
+                    </strong>
 
                     <button
                       type="button"
                       style={styles.outlineButton}
-                      onClick={() =>
-                        actualizarItemVenta(index, "cantidad", Number(item.cantidad || 0) + 1)
-                      }
+                      onClick={() => {
+                        const productoOriginal =
+                          productosActivos.find(
+                            (producto) =>
+                              Number(producto.id) ===
+                              Number(item.producto_id)
+                          );
+
+                        const stockDisponible = Number(
+                          productoOriginal?.stock || 0
+                        );
+
+                        const nuevaCantidad =
+                          Number(item.cantidad || 0) + 1;
+
+                        if (
+                          nuevaCantidad > stockDisponible
+                        ) {
+                          alert(
+                            `No puedes superar el stock disponible: ${stockDisponible}`
+                          );
+                          return;
+                        }
+
+                        actualizarItemVenta(
+                          index,
+                          "cantidad",
+                          nuevaCantidad
+                        );
+                      }}
                     >
                       +
                     </button>
@@ -6765,7 +7026,9 @@ setHistorialConsumoAlumno(
                     <button
                       type="button"
                       style={styles.smallDangerButton}
-                      onClick={() => eliminarItemVenta(index)}
+                      onClick={() =>
+                        eliminarItemVenta(index)
+                      }
                     >
                       Quitar
                     </button>
@@ -6777,59 +7040,98 @@ setHistorialConsumoAlumno(
 
           <div style={{ height: 16 }} />
 
+          <label style={styles.label}>
+            Método de pago
+          </label>
+
           <select
             value={ventaForm.metodo_pago}
             onChange={(e) =>
-              setVentaForm({ ...ventaForm, metodo_pago: e.target.value })
+              setVentaForm((prev) => ({
+                ...prev,
+                metodo_pago: e.target.value,
+              }))
             }
             style={styles.input}
           >
             <option value="EFECTIVO">Efectivo</option>
-            <option value="TRANSFERENCIA">Transferencia</option>
-            <option value="RECARGA">Recarga</option>
+            <option value="TRANSFERENCIA">
+              Transferencia
+            </option>
+            <option value="RECARGA">
+              Saldo del alumno
+            </option>
           </select>
 
           <div style={{ height: 12 }} />
+
+          <label style={styles.label}>Observación</label>
 
           <input
             type="text"
             placeholder="Observación"
             value={ventaForm.observacion}
             onChange={(e) =>
-              setVentaForm({ ...ventaForm, observacion: e.target.value })
+              setVentaForm((prev) => ({
+                ...prev,
+                observacion: e.target.value,
+              }))
             }
             style={styles.input}
           />
 
-          {ventaForm.metodo_pago === "RECARGA" && alumnoVentaSeleccionado && (
-            <div style={styles.infoBox}>
-              <strong>Saldo disponible:</strong>{" "}
-              {formatearMoneda(alumnoVentaSeleccionado.saldo)}
-            </div>
-          )}
+          {ventaForm.metodo_pago === "RECARGA" &&
+            alumnoVentaSeleccionado && (
+              <div
+                style={{
+                  ...styles.infoBox,
+                  marginTop: 12,
+                }}
+              >
+                <strong>Saldo disponible:</strong>{" "}
+                {formatearMoneda(
+                  alumnoVentaSeleccionado.saldo || 0
+                )}
+              </div>
+            )}
 
           <div style={{ height: 12 }} />
 
           <div style={styles.totalVentaBox}>
-            Total venta: {formatearMoneda(totalVentaCalculado)}
+            Total venta:{" "}
+            {formatearMoneda(totalVentaCalculado)}
           </div>
 
           <div style={styles.filterButtons}>
-            <button type="submit" style={styles.button} onClick={crearVenta}>
+            <button
+              type="button"
+              style={{
+                ...styles.button,
+                opacity:
+                  ventaItemsCalculados.length === 0
+                    ? 0.6
+                    : 1,
+              }}
+              disabled={ventaItemsCalculados.length === 0}
+              onClick={crearVenta}
+            >
               Generar venta
             </button>
 
             <button
               type="button"
               style={styles.cancelButton}
-              onClick={() =>
-                setVentaForm({
-                  alumno_id: "",
-                  metodo_pago: "EFECTIVO",
-                  observacion: "",
-                  items: [{ producto_id: "", cantidad: 1 }],
-                })
-              }
+              onClick={() => {
+                const confirmar =
+                  ventaItems.length === 0 ||
+                  window.confirm(
+                    "¿Deseas cancelar esta orden y eliminar los productos agregados?"
+                  );
+
+                if (!confirmar) return;
+
+                limpiarFormularioVenta();
+              }}
             >
               Cancelar orden
             </button>
