@@ -6389,7 +6389,7 @@ setHistorialConsumoAlumno(
               style={styles.outlineButton}
               onClick={() => {
                 const confirmar =
-                  ventaItems.length === 0 ||
+                  (Array.isArray(ventaItems) ? ventaItems : []).length === 0 ||
                   window.confirm(
                     "¿Deseas regresar al alumno? Los productos agregados se eliminarán."
                   );
@@ -6488,7 +6488,7 @@ setHistorialConsumoAlumno(
         </div>
 
         <div style={{ marginTop: 16 }}>
-          {alumnosActivos.filter((a) => {
+          {(Array.isArray(alumnosActivos) ? alumnosActivos : []).filter((a) => {
             const texto =
               busquedaUsuarioNuevaOrden.trim().toLowerCase();
 
@@ -6521,7 +6521,7 @@ setHistorialConsumoAlumno(
                 </thead>
 
                 <tbody>
-                  {alumnosActivos
+                  {(Array.isArray(alumnosActivos) ? alumnosActivos : [])
                     .filter((a) => {
                       const texto =
                         busquedaUsuarioNuevaOrden
@@ -6655,7 +6655,7 @@ setHistorialConsumoAlumno(
 
           {[
             ...new Set(
-              productosActivos
+              (Array.isArray(productosActivos) ? productosActivos : [])
                 .map((p) => p.categoria)
                 .filter(Boolean)
             ),
@@ -6740,7 +6740,7 @@ setHistorialConsumoAlumno(
             gap: 18,
           }}
         >
-          {productosActivos
+          {(Array.isArray(productosActivos) ? productosActivos : [])
             .filter((p) => {
               const texto =
                 busquedaProductoNuevaOrden
@@ -6865,7 +6865,9 @@ setHistorialConsumoAlumno(
                       }
 
                       setVentaItems((prev) => {
-                        const existe = prev.find(
+                        const listaActual = Array.isArray(prev) ? prev : [];
+
+                        const existe = listaActual.find(
                           (item) =>
                             Number(item.producto_id) ===
                             Number(producto.id)
@@ -6885,7 +6887,7 @@ setHistorialConsumoAlumno(
                             return prev;
                           }
 
-                          return prev.map((item) =>
+                          return listaActual.map((item) =>
                             Number(item.producto_id) ===
                             Number(producto.id)
                               ? {
@@ -6898,7 +6900,7 @@ setHistorialConsumoAlumno(
                         }
 
                         return [
-                          ...prev,
+                          ...listaActual,
                           {
                             producto_id: producto.id,
                             cantidad: 1,
@@ -6921,7 +6923,7 @@ setHistorialConsumoAlumno(
         <div style={styles.box}>
           <h3 style={{ marginTop: 0 }}>Resumen de orden</h3>
 
-          {ventaItemsCalculados.length === 0 ? (
+          {(Array.isArray(ventaItemsCalculados) ? ventaItemsCalculados : []).length === 0 ? (
             <p>No hay productos agregados.</p>
           ) : (
             <div
@@ -6931,7 +6933,7 @@ setHistorialConsumoAlumno(
                 gap: 12,
               }}
             >
-              {ventaItemsCalculados.map((item, index) => (
+              {(Array.isArray(ventaItemsCalculados) ? ventaItemsCalculados : []).map((item, index) => (
                 <div
                   key={`${item.producto_id}-${index}`}
                   style={styles.itemVentaCard}
@@ -6990,8 +6992,11 @@ setHistorialConsumoAlumno(
                       type="button"
                       style={styles.outlineButton}
                       onClick={() => {
-                        const productoOriginal =
-                          productosActivos.find(
+                        const productoOriginal = (
+                          Array.isArray(productosActivos)
+                            ? productosActivos
+                            : []
+                        ).find(
                             (producto) =>
                               Number(producto.id) ===
                               Number(item.producto_id)
@@ -7108,11 +7113,11 @@ setHistorialConsumoAlumno(
               style={{
                 ...styles.button,
                 opacity:
-                  ventaItemsCalculados.length === 0
+                  (Array.isArray(ventaItemsCalculados) ? ventaItemsCalculados : []).length === 0
                     ? 0.6
                     : 1,
               }}
-              disabled={ventaItemsCalculados.length === 0}
+              disabled={(Array.isArray(ventaItemsCalculados) ? ventaItemsCalculados : []).length === 0}
               onClick={crearVenta}
             >
               Generar venta
@@ -7123,7 +7128,7 @@ setHistorialConsumoAlumno(
               style={styles.cancelButton}
               onClick={() => {
                 const confirmar =
-                  ventaItems.length === 0 ||
+                  (Array.isArray(ventaItems) ? ventaItems : []).length === 0 ||
                   window.confirm(
                     "¿Deseas cancelar esta orden y eliminar los productos agregados?"
                   );
@@ -7141,7 +7146,6 @@ setHistorialConsumoAlumno(
     </div>
   </div>
 )}
-
             {vistaVentasInterna === "consultar" && (
               <>
                 <div style={styles.box}>
