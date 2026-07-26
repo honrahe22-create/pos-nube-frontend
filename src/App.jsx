@@ -6748,41 +6748,6 @@ if (!usuario) {
               </div>
 
               <button
-                type="submit"
-                disabled={
-                  (Array.isArray(ventaItemsCalculados)
-                    ? ventaItemsCalculados
-                    : []
-                  ).length === 0
-                }
-                style={{
-                  width: "100%",
-                  marginTop: 14,
-                  border: "none",
-                  borderRadius: 9,
-                  padding: "13px 12px",
-                  background:
-                    (Array.isArray(ventaItemsCalculados)
-                      ? ventaItemsCalculados
-                      : []
-                    ).length === 0
-                      ? "#94a3b8"
-                      : "#ff8748",
-                  color: "#ffffff",
-                  fontWeight: 900,
-                  cursor:
-                    (Array.isArray(ventaItemsCalculados)
-                      ? ventaItemsCalculados
-                      : []
-                    ).length === 0
-                      ? "not-allowed"
-                      : "pointer",
-                }}
-              >
-                Crear orden
-              </button>
-
-              <button
                 type="button"
                 onClick={() => {
                   const confirmar =
