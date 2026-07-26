@@ -3233,13 +3233,60 @@ if (!usuario) {
   <>
     <div style={styles.pageHeader}>
       <div>
-        <h1 style={styles.dashboardTitle}>
-          Bienvenido, {usuario.nombre}
-        </h1>
+        <div style={styles.pageHeader}>
+  <div>
+    <h1 style={styles.dashboardTitle}>
+      Bienvenido a {institucionActiva?.nombre || "POS NUBE"}
+    </h1>
 
-        <p style={styles.dashboardSubtitle}>
-          Resumen general del sistema
-        </p>
+    <p style={styles.dashboardSubtitle}>
+      Resumen general del sistema
+    </p>
+  </div>
+
+  <div
+    style={{
+      background: "#ffffff",
+      border: "1px solid #e5e7eb",
+      borderRadius: 14,
+      padding: "12px 18px",
+      minWidth: 280,
+      boxShadow: "0 5px 15px rgba(15, 23, 42, 0.08)",
+    }}
+  >
+    <div
+      style={{
+        fontSize: 12,
+        color: "#64748b",
+        fontWeight: 700,
+        marginBottom: 4,
+      }}
+    >
+      Usuario conectado
+    </div>
+
+    <div
+      style={{
+        fontSize: 17,
+        color: "#111827",
+        fontWeight: 900,
+        wordBreak: "break-word",
+      }}
+    >
+      {usuario?.correo || correo || "Usuario sin correo"}
+    </div>
+
+    <div
+      style={{
+        fontSize: 13,
+        color: "#64748b",
+        marginTop: 4,
+      }}
+    >
+      {usuario?.rol || "Administrador"}
+    </div>
+  </div>
+</div>
       </div>
     </div>
 
