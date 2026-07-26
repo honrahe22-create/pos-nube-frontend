@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 export default function AlumnosModulo({
   styles,
   filtroAlumnos,
@@ -40,6 +42,31 @@ export default function AlumnosModulo({
   setHistorialRecargasAlumno,
   setHistorialConsumoAlumno
 }) {
+  const [busquedaHistorial, setBusquedaHistorial] = useState("");
+
+  const regresarListado = () => {
+    setAlumnoDetalle(null);
+    setVistaAlumnoDetalle("datos");
+    setOrdenDetalleAlumno(null);
+    setHistorialVentasAlumno([]);
+    setHistorialRecargasAlumno([]);
+    setHistorialConsumoAlumno([]);
+    setBusquedaHistorial("");
+    limpiarFormularioAlumno();
+  };
+
+  const exportarOrdenesAlumno = (ordenes) => {
+    const filas = [["Orden", "Nombre", "Apellido", "Fecha", "Total", "Forma de pago", "Estado"], ...ordenes.map((v) => [v.id || "", alumnoDetalle?.nombres || "", alumnoDetalle?.apellidos || "", v.created_at || "", Number(v.total || 0).toFixed(2), v.metodo_pago || "", v.estado || "Pagada"])];
+    const csv = filas.map((fila) => fila.map((valor) => `"${String(valor).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const enlace = document.createElement("a");
+    enlace.href = url;
+    enlace.download = `ordenes_alumno_${alumnoDetalle?.id || ""}.csv`;
+    enlace.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
   <>
     <div style={styles.pageHeader}>
@@ -87,288 +114,239 @@ export default function AlumnosModulo({
       </div>
     </div>
 
-    {alumnoDetalle && (
-      <div style={{ ...styles.box, marginBottom: 20 }}>
-        <div style={styles.pageHeaderSmall}>
-          <div>
-            <h2 style={{ margin: 0 }}>
-              {alumnoDetalle.nombres || ""} {alumnoDetalle.apellidos || ""}
-            </h2>
-            <p style={{ margin: "6px 0 0", color: "#6b7280" }}>
-              Cédula: {obtenerCedulaAlumno(alumnoDetalle) || "-"} | Saldo:{" "}
-              {formatearMoneda(alumnoDetalle.saldo)}
-            </p>
+    {alumnoDetalle && (() => {
+      const activo = alumnoDetalle.activo !== false;
+      const nombreCompleto = `${alumnoDetalle.nombres || ""} ${alumnoDetalle.apellidos || ""}`.trim() || "Alumno";
+      const totalPagadas = historialVentasAlumno
+        .filter((v) => String(v.estado || "").toUpperCase() !== "PENDIENTE")
+        .reduce((acc, v) => acc + Number(v.total || 0), 0);
+      const totalPendientes = historialVentasAlumno
+        .filter((v) => String(v.estado || "").toUpperCase() === "PENDIENTE")
+        .reduce((acc, v) => acc + Number(v.total || 0), 0);
+      const ordenesVisibles = historialVentasAlumno.filter((v) => {
+        const texto = busquedaHistorial.trim().toLowerCase();
+        if (!texto) return true;
+        return [v.id, v.metodo_pago, v.estado, v.total, v.created_at]
+          .some((valor) => String(valor || "").toLowerCase().includes(texto));
+      });
+
+      const irACrearOrden = () => {
+        setVista("ventas");
+        setVistaVentasInterna("registrar");
+        setModoNuevaOrden("consumidor_final");
+        setVentaItems([]);
+        setVentaForm({ alumno_id: alumnoDetalle.id, metodo_pago: "RECARGA", observacion: "" });
+        setBusquedaUsuarioNuevaOrden(nombreCompleto);
+        setBusquedaProductoNuevaOrden("");
+        setCodigoBarraNuevaOrden("");
+        setCategoriaNuevaOrden("TODOS");
+      };
+
+      return (
+        <div style={paymon.fichaShell}>
+          <div style={paymon.hero}>
+            <button
+              type="button"
+              style={paymon.backButton}
+              title="Regresar al listado"
+              onClick={regresarListado}
+            >
+              ←
+            </button>
+
+            <div style={paymon.avatar}>
+              {String(alumnoDetalle.nombres || "A").charAt(0).toUpperCase()}
+            </div>
+
+            <div style={paymon.heroIdentity}>
+              <h2 style={paymon.heroName}>{nombreCompleto}</h2>
+              <div style={paymon.badgeRow}>
+                <span style={paymon.studentBadge}>Estudiante</span>
+                <span style={activo ? paymon.activeBadge : paymon.inactiveBadge}>
+                  {activo ? "Activo" : "Inactivo"}
+                </span>
+              </div>
+            </div>
+
+            <div style={paymon.heroActions}>
+              <button
+                type="button"
+                style={paymon.whiteButton}
+                onClick={() => {
+                  iniciarEdicionAlumno(alumnoDetalle);
+                  setAlumnoDetalle(null);
+                }}
+              >
+                Editar perfil ✎
+              </button>
+              <button
+                type="button"
+                style={paymon.monthButton}
+                onClick={() => alert("La compra mensual se habilitará en el siguiente ajuste.")}
+              >
+                Compra mensual ◫
+              </button>
+              <button type="button" style={paymon.orangeButton} onClick={irACrearOrden}>
+                Crear orden ＋
+              </button>
+            </div>
           </div>
 
-          <button
-  type="button"
-  style={styles.button}
-  onClick={() => {
-    setVista("ventas");
-    setVistaVentasInterna("registrar");
-    setModoNuevaOrden("consumidor_final");
+          <div style={paymon.profileGrid}>
+            <div style={paymon.dataCardPlain}>
+              <DataRow label="Teléfono" value={alumnoDetalle.telefono || alumnoDetalle.celular || "-"} />
+              <DataRow label="Email" value={alumnoDetalle.email || alumnoDetalle.correo || "-"} />
+              <DataRow label="Cédula" value={obtenerCedulaAlumno(alumnoDetalle) || "-"} />
+              <DataRow label="País" value={alumnoDetalle.pais || "Ecuador"} />
+              <DataRow label="Ciudad" value={alumnoDetalle.ciudad || "-"} />
+              <DataRow label="ID" value={alumnoDetalle.id || "-"} />
+            </div>
 
-    // Vaciar carrito anterior
-    setVentaItems([]);
+            <div style={paymon.dataCard}>
+              <DataRow label="Institución" value={alumnoDetalle.institucion_nombre || "Colegio Marista"} />
+              <DataRow label="Curso" value={alumnoDetalle.curso || "-"} />
+              <DataRow label="Paralelo" value={alumnoDetalle.paralelo || "-"} />
+              <DataRow label="Código" value={alumnoDetalle.codigo || obtenerCedulaAlumno(alumnoDetalle) || "-"} />
+              <DataRow label="Profesor" value={alumnoDetalle.es_profesor ? "Sí" : "No"} />
+              <DataRow label="Crédito" value={alumnoDetalle.credito ? "Sí" : "No"} />
+            </div>
 
-    // Preparar nueva venta
-    setVentaForm({
-      alumno_id: alumnoDetalle.id,
-      metodo_pago: "RECARGA",
-      observacion: "",
-    });
+            <div style={paymon.balanceCard}>
+              <div style={paymon.balanceBox}>
+                <span style={paymon.balanceLabel}>Saldo actual:</span>
+                <strong style={paymon.balanceValue}>{formatearMoneda(alumnoDetalle.saldo)}</strong>
+              </div>
+              <button
+                type="button"
+                style={paymon.rechargeButton}
+                onClick={() => {
+                  setVista("recargas");
+                  setRecargaForm((prev) => ({ ...prev, alumno_id: alumnoDetalle.id }));
+                }}
+              >
+                Recargar efectivo
+              </button>
+            </div>
+          </div>
 
-    // Mostrar el alumno seleccionado
-    setBusquedaUsuarioNuevaOrden(
-      `${alumnoDetalle.nombres || ""} ${alumnoDetalle.apellidos || ""}`.trim()
-    );
+          <div style={paymon.faceNotice}>
+            <div>
+              <strong>☺ &nbsp; Registrar reconocimiento facial para {alumnoDetalle.nombres || "el alumno"}</strong>
+              <div style={paymon.faceSubtext}>Permite identificarlo de forma segura y rápida.</div>
+            </div>
+            <button type="button" style={paymon.faceButton}>Registrar rostro</button>
+          </div>
 
-    // Limpiar búsqueda de productos
-    setBusquedaProductoNuevaOrden("");
-    setCodigoBarraNuevaOrden("");
-    setCategoriaNuevaOrden("TODOS");
-  }}
->
-  Crear orden
-</button>
+          <div style={paymon.tabs}>
+            <button type="button" style={vistaAlumnoDetalle === "ordenes" || vistaAlumnoDetalle === "datos" ? paymon.tabActive : paymon.tab} onClick={() => setVistaAlumnoDetalle("ordenes")}>Órdenes</button>
+            <button type="button" style={vistaAlumnoDetalle === "recargas" ? paymon.tabActive : paymon.tab} onClick={() => setVistaAlumnoDetalle("recargas")}>Recargas</button>
+            <button type="button" style={vistaAlumnoDetalle === "dispositivo" ? paymon.tabActive : paymon.tab} onClick={() => setVistaAlumnoDetalle("dispositivo")}>Dispositivos</button>
+            <button type="button" style={vistaAlumnoDetalle === "consumo" ? paymon.tabActive : paymon.tab} onClick={() => setVistaAlumnoDetalle("consumo")}>Consumo</button>
+          </div>
 
-          <button
-            type="button"
-            style={styles.secondaryButton}
-            onClick={() => {
-              setVista("recargas");
-              setRecargaForm((prev) => ({
-                ...prev,
-                alumno_id: alumnoDetalle.id,
-              }));
-            }}
-          >
-            Recargar efectivo
-          </button>
+          {(vistaAlumnoDetalle === "ordenes" || vistaAlumnoDetalle === "datos") && (
+            <div style={paymon.historyPanel}>
+              <div style={paymon.summaryRow}>
+                <div style={paymon.summaryCard}>
+                  <div style={paymon.summaryCell}>
+                    <span>Total pagadas</span>
+                    <strong style={paymon.paidValue}>{formatearMoneda(totalPagadas)}</strong>
+                    <small>Total de órdenes pagadas</small>
+                  </div>
+                  <div style={paymon.summaryCell}>
+                    <span>Total pendientes</span>
+                    <strong style={paymon.pendingValue}>{formatearMoneda(totalPendientes)}</strong>
+                    <small>Total de órdenes por pagar</small>
+                  </div>
+                </div>
+                <button type="button" style={paymon.orangeButton} onClick={irACrearOrden}>Crear orden</button>
+              </div>
 
-          <button
-            type="button"
-            style={styles.outlineButton}
-            onClick={() => {
-              iniciarEdicionAlumno(alumnoDetalle);
-              setAlumnoDetalle(null);
-            }}
-          >
-            Editar perfil
-          </button>
+              <div style={paymon.tableCard}>
+                <div style={paymon.tableToolbar}>
+                  <input
+                    value={busquedaHistorial}
+                    onChange={(e) => setBusquedaHistorial(e.target.value)}
+                    placeholder="⌕  Buscar"
+                    style={paymon.searchInput}
+                  />
+                  <button type="button" style={paymon.exportButton} onClick={() => exportarOrdenesAlumno(ordenesVisibles)}>
+                    EXPORTAR ⤓
+                  </button>
+                </div>
 
-          <button type="button" style={styles.outlineButton} onClick={() => setVistaAlumnoDetalle("ordenes")}>
-            Órdenes
-          </button>
+                <div style={paymon.tableWrap}>
+                  <table style={paymon.table}>
+                    <thead>
+                      <tr>
+                        <th style={paymon.th}>Orden</th>
+                        <th style={paymon.th}>Nombre</th>
+                        <th style={paymon.th}>Apellido</th>
+                        <th style={paymon.th}>Detalles</th>
+                        <th style={paymon.th}>Fecha</th>
+                        <th style={paymon.th}>Total</th>
+                        <th style={paymon.th}>Forma de pago</th>
+                        <th style={paymon.th}>Estado</th>
+                        <th style={paymon.th}>Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ordenesVisibles.length === 0 ? (
+                        <tr><td colSpan="9" style={paymon.emptyCell}>No hay datos disponibles</td></tr>
+                      ) : ordenesVisibles.map((v) => (
+                        <tr key={v.id}>
+                          <td style={paymon.td}>#{v.id}</td>
+                          <td style={paymon.td}>{alumnoDetalle.nombres || "-"}</td>
+                          <td style={paymon.td}>{alumnoDetalle.apellidos || "-"}</td>
+                          <td style={paymon.td}>{Array.isArray(v.items) ? `${v.items.length} producto(s)` : "Ver orden"}</td>
+                          <td style={paymon.td}>{v.created_at ? new Date(v.created_at).toLocaleString() : "-"}</td>
+                          <td style={paymon.td}>{formatearMoneda(v.total)}</td>
+                          <td style={paymon.td}>{v.metodo_pago || "-"}</td>
+                          <td style={paymon.td}><span style={paymon.statusPill}>{v.estado || "Pagada"}</span></td>
+                          <td style={paymon.td}>
+                            <button
+                              type="button"
+                              style={paymon.viewButton}
+                              onClick={() => {
+                                const detalleOrden = historialConsumoAlumno.filter((c) => Number(c.venta_id) === Number(v.id));
+                                setOrdenDetalleAlumno({ ...v, detalle: detalleOrden });
+                              }}
+                            >
+                              Ver
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
 
-          <button type="button" style={styles.outlineButton} onClick={() => setVistaAlumnoDetalle("recargas")}>
-            Recargas
-          </button>
-
-          <button type="button" style={styles.outlineButton} onClick={() => setVistaAlumnoDetalle("dispositivo")}>
-            Dispositivo
-          </button>
-        </div>
-
-        <div style={{ marginTop: 18 }}>
-          {vistaAlumnoDetalle === "datos" && (
-            <div style={styles.infoBox}>
-              <strong>Datos del alumno:</strong> saldo, curso, código, estado y acciones principales.
+              {ordenDetalleAlumno && (
+                <div style={paymon.orderDetail}>
+                  <div style={paymon.detailHeader}>
+                    <h4 style={{ margin: 0 }}>Detalle de orden #{ordenDetalleAlumno.id}</h4>
+                    <button type="button" style={paymon.exportButton} onClick={() => setOrdenDetalleAlumno(null)}>Cerrar</button>
+                  </div>
+                  {ordenDetalleAlumno.detalle?.length ? (
+                    <div style={paymon.tableWrap}>
+                      <table style={paymon.table}>
+                        <thead><tr><th style={paymon.th}>Producto</th><th style={paymon.th}>Cantidad</th><th style={paymon.th}>Precio</th><th style={paymon.th}>Total</th></tr></thead>
+                        <tbody>{ordenDetalleAlumno.detalle.map((d, index) => <tr key={`${d.producto_id}-${index}`}><td style={paymon.td}>{d.producto_nombre}</td><td style={paymon.td}>{d.cantidad}</td><td style={paymon.td}>{formatearMoneda(d.precio_unitario)}</td><td style={paymon.td}>{formatearMoneda(d.total)}</td></tr>)}</tbody>
+                      </table>
+                    </div>
+                  ) : <p>No hay detalle de productos para esta orden.</p>}
+                </div>
+              )}
             </div>
           )}
 
-          {vistaAlumnoDetalle === "ordenes" && (
-  <div style={styles.infoBox}>
-    <h4>Historial de Órdenes</h4>
-
-    {historialVentasAlumno.length === 0 ? (
-      <p>No existen órdenes registradas.</p>
-    ) : (
-      <table style={styles.table}>
-        <thead>
-          <tr>
-            <th style={styles.th}>ID</th>
-            <th style={styles.th}>Fecha</th>
-            <th style={styles.th}>Total</th>
-            <th style={styles.th}>Método</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {historialVentasAlumno.map((v) => (
-            <tr
-  key={v.id}
-  style={{ cursor: "pointer" }}
-  onClick={() => {
-    const detalleOrden = historialConsumoAlumno.filter(
-      (c) => Number(c.venta_id) === Number(v.id)
-    );
-
-    setOrdenDetalleAlumno({
-      ...v,
-      detalle: detalleOrden,
-    });
-  }}
->
-              <td style={styles.td}>{v.id}</td>
-              <td style={styles.td}>
-                {new Date(v.created_at).toLocaleString()}
-              </td>
-              <td style={styles.td}>
-                {formatearMoneda(v.total)}
-              </td>
-              <td style={styles.td}>{v.metodo_pago}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    )}
-  </div>
-)}
-{ordenDetalleAlumno && (
-  <div style={{ ...styles.box, marginTop: 16 }}>
-    <div style={styles.pageHeaderSmall}>
-      <h4 style={{ margin: 0 }}>Detalle de orden #{ordenDetalleAlumno.id}</h4>
-
-      <button
-        type="button"
-        style={styles.outlineButton}
-        onClick={() => setOrdenDetalleAlumno(null)}
-      >
-        Cerrar detalle
-      </button>
-    </div>
-
-    <p>
-      <strong>Fecha:</strong>{" "}
-      {new Date(ordenDetalleAlumno.created_at).toLocaleString()} |{" "}
-      <strong>Método:</strong> {ordenDetalleAlumno.metodo_pago} |{" "}
-      <strong>Total:</strong> {formatearMoneda(ordenDetalleAlumno.total)}
-    </p>
-
-    {ordenDetalleAlumno.detalle?.length ? (
-      <table style={styles.table}>
-        <thead>
-          <tr>
-            <th style={styles.th}>Producto</th>
-            <th style={styles.th}>Cantidad</th>
-            <th style={styles.th}>Precio</th>
-            <th style={styles.th}>Total</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {ordenDetalleAlumno.detalle.map((d, index) => (
-            <tr key={`${d.producto_id}-${index}`}>
-              <td style={styles.td}>{d.producto_nombre}</td>
-              <td style={styles.td}>{d.cantidad}</td>
-              <td style={styles.td}>{formatearMoneda(d.precio_unitario)}</td>
-              <td style={styles.td}>{formatearMoneda(d.total)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    ) : (
-      <p>No hay detalle de productos para esta orden.</p>
-    )}
-  </div>
-)}
-
-          {vistaAlumnoDetalle === "recargas" && (
-  <div style={styles.infoBox}>
-    <h4>Historial de Recargas</h4>
-
-    {historialRecargasAlumno.length === 0 ? (
-      <p>No existen recargas registradas.</p>
-    ) : (
-      <table style={styles.table}>
-        <thead>
-          <tr>
-            <th style={styles.th}>Fecha</th>
-            <th style={styles.th}>Monto</th>
-            <th style={styles.th}>Método</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {historialRecargasAlumno.map((r) => (
-            <tr key={r.id}>
-              <td style={styles.td}>
-                {new Date(r.created_at).toLocaleString()}
-              </td>
-              <td style={styles.td}>
-                {formatearMoneda(r.monto)}
-              </td>
-              <td style={styles.td}>{r.metodo_pago}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    )}
-  </div>
-)}
-
-{vistaAlumnoDetalle === "consumo" && (
-  <div style={styles.infoBox}>
-    <h4 style={{ marginTop: 0 }}>Consumo detallado</h4>
-
-    {historialConsumoAlumno.length === 0 ? (
-      <p>No existen consumos registrados.</p>
-    ) : (
-      <table style={styles.table}>
-        <thead>
-          <tr>
-            <th style={styles.th}>Fecha</th>
-            <th style={styles.th}>Orden</th>
-            <th style={styles.th}>Producto</th>
-            <th style={styles.th}>Cantidad</th>
-            <th style={styles.th}>Precio</th>
-            <th style={styles.th}>Total</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {historialConsumoAlumno.map((c, index) => (
-            <tr key={`${c.venta_id}-${c.producto_id}-${index}`}>
-              <td style={styles.td}>
-                {new Date(c.created_at).toLocaleString()}
-              </td>
-
-              <td style={styles.td}>
-                #{c.venta_id}
-              </td>
-
-              <td style={styles.td}>
-                {c.producto_nombre}
-              </td>
-
-              <td style={styles.td}>
-                {c.cantidad}
-              </td>
-
-              <td style={styles.td}>
-                {formatearMoneda(c.precio_unitario)}
-              </td>
-
-              <td style={styles.td}>
-                {formatearMoneda(c.total)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    )}
-  </div>
-)}
-
-          {vistaAlumnoDetalle === "dispositivo" && (
-            <div style={styles.infoBox}>
-              Dispositivo / tarjeta / código asignado al alumno.
-            </div>
-          )}
+          {vistaAlumnoDetalle === "recargas" && <HistorialSimple titulo="Historial de recargas" columnas={["Fecha", "Monto", "Método"]} filas={historialRecargasAlumno.map((r) => [r.created_at ? new Date(r.created_at).toLocaleString() : "-", formatearMoneda(r.monto), r.metodo_pago || "-"])} />}
+          {vistaAlumnoDetalle === "consumo" && <HistorialSimple titulo="Consumo detallado" columnas={["Fecha", "Orden", "Producto", "Cantidad", "Precio", "Total"]} filas={historialConsumoAlumno.map((c) => [c.created_at ? new Date(c.created_at).toLocaleString() : "-", `#${c.venta_id}`, c.producto_nombre || "-", c.cantidad || 0, formatearMoneda(c.precio_unitario), formatearMoneda(c.total)])} />}
+          {vistaAlumnoDetalle === "dispositivo" && <div style={paymon.historyPanel}><h3>Dispositivos</h3><p>No hay dispositivos vinculados todavía.</p><button type="button" style={paymon.orangeButton}>Enlazar dispositivo</button></div>}
         </div>
-      </div>
-    )}
+      );
+    })()}
 
     {!alumnoDetalle && (
     <div style={styles.twoColumn}>
@@ -632,3 +610,45 @@ setHistorialConsumoAlumno(
   </>
   );
 }
+
+
+function DataRow({ label, value }) {
+  return <div style={paymon.dataRow}><span style={paymon.dataLabel}>{label}:</span><strong style={paymon.dataValue}>{value}</strong></div>;
+}
+
+function HistorialSimple({ titulo, columnas, filas }) {
+  return (
+    <div style={paymon.historyPanel}>
+      <h3>{titulo}</h3>
+      <div style={paymon.tableWrap}>
+        <table style={paymon.table}>
+          <thead><tr>{columnas.map((c) => <th key={c} style={paymon.th}>{c}</th>)}</tr></thead>
+          <tbody>{filas.length ? filas.map((fila, i) => <tr key={i}>{fila.map((v, j) => <td key={j} style={paymon.td}>{v}</td>)}</tr>) : <tr><td colSpan={columnas.length} style={paymon.emptyCell}>No hay datos disponibles</td></tr>}</tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const paymon = {
+  fichaShell: { background: "#fff", borderRadius: 16, overflow: "hidden", boxShadow: "0 14px 40px rgba(15,23,42,.10)", marginBottom: 24 },
+  hero: { background: "#2428b8", color: "#fff", padding: "22px 28px", display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" },
+  backButton: { border: 0, background: "transparent", color: "#ff8b45", fontSize: 34, cursor: "pointer", padding: 0 },
+  avatar: { width: 72, height: 72, borderRadius: "50%", background: "#fff", color: "#2428b8", border: "3px solid #ff8b45", display: "grid", placeItems: "center", fontSize: 30, fontWeight: 800 },
+  heroIdentity: { minWidth: 220, flex: 1 }, heroName: { margin: "0 0 10px", fontSize: 26 }, badgeRow: { display: "flex", gap: 10 },
+  studentBadge: { background: "#eef2ff", color: "#3137d8", padding: "8px 18px", borderRadius: 12 }, activeBadge: { background: "#dff7e8", color: "#166534", padding: "8px 18px", borderRadius: 12 }, inactiveBadge: { background: "#fee2e2", color: "#991b1b", padding: "8px 18px", borderRadius: 12 },
+  heroActions: { display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" },
+  whiteButton: { border: 0, background: "#fff", color: "#2428b8", borderRadius: 7, padding: "14px 20px", fontWeight: 700, cursor: "pointer" },
+  monthButton: { border: 0, background: "#6d88ef", color: "#fff", borderRadius: 7, padding: "14px 20px", fontWeight: 700, cursor: "pointer" },
+  orangeButton: { border: 0, background: "#ff8548", color: "#fff", borderRadius: 9, padding: "14px 24px", fontWeight: 700, cursor: "pointer" },
+  profileGrid: { padding: "34px 6% 22px", display: "grid", gridTemplateColumns: "minmax(230px,1fr) minmax(260px,1fr) minmax(230px,.75fr)", gap: 30, alignItems: "stretch" },
+  dataCardPlain: { padding: "8px 12px" }, dataCard: { padding: "24px 28px", borderRadius: 12, boxShadow: "0 6px 18px rgba(15,23,42,.12)" },
+  dataRow: { display: "grid", gridTemplateColumns: "110px 1fr", gap: 10, marginBottom: 14, alignItems: "baseline" }, dataLabel: { color: "#64748b", fontSize: 16 }, dataValue: { color: "#111827", overflowWrap: "anywhere" },
+  balanceCard: { padding: 20, borderRadius: 12, boxShadow: "0 6px 18px rgba(15,23,42,.12)", display: "flex", flexDirection: "column", gap: 18, justifyContent: "center" },
+  balanceBox: { background: "#dff7ef", borderRadius: 10, padding: 18, textAlign: "center" }, balanceLabel: { display: "block", fontWeight: 700 }, balanceValue: { display: "block", fontSize: 38, marginTop: 6 }, rechargeButton: { border: 0, background: "#2428b8", color: "#fff", padding: 14, borderRadius: 6, fontWeight: 700, cursor: "pointer" },
+  faceNotice: { margin: "8px 5% 34px", border: "1px solid #c9d7ff", background: "#f3f6ff", borderRadius: 13, padding: "18px 26px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, color: "#3f46ce", flexWrap: "wrap" }, faceSubtext: { fontSize: 13, marginTop: 4 }, faceButton: { border: 0, background: "#5b50e8", color: "#fff", borderRadius: 8, padding: "10px 16px", fontWeight: 700, cursor: "pointer" },
+  tabs: { margin: "0 5%", display: "flex", gap: 4, flexWrap: "wrap" }, tab: { minWidth: 170, padding: "14px 28px", border: "2px solid #ff8548", color: "#ff5f2b", background: "#fff", cursor: "pointer", fontWeight: 700 }, tabActive: { minWidth: 170, padding: "14px 28px", border: "2px solid #ff8548", color: "#fff", background: "#ff8548", cursor: "pointer", fontWeight: 700 },
+  historyPanel: { margin: "0 5% 40px", padding: "28px 0" }, summaryRow: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 20, flexWrap: "wrap" }, summaryCard: { display: "grid", gridTemplateColumns: "1fr 1fr", borderRadius: 10, boxShadow: "0 5px 16px rgba(15,23,42,.12)", overflow: "hidden", minWidth: 420 }, summaryCell: { padding: "20px 30px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, borderRight: "1px solid #e5e7eb" }, paidValue: { fontSize: 36, color: "#062c4c" }, pendingValue: { fontSize: 36, color: "#2fc48d" },
+  tableCard: { marginTop: 34, padding: 28, borderRadius: 12, boxShadow: "0 8px 22px rgba(15,23,42,.12)" }, tableToolbar: { display: "flex", justifyContent: "space-between", gap: 16, marginBottom: 22, flexWrap: "wrap" }, searchInput: { width: 270, maxWidth: "100%", padding: "14px 16px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 16 }, exportButton: { border: "1px solid #10b981", color: "#059669", background: "#fff", borderRadius: 8, padding: "12px 20px", cursor: "pointer", fontWeight: 700 },
+  tableWrap: { overflowX: "auto" }, table: { width: "100%", borderCollapse: "collapse", minWidth: 880 }, th: { background: "#dceafe", color: "#10167d", padding: "16px 12px", textAlign: "left", whiteSpace: "nowrap" }, td: { padding: "14px 12px", borderBottom: "1px solid #e5e7eb", whiteSpace: "nowrap" }, emptyCell: { textAlign: "center", padding: 26, fontSize: 18 }, statusPill: { background: "#dcfce7", color: "#166534", padding: "6px 10px", borderRadius: 999, fontWeight: 700 }, viewButton: { border: 0, background: "#2428b8", color: "#fff", padding: "8px 12px", borderRadius: 6, cursor: "pointer" }, orderDetail: { marginTop: 22, padding: 20, border: "1px solid #e5e7eb", borderRadius: 10 }, detailHeader: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" },
+};
