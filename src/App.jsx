@@ -1,3 +1,8 @@
+Biblioteca
+/
+App_PROFESORES_DETALLE.jsx
+
+
 import * as XLSX from "xlsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import AlumnosModulo from "./components/AlumnosModulo";
@@ -224,6 +229,8 @@ const [profesorForm, setProfesorForm] = useState({
 });
 
 const [editandoProfesorId, setEditandoProfesorId] = useState(null);
+const [profesorDetalle, setProfesorDetalle] = useState(null);
+const [vistaProfesorDetalle, setVistaProfesorDetalle] = useState("ordenes");
 
    const [ventasFiltros, setVentasFiltros] = useState({
   tipo_fecha: "created_at",
@@ -4813,7 +4820,7 @@ if (!usuario) {
       </div>
     </div>
 
-    {vistaProfesoresInterna === "profesores" && (
+    {vistaProfesoresInterna === "profesores" && !profesorDetalle && (
       <div style={styles.twoColumn}>
         <div style={styles.box}>
           <h3>{editandoProfesorId ? "Editar profesor" : "Nuevo profesor"}</h3>
@@ -5078,11 +5085,10 @@ if (!usuario) {
                               <button
                                 type="button"
                                 style={styles.smallDarkButton}
-                                onClick={() =>
-                                  alert(
-                                    `Profesor: ${p.nombres || ""} ${p.apellidos || ""}`
-                                  )
-                                }
+                                onClick={() => {
+                                  setProfesorDetalle(p);
+                                  setVistaProfesorDetalle("ordenes");
+                                }}
                                 title="Ver"
                               >
                                 👁
@@ -5185,6 +5191,290 @@ if (!usuario) {
               </table>
             </div>
           )}
+        </div>
+      </div>
+    )}
+
+    {vistaProfesoresInterna === "profesores" && profesorDetalle && (
+      <div
+        style={{
+          background: "#ffffff",
+          borderRadius: 18,
+          overflow: "hidden",
+          boxShadow: "0 10px 30px rgba(15, 23, 42, 0.10)",
+          border: "1px solid #e5e7eb",
+        }}
+      >
+        <div
+          style={{
+            background: "linear-gradient(135deg, #1e2bb8 0%, #3036c8 100%)",
+            color: "#ffffff",
+            padding: "22px 28px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 18,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+            <button
+              type="button"
+              onClick={() => setProfesorDetalle(null)}
+              style={{
+                border: "none",
+                background: "transparent",
+                color: "#ff9a45",
+                fontSize: 34,
+                fontWeight: 900,
+                cursor: "pointer",
+                lineHeight: 1,
+              }}
+              title="Regresar a profesores"
+            >
+              ‹
+            </button>
+
+            <div
+              style={{
+                width: 78,
+                height: 78,
+                borderRadius: "50%",
+                background: "#ffffff",
+                color: "#2435bd",
+                border: "3px solid #ff8a45",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 30,
+                fontWeight: 900,
+              }}
+            >
+              {(profesorDetalle.nombres || "P").charAt(0).toUpperCase()}
+            </div>
+
+            <div>
+              <h2 style={{ margin: 0, fontSize: 28, fontWeight: 900 }}>
+                {`${profesorDetalle.nombres || ""} ${profesorDetalle.apellidos || ""}`.trim() || "Profesor"}
+              </h2>
+              <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                <span
+                  style={{
+                    background: "#dbe7ff",
+                    color: "#2435bd",
+                    padding: "8px 18px",
+                    borderRadius: 14,
+                    fontWeight: 700,
+                  }}
+                >
+                  Profesor
+                </span>
+                <span
+                  style={{
+                    background: profesorDetalle.activo !== false ? "#dcfce7" : "#fee2e2",
+                    color: profesorDetalle.activo !== false ? "#166534" : "#991b1b",
+                    padding: "8px 18px",
+                    borderRadius: 14,
+                    fontWeight: 700,
+                  }}
+                >
+                  {profesorDetalle.activo !== false ? "Activo" : "Inactivo"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              style={{ ...styles.outlineButton, background: "#ffffff", color: "#2435bd" }}
+              onClick={() => setVistaProfesorDetalle("creditos")}
+            >
+              Historial de créditos
+            </button>
+            <button
+              type="button"
+              style={{ ...styles.outlineButton, background: "#ffffff", color: "#2435bd" }}
+              onClick={() => {
+                setEditandoProfesorId(profesorDetalle.id);
+                setProfesorForm({
+                  cedula: profesorDetalle.cedula || "",
+                  nombres: profesorDetalle.nombres || "",
+                  apellidos: profesorDetalle.apellidos || "",
+                  email: profesorDetalle.email || "",
+                  codigo: profesorDetalle.codigo || "",
+                  telefono: profesorDetalle.telefono || "",
+                  saldo: profesorDetalle.credito || profesorDetalle.saldo || "",
+                  es_profesor: profesorDetalle.es_profesor !== false,
+                });
+                setProfesorDetalle(null);
+              }}
+            >
+              Editar perfil
+            </button>
+            <button
+              type="button"
+              style={{
+                border: "none",
+                background: "#ff8548",
+                color: "#ffffff",
+                padding: "12px 22px",
+                borderRadius: 10,
+                fontWeight: 800,
+                cursor: "pointer",
+              }}
+              onClick={() => {
+                setVista("ventas");
+                setVistaVentasInterna("nueva");
+                setTipoUsuarioNuevaOrden("PROFESORES");
+                setBusquedaUsuarioNuevaOrden(
+                  `${profesorDetalle.nombres || ""} ${profesorDetalle.apellidos || ""}`.trim()
+                );
+              }}
+            >
+              Crear orden +
+            </button>
+          </div>
+        </div>
+
+        <div style={{ padding: 28 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(260px, 1fr) minmax(260px, 1fr) minmax(220px, 0.7fr)",
+              gap: 22,
+              alignItems: "stretch",
+            }}
+          >
+            <div style={{ padding: 22, lineHeight: 2.05 }}>
+              <div><strong>Teléfono:</strong> {profesorDetalle.telefono || "-"}</div>
+              <div><strong>Email:</strong> {profesorDetalle.email || "-"}</div>
+              <div><strong>Cédula:</strong> {profesorDetalle.cedula || "-"}</div>
+              <div><strong>ID:</strong> {profesorDetalle.id || "-"}</div>
+            </div>
+
+            <div
+              style={{
+                padding: 24,
+                borderRadius: 14,
+                background: "#ffffff",
+                boxShadow: "0 5px 18px rgba(15, 23, 42, 0.10)",
+                lineHeight: 2.05,
+              }}
+            >
+              <div><strong>Institución:</strong> {institucionActiva?.nombre || "-"}</div>
+              <div><strong>Código:</strong> {profesorDetalle.codigo || "-"}</div>
+              <div><strong>Es profesor:</strong> {profesorDetalle.es_profesor !== false ? "Sí" : "No"}</div>
+              <div><strong>Crédito:</strong> {Number(profesorDetalle.credito || profesorDetalle.saldo || 0) > 0 ? "Sí" : "No"}</div>
+            </div>
+
+            <div
+              style={{
+                padding: 22,
+                borderRadius: 14,
+                background: "#ffffff",
+                boxShadow: "0 5px 18px rgba(15, 23, 42, 0.10)",
+                textAlign: "center",
+              }}
+            >
+              <div
+                style={{
+                  background: "#d9f7ea",
+                  borderRadius: 12,
+                  padding: 18,
+                  fontWeight: 800,
+                }}
+              >
+                <div style={{ fontSize: 17 }}>Crédito actual:</div>
+                <div style={{ fontSize: 34, marginTop: 4 }}>
+                  {formatearMoneda(profesorDetalle.credito || profesorDetalle.saldo || 0)}
+                </div>
+              </div>
+              <button
+                type="button"
+                style={{ ...styles.button, width: "100%", marginTop: 18 }}
+                onClick={() => setVistaProfesorDetalle("recargas")}
+              >
+                Recargar efectivo
+              </button>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 28 }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {[
+                ["ordenes", "Órdenes"],
+                ["recargas", "Recargas"],
+                ["dispositivos", "Dispositivos"],
+                ["creditos", "Créditos"],
+              ].map(([clave, texto]) => (
+                <button
+                  key={clave}
+                  type="button"
+                  onClick={() => setVistaProfesorDetalle(clave)}
+                  style={{
+                    border: "2px solid #ff8548",
+                    background: vistaProfesorDetalle === clave ? "#ff8548" : "#ffffff",
+                    color: vistaProfesorDetalle === clave ? "#ffffff" : "#ff5b24",
+                    padding: "12px 28px",
+                    borderRadius: "10px 10px 0 0",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  {texto}
+                </button>
+              ))}
+            </div>
+
+            <div
+              style={{
+                border: "1px solid #e5e7eb",
+                borderRadius: "0 14px 14px 14px",
+                padding: 24,
+                minHeight: 220,
+                background: "#ffffff",
+              }}
+            >
+              {vistaProfesorDetalle === "ordenes" && (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", gap: 14 }}>
+                      <div style={{ padding: "16px 24px", border: "1px solid #e5e7eb", borderRadius: 12 }}>
+                        <div>Total pagadas</div>
+                        <strong style={{ fontSize: 28 }}>{formatearMoneda(0)}</strong>
+                      </div>
+                      <div style={{ padding: "16px 24px", border: "1px solid #e5e7eb", borderRadius: 12 }}>
+                        <div>Total pendientes</div>
+                        <strong style={{ fontSize: 28, color: "#10b981" }}>{formatearMoneda(0)}</strong>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 28, textAlign: "center", color: "#64748b", padding: 28 }}>
+                    No hay órdenes disponibles para este profesor.
+                  </div>
+                </>
+              )}
+
+              {vistaProfesorDetalle === "recargas" && (
+                <div style={{ textAlign: "center", color: "#64748b", padding: 40 }}>
+                  No hay recargas registradas para este profesor.
+                </div>
+              )}
+
+              {vistaProfesorDetalle === "dispositivos" && (
+                <div style={{ textAlign: "center", color: "#64748b", padding: 40 }}>
+                  No hay dispositivos registrados para este profesor.
+                </div>
+              )}
+
+              {vistaProfesorDetalle === "creditos" && (
+                <div style={{ textAlign: "center", color: "#64748b", padding: 40 }}>
+                  No hay movimientos de crédito registrados para este profesor.
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     )}
@@ -6746,6 +7036,41 @@ if (!usuario) {
                   {formatearMoneda(totalVentaCalculado)}
                 </div>
               </div>
+
+              <button
+                type="submit"
+                disabled={
+                  (Array.isArray(ventaItemsCalculados)
+                    ? ventaItemsCalculados
+                    : []
+                  ).length === 0
+                }
+                style={{
+                  width: "100%",
+                  marginTop: 14,
+                  border: "none",
+                  borderRadius: 9,
+                  padding: "13px 12px",
+                  background:
+                    (Array.isArray(ventaItemsCalculados)
+                      ? ventaItemsCalculados
+                      : []
+                    ).length === 0
+                      ? "#94a3b8"
+                      : "#ff8748",
+                  color: "#ffffff",
+                  fontWeight: 900,
+                  cursor:
+                    (Array.isArray(ventaItemsCalculados)
+                      ? ventaItemsCalculados
+                      : []
+                    ).length === 0
+                      ? "not-allowed"
+                      : "pointer",
+                }}
+              >
+                Crear orden
+              </button>
 
               <button
                 type="button"
