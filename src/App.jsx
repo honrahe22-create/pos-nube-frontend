@@ -3027,180 +3027,197 @@ if (!usuario) {
             </strong>
           </div>
 
-          <button
-            style={vista === "dashboard" ? styles.menuButtonActive : styles.menuButton}
-            onClick={() => setVista("dashboard")}
-          >
-            Dashboard
-          </button>
-
-          <button
-  style={
-    vista === "productos" || vista === "inventario"
-      ? styles.menuButtonActive
-      : styles.menuButton
-  }
-  onClick={() => setMenuComidasAbierto(!menuComidasAbierto)}
->
-  Comidas
-</button>
-
-{menuComidasAbierto && (
-  <div style={styles.subMenu}>
-    <button
-      style={
-        vista === "productos"
-          ? styles.subMenuButtonActive
-          : styles.subMenuButton
-      }
-      onClick={() => setVista("productos")}
-    >
-      Menú Cafetería
-    </button>
-
-    <button
-      style={
-        vista === "inventario"
-          ? styles.subMenuButtonActive
-          : styles.subMenuButton
-      }
-      onClick={() => setVista("inventario")}
-    >
-      Stock
-    </button>
-  </div>
-)}
-
-<button
-  style={vista === "alumnos" ? styles.menuButtonActive : styles.menuButton}
-  onClick={() => setVista("alumnos")}
->
-  Alumnos
-</button>
-
-<button
-  style={
-    vista === "profesores" || vista === "creditos_profesores"
-      ? styles.menuButtonActive
-      : styles.menuButton
-  }
-  onClick={() => {
-    setVista("profesores");
-    setVistaProfesoresInterna("profesores");
+          <div
+  style={{
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    marginTop: 16,
   }}
 >
-  Profesores
-</button>
-
-<button
-  style={vista === "recargas" ? styles.menuButtonActive : styles.menuButton}
-  onClick={() => setVista("recargas")}
->
-  Recargas en efectivo
-</button>
-
-          <button
-  style={vista === "ventas" ? styles.menuButtonActive : styles.menuButton}
-  onClick={() => {
-    setVista("ventas");
-    setMenuVentasAbierto(!menuVentasAbierto);
-  }}
->
-  Ventas
-</button>
-
-{menuVentasAbierto && (
-  <div style={styles.subMenu}>
-    <button
-      style={
-        vista === "ventas" && vistaVentasInterna === "registrar"
-          ? styles.subMenuButtonActive
-          : styles.subMenuButton
-      }
-      onClick={() => {
-        setVista("ventas");
-        setVistaVentasInterna("registrar");
-      }}
-    >
-      Nueva Orden
-    </button>
-
-    <button
-      style={
-        vista === "ventas" && vistaVentasInterna === "consultar"
-          ? styles.subMenuButtonActive
-          : styles.subMenuButton
-      }
-      onClick={() => {
+  {[
+    {
+      id: "dashboard",
+      icono: "▦",
+      texto: "Dashboard",
+      activo: vista === "dashboard",
+      accion: () => setVista("dashboard"),
+    },
+    {
+      id: "consultar_ventas",
+      icono: "▣",
+      texto: "Ventas",
+      activo:
+        vista === "ventas" &&
+        vistaVentasInterna === "consultar",
+      accion: () => {
         setVista("ventas");
         setVistaVentasInterna("consultar");
+      },
+    },
+    {
+      id: "nueva_orden",
+      icono: "＋",
+      texto: "Nueva Orden",
+      activo:
+        vista === "ventas" &&
+        vistaVentasInterna === "registrar",
+      accion: () => {
+        setVista("ventas");
+        setVistaVentasInterna("registrar");
+      },
+    },
+    {
+      id: "alumnos",
+      icono: "◎",
+      texto: "Alumnos",
+      activo: vista === "alumnos",
+      accion: () => setVista("alumnos"),
+    },
+    {
+      id: "profesores",
+      icono: "◉",
+      texto: "Profesores",
+      activo:
+        vista === "profesores" ||
+        vista === "creditos_profesores",
+      accion: () => {
+        setVista("profesores");
+        setVistaProfesoresInterna("profesores");
+      },
+    },
+    {
+      id: "menu_cafeteria",
+      icono: "▤",
+      texto: "Menú Cafetería",
+      activo: vista === "productos",
+      accion: () => setVista("productos"),
+    },
+    {
+      id: "stock",
+      icono: "▥",
+      texto: "Stock",
+      activo: vista === "inventario",
+      accion: () => setVista("inventario"),
+    },
+    {
+      id: "recargas",
+      icono: "$",
+      texto: "Recargas en efectivo",
+      activo: vista === "recargas",
+      accion: () => setVista("recargas"),
+    },
+    {
+      id: "egresos",
+      icono: "−",
+      texto: "Egresos diarios",
+      activo: vista === "egresos_diarios",
+      accion: () => setVista("egresos_diarios"),
+    },
+    {
+      id: "cierre_caja",
+      icono: "◫",
+      texto: "Cierre de caja",
+      activo: vista === "reporte_cierre",
+      accion: () => setVista("reporte_cierre"),
+    },
+    {
+      id: "productos_vendidos",
+      icono: "▧",
+      texto: "Productos vendidos",
+      activo: vista === "reporte_productos",
+      accion: () => setVista("reporte_productos"),
+    },
+    {
+      id: "productos_dia",
+      icono: "◷",
+      texto: "Productos por día",
+      activo: vista === "reporte_productos_dia",
+      accion: () => setVista("reporte_productos_dia"),
+    },
+  ].map((opcion) => (
+    <button
+      key={opcion.id}
+      type="button"
+      onClick={opcion.accion}
+      style={{
+        position: "relative",
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        gap: 13,
+        padding: "13px 14px 13px 16px",
+        border: "none",
+        borderRadius: 10,
+        background: opcion.activo
+          ? "rgba(255,255,255,0.96)"
+          : "transparent",
+        color: opcion.activo ? "#2447a6" : "#ffffff",
+        fontSize: 16,
+        fontWeight: opcion.activo ? 800 : 600,
+        textAlign: "left",
+        cursor: "pointer",
+        transition:
+          "background 0.2s ease, color 0.2s ease, transform 0.2s ease",
+        boxShadow: opcion.activo
+          ? "0 5px 14px rgba(0,0,0,0.10)"
+          : "none",
+      }}
+      onMouseEnter={(e) => {
+        if (!opcion.activo) {
+          e.currentTarget.style.background =
+            "rgba(255,255,255,0.12)";
+          e.currentTarget.style.transform = "translateX(3px)";
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!opcion.activo) {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.transform = "translateX(0)";
+        }
       }}
     >
-      Consultar ventas
+      {opcion.activo && (
+        <span
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 8,
+            bottom: 8,
+            width: 4,
+            borderRadius: "0 6px 6px 0",
+            background: "#ff9d3d",
+          }}
+        />
+      )}
+
+      <span
+        style={{
+          width: 29,
+          minWidth: 29,
+          height: 29,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: 8,
+          border: opcion.activo
+            ? "1px solid #9eb5ef"
+            : "1px solid rgba(255,255,255,0.40)",
+          background: opcion.activo
+            ? "#eef3ff"
+            : "rgba(255,255,255,0.08)",
+          color: opcion.activo ? "#2447a6" : "#ffffff",
+          fontSize: 17,
+          fontWeight: 900,
+        }}
+      >
+        {opcion.icono}
+      </span>
+
+      <span>{opcion.texto}</span>
     </button>
-  </div>
-)}
-
-<button
-  style={vista === "egresos_diarios" ? styles.menuButtonActive : styles.menuButton}
-  onClick={() => setVista("egresos_diarios")}
->
-  Egresos diarios
-</button>
-
-<button
-  style={
-    vista === "reportes" ||
-    vista === "reporte_cierre" ||
-    vista === "reporte_productos" ||
-    vista === "reporte_productos_dia"
-      ? styles.menuButtonActive
-      : styles.menuButton
-  }
-  onClick={() => {
-    setVista("reportes");
-    setMenuReportesAbierto(!menuReportesAbierto);
-  }}
->
-  Reportes
-</button>
-
-{menuReportesAbierto && (
-  <div style={styles.subMenu}>
-    <button
-      style={
-        vista === "reporte_cierre"
-          ? styles.subMenuButtonActive
-          : styles.subMenuButton
-      }
-      onClick={() => setVista("reporte_cierre")}
-    >
-      Cierre de caja
-    </button>
-
-    <button
-      style={
-        vista === "reporte_productos"
-          ? styles.subMenuButtonActive
-          : styles.subMenuButton
-      }
-      onClick={() => setVista("reporte_productos")}
-    >
-      Productos vendidos
-    </button>
-
-    <button
-      style={
-        vista === "reporte_productos_dia"
-          ? styles.subMenuButtonActive
-          : styles.subMenuButton
-      }
-      onClick={() => setVista("reporte_productos_dia")}
-    >
-      Productos por día
-    </button>
-  </div>
-)}
+  ))}
+</div>
 
 </div>
 
