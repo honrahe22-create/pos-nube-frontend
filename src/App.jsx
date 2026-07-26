@@ -1,6 +1,6 @@
 import * as XLSX from "xlsx";
 import { useEffect, useMemo, useRef, useState } from "react";
-import AlumnosModulo from "./components/AlumnosModulo";
+import AlumnosModulo from "./components/alumnos/AlumnosModulo";
 
 const API_URL = "https://pos-nube-backend.onrender.com";
 
