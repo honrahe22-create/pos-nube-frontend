@@ -1,8 +1,3 @@
-Biblioteca
-/
-App_PROFESORES_DETALLE.jsx
-
-
 import * as XLSX from "xlsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import AlumnosModulo from "./components/AlumnosModulo";
