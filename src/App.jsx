@@ -5827,14 +5827,6 @@ if (!usuario) {
 </div>
 
           {vistaVentasInterna === "registrar" && (
-
-Y BORRA DESDE ESA LÍNEA HASTA JUSTO ANTES DE ESTA OTRA LÍNEA:
-
-{vistaVentasInterna === "consultar" && (
-
-PEGA EN ESE LUGAR TODO ESTE BLOQUE:
-
-{vistaVentasInterna === "registrar" && (
   <div
     style={{
       background: "#ffffff",
@@ -6752,6 +6744,7 @@ PEGA EN ESE LUGAR TODO ESTE BLOQUE:
     </form>
   </div>
 )}
+
             {vistaVentasInterna === "consultar" && (
               <>
                 <div style={styles.box}>
