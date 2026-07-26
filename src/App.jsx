@@ -3027,180 +3027,197 @@ if (!usuario) {
             </strong>
           </div>
 
-          <button
-            style={vista === "dashboard" ? styles.menuButtonActive : styles.menuButton}
-            onClick={() => setVista("dashboard")}
-          >
-            Dashboard
-          </button>
-
-          <button
-  style={
-    vista === "productos" || vista === "inventario"
-      ? styles.menuButtonActive
-      : styles.menuButton
-  }
-  onClick={() => setMenuComidasAbierto(!menuComidasAbierto)}
->
-  Comidas
-</button>
-
-{menuComidasAbierto && (
-  <div style={styles.subMenu}>
-    <button
-      style={
-        vista === "productos"
-          ? styles.subMenuButtonActive
-          : styles.subMenuButton
-      }
-      onClick={() => setVista("productos")}
-    >
-      Menú Cafetería
-    </button>
-
-    <button
-      style={
-        vista === "inventario"
-          ? styles.subMenuButtonActive
-          : styles.subMenuButton
-      }
-      onClick={() => setVista("inventario")}
-    >
-      Stock
-    </button>
-  </div>
-)}
-
-<button
-  style={vista === "alumnos" ? styles.menuButtonActive : styles.menuButton}
-  onClick={() => setVista("alumnos")}
->
-  Alumnos
-</button>
-
-<button
-  style={
-    vista === "profesores" || vista === "creditos_profesores"
-      ? styles.menuButtonActive
-      : styles.menuButton
-  }
-  onClick={() => {
-    setVista("profesores");
-    setVistaProfesoresInterna("profesores");
+          <div
+  style={{
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    marginTop: 16,
   }}
 >
-  Profesores
-</button>
-
-<button
-  style={vista === "recargas" ? styles.menuButtonActive : styles.menuButton}
-  onClick={() => setVista("recargas")}
->
-  Recargas en efectivo
-</button>
-
-          <button
-  style={vista === "ventas" ? styles.menuButtonActive : styles.menuButton}
-  onClick={() => {
-    setVista("ventas");
-    setMenuVentasAbierto(!menuVentasAbierto);
-  }}
->
-  Ventas
-</button>
-
-{menuVentasAbierto && (
-  <div style={styles.subMenu}>
-    <button
-      style={
-        vista === "ventas" && vistaVentasInterna === "registrar"
-          ? styles.subMenuButtonActive
-          : styles.subMenuButton
-      }
-      onClick={() => {
-        setVista("ventas");
-        setVistaVentasInterna("registrar");
-      }}
-    >
-      Nueva Orden
-    </button>
-
-    <button
-      style={
-        vista === "ventas" && vistaVentasInterna === "consultar"
-          ? styles.subMenuButtonActive
-          : styles.subMenuButton
-      }
-      onClick={() => {
+  {[
+    {
+      id: "dashboard",
+      icono: "▦",
+      texto: "Dashboard",
+      activo: vista === "dashboard",
+      accion: () => setVista("dashboard"),
+    },
+    {
+      id: "consultar_ventas",
+      icono: "▣",
+      texto: "Ventas",
+      activo:
+        vista === "ventas" &&
+        vistaVentasInterna === "consultar",
+      accion: () => {
         setVista("ventas");
         setVistaVentasInterna("consultar");
+      },
+    },
+    {
+      id: "nueva_orden",
+      icono: "＋",
+      texto: "Nueva Orden",
+      activo:
+        vista === "ventas" &&
+        vistaVentasInterna === "registrar",
+      accion: () => {
+        setVista("ventas");
+        setVistaVentasInterna("registrar");
+      },
+    },
+    {
+      id: "alumnos",
+      icono: "◎",
+      texto: "Alumnos",
+      activo: vista === "alumnos",
+      accion: () => setVista("alumnos"),
+    },
+    {
+      id: "profesores",
+      icono: "◉",
+      texto: "Profesores",
+      activo:
+        vista === "profesores" ||
+        vista === "creditos_profesores",
+      accion: () => {
+        setVista("profesores");
+        setVistaProfesoresInterna("profesores");
+      },
+    },
+    {
+      id: "menu_cafeteria",
+      icono: "▤",
+      texto: "Menú Cafetería",
+      activo: vista === "productos",
+      accion: () => setVista("productos"),
+    },
+    {
+      id: "stock",
+      icono: "▥",
+      texto: "Stock",
+      activo: vista === "inventario",
+      accion: () => setVista("inventario"),
+    },
+    {
+      id: "recargas",
+      icono: "$",
+      texto: "Recargas en efectivo",
+      activo: vista === "recargas",
+      accion: () => setVista("recargas"),
+    },
+    {
+      id: "egresos",
+      icono: "−",
+      texto: "Egresos diarios",
+      activo: vista === "egresos_diarios",
+      accion: () => setVista("egresos_diarios"),
+    },
+    {
+      id: "cierre_caja",
+      icono: "◫",
+      texto: "Cierre de caja",
+      activo: vista === "reporte_cierre",
+      accion: () => setVista("reporte_cierre"),
+    },
+    {
+      id: "productos_vendidos",
+      icono: "▧",
+      texto: "Productos vendidos",
+      activo: vista === "reporte_productos",
+      accion: () => setVista("reporte_productos"),
+    },
+    {
+      id: "productos_dia",
+      icono: "◷",
+      texto: "Productos por día",
+      activo: vista === "reporte_productos_dia",
+      accion: () => setVista("reporte_productos_dia"),
+    },
+  ].map((opcion) => (
+    <button
+      key={opcion.id}
+      type="button"
+      onClick={opcion.accion}
+      style={{
+        position: "relative",
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        gap: 13,
+        padding: "13px 14px 13px 16px",
+        border: "none",
+        borderRadius: 10,
+        background: opcion.activo
+          ? "rgba(255,255,255,0.96)"
+          : "transparent",
+        color: opcion.activo ? "#2447a6" : "#ffffff",
+        fontSize: 16,
+        fontWeight: opcion.activo ? 800 : 600,
+        textAlign: "left",
+        cursor: "pointer",
+        transition:
+          "background 0.2s ease, color 0.2s ease, transform 0.2s ease",
+        boxShadow: opcion.activo
+          ? "0 5px 14px rgba(0,0,0,0.10)"
+          : "none",
+      }}
+      onMouseEnter={(e) => {
+        if (!opcion.activo) {
+          e.currentTarget.style.background =
+            "rgba(255,255,255,0.12)";
+          e.currentTarget.style.transform = "translateX(3px)";
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!opcion.activo) {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.transform = "translateX(0)";
+        }
       }}
     >
-      Consultar ventas
+      {opcion.activo && (
+        <span
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 8,
+            bottom: 8,
+            width: 4,
+            borderRadius: "0 6px 6px 0",
+            background: "#ff9d3d",
+          }}
+        />
+      )}
+
+      <span
+        style={{
+          width: 29,
+          minWidth: 29,
+          height: 29,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: 8,
+          border: opcion.activo
+            ? "1px solid #9eb5ef"
+            : "1px solid rgba(255,255,255,0.40)",
+          background: opcion.activo
+            ? "#eef3ff"
+            : "rgba(255,255,255,0.08)",
+          color: opcion.activo ? "#2447a6" : "#ffffff",
+          fontSize: 17,
+          fontWeight: 900,
+        }}
+      >
+        {opcion.icono}
+      </span>
+
+      <span>{opcion.texto}</span>
     </button>
-  </div>
-)}
-
-<button
-  style={vista === "egresos_diarios" ? styles.menuButtonActive : styles.menuButton}
-  onClick={() => setVista("egresos_diarios")}
->
-  Egresos diarios
-</button>
-
-<button
-  style={
-    vista === "reportes" ||
-    vista === "reporte_cierre" ||
-    vista === "reporte_productos" ||
-    vista === "reporte_productos_dia"
-      ? styles.menuButtonActive
-      : styles.menuButton
-  }
-  onClick={() => {
-    setVista("reportes");
-    setMenuReportesAbierto(!menuReportesAbierto);
-  }}
->
-  Reportes
-</button>
-
-{menuReportesAbierto && (
-  <div style={styles.subMenu}>
-    <button
-      style={
-        vista === "reporte_cierre"
-          ? styles.subMenuButtonActive
-          : styles.subMenuButton
-      }
-      onClick={() => setVista("reporte_cierre")}
-    >
-      Cierre de caja
-    </button>
-
-    <button
-      style={
-        vista === "reporte_productos"
-          ? styles.subMenuButtonActive
-          : styles.subMenuButton
-      }
-      onClick={() => setVista("reporte_productos")}
-    >
-      Productos vendidos
-    </button>
-
-    <button
-      style={
-        vista === "reporte_productos_dia"
-          ? styles.subMenuButtonActive
-          : styles.subMenuButton
-      }
-      onClick={() => setVista("reporte_productos_dia")}
-    >
-      Productos por día
-    </button>
-  </div>
-)}
+  ))}
+</div>
 
 </div>
 
@@ -3212,14 +3229,71 @@ if (!usuario) {
 
 <main style={styles.main}>
 
+{/* ===== BARRA SUPERIOR GLOBAL ===== */}
+<div
+  style={{
+    position: "sticky",
+    top: 0,
+    zIndex: 100,
+    margin: "-34px -36px 28px",
+    padding: "14px 36px",
+    minHeight: 68,
+    background: "#ffffff",
+    borderBottom: "1px solid #e5e7eb",
+    boxShadow: "0 4px 14px rgba(15, 23, 42, 0.08)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 20,
+    flexWrap: "wrap",
+    boxSizing: "border-box",
+  }}
+>
+  <div>
+    <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
+      Institución
+    </div>
+    <div style={{ fontSize: 21, color: "#111827", fontWeight: 900 }}>
+      {institucionActiva?.nombre || "POS NUBE"}
+    </div>
+  </div>
+
+  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+    <div
+      style={{
+        width: 42,
+        height: 42,
+        borderRadius: "50%",
+        background: "#1e3a8a",
+        color: "#ffffff",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontWeight: 900,
+        fontSize: 17,
+      }}
+    >
+      {(usuario?.correo || correo || "U").charAt(0).toUpperCase()}
+    </div>
+
+    <div>
+      <div style={{ fontSize: 15, color: "#111827", fontWeight: 800 }}>
+        {usuario?.correo || correo || "Usuario sin correo"}
+      </div>
+      <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+        {usuario?.rol || "Administrador"}
+      </div>
+    </div>
+  </div>
+</div>
+
 {vista === "dashboard" && (
   <>
     <div style={styles.pageHeader}>
       <div>
         <h1 style={styles.dashboardTitle}>
-          Bienvenido, {usuario.nombre}
+          Bienvenido a {institucionActiva?.nombre || "POS NUBE"}
         </h1>
-
         <p style={styles.dashboardSubtitle}>
           Resumen general del sistema
         </p>
@@ -3227,7 +3301,6 @@ if (!usuario) {
     </div>
 
     <div style={styles.grid}>
-
       <div style={styles.box}>
         <h3>Total ventas</h3>
         <p>{resumen ? resumen.total_ventas : "0"}</p>
@@ -3252,7 +3325,6 @@ if (!usuario) {
         <h3>Total transferencia</h3>
         <p>${resumen ? resumen.total_transferencia : "0.00"}</p>
       </div>
-
     </div>
   </>
 )}
@@ -5826,48 +5898,63 @@ if (!usuario) {
   </button>
 </div>
 
-           {vistaVentasInterna === "registrar" && (
-  <div style={styles.box}>
+          {vistaVentasInterna === "registrar" && (
+  <div
+    style={{
+      background: "#ffffff",
+      borderRadius: 18,
+      overflow: "hidden",
+      boxShadow: "0 10px 30px rgba(15, 23, 42, 0.10)",
+      border: "1px solid #e5e7eb",
+    }}
+  >
+    {/* CABECERA AZUL */}
     <div
       style={{
         background: "#2528b8",
-        color: "#fff",
-        padding: "20px 24px",
-        borderRadius: "16px 16px 0 0",
-        margin: "-24px -24px 20px -24px",
+        color: "#ffffff",
+        padding: "18px 22px",
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
-        gap: 12,
+        gap: 16,
         flexWrap: "wrap",
       }}
     >
       <div>
-        <h2 style={{ margin: 0, fontSize: "24px" }}>Nueva Orden</h2>
+        <h2 style={{ margin: 0, fontSize: 28, fontWeight: 800 }}>
+          Nueva Orden
+        </h2>
 
-        {alumnoDetalle &&
-          Number(ventaForm.alumno_id) === Number(alumnoDetalle.id) && (
-            <div style={{ marginTop: 8, fontSize: 14 }}>
-              Orden para:{" "}
-              <strong>
-                {alumnoDetalle.nombres || ""}{" "}
-                {alumnoDetalle.apellidos || ""}
-              </strong>
-            </div>
+        <div style={{ marginTop: 8, fontSize: 14, opacity: 0.95 }}>
+          {alumnoVentaSeleccionado ? (
+            <>
+              Compra para{" "}
+              <strong>{obtenerNombreAlumno(alumnoVentaSeleccionado)}</strong>
+            </>
+          ) : (
+            <>Selecciona un alumno o continúa como consumidor final</>
           )}
+        </div>
       </div>
 
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "stretch",
+          gap: 10,
+          flexWrap: "wrap",
+        }}
+      >
         {alumnoDetalle &&
           Number(ventaForm.alumno_id) === Number(alumnoDetalle.id) && (
             <button
               type="button"
-              style={styles.outlineButton}
               onClick={() => {
                 const confirmar =
                   (Array.isArray(ventaItems) ? ventaItems : []).length === 0 ||
                   window.confirm(
-                    "¿Deseas regresar al alumno? Los productos agregados se eliminarán."
+                    "¿Deseas regresar a la ficha del alumno? Los productos agregados se eliminarán."
                   );
 
                 if (!confirmar) return;
@@ -5876,67 +5963,93 @@ if (!usuario) {
                 setVistaAlumnoDetalle("datos");
                 setVista("alumnos");
               }}
+              style={{
+                border: "1px solid rgba(255,255,255,0.7)",
+                background: "#ffffff",
+                color: "#2528b8",
+                borderRadius: 10,
+                padding: "11px 16px",
+                fontWeight: 800,
+                cursor: "pointer",
+              }}
             >
               ← Regresar al alumno
             </button>
           )}
 
-        <button
-          type="button"
-          style={styles.secondaryButton}
-          onClick={() => setModoNuevaOrden("identificar")}
-        >
-          Identificar usuario
-        </button>
-
-        <button
-          type="button"
-          style={styles.outlineButton}
-          onClick={() => {
-            setModoNuevaOrden("consumidor_final");
-
-            setVentaForm((prev) => ({
-              ...prev,
-              alumno_id: "",
-              metodo_pago:
-                prev.metodo_pago === "RECARGA"
-                  ? "EFECTIVO"
-                  : prev.metodo_pago,
-            }));
-
-            setBusquedaUsuarioNuevaOrden("");
+        <div
+          style={{
+            minWidth: 145,
+            padding: "10px 14px",
+            borderRadius: 10,
+            background: "#dbe7ff",
+            color: "#111827",
+            textAlign: "center",
           }}
         >
-          Consumidor final
-        </button>
+          <div style={{ fontSize: 12, fontWeight: 700 }}>Usuario</div>
+          <div style={{ fontSize: 14, fontWeight: 800 }}>
+            {alumnoVentaSeleccionado
+              ? obtenerNombreAlumno(alumnoVentaSeleccionado)
+              : "Consumidor final"}
+          </div>
+        </div>
+
+        <div
+          style={{
+            minWidth: 125,
+            padding: "10px 14px",
+            borderRadius: 10,
+            background: "#ffe0a3",
+            color: "#111827",
+            textAlign: "center",
+          }}
+        >
+          <div style={{ fontSize: 12, fontWeight: 700 }}>Total</div>
+          <div style={{ fontSize: 24, fontWeight: 900 }}>
+            {formatearMoneda(totalVentaCalculado)}
+          </div>
+        </div>
+
+        <div
+          style={{
+            minWidth: 125,
+            padding: "10px 14px",
+            borderRadius: 10,
+            background: "#d9f4df",
+            color: "#111827",
+            textAlign: "center",
+          }}
+        >
+          <div style={{ fontSize: 12, fontWeight: 700 }}>Saldo</div>
+          <div style={{ fontSize: 24, fontWeight: 900 }}>
+            {formatearMoneda(alumnoVentaSeleccionado?.saldo || 0)}
+          </div>
+        </div>
       </div>
     </div>
 
-    {alumnoVentaSeleccionado && (
-      <div style={{ ...styles.infoBox, marginBottom: 20 }}>
-        <strong>Alumno seleccionado:</strong>{" "}
-        {alumnoVentaSeleccionado.nombres || ""}{" "}
-        {alumnoVentaSeleccionado.apellidos || ""}
-        {" | "}
-        <strong>Cédula:</strong>{" "}
-        {obtenerCedulaAlumno(alumnoVentaSeleccionado) || "-"}
-        {" | "}
-        <strong>Saldo:</strong>{" "}
-        {formatearMoneda(alumnoVentaSeleccionado.saldo || 0)}
-      </div>
-    )}
-
+    {/* SELECCIÓN DE USUARIO */}
     {modoNuevaOrden === "identificar" && (
-      <div style={{ ...styles.box, marginBottom: 20, padding: 20 }}>
-        <div style={styles.filtersGrid}>
-          <div style={styles.filterField}>
+      <div
+        style={{
+          padding: 18,
+          borderBottom: "1px solid #e5e7eb",
+          background: "#f8fafc",
+        }}
+      >
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(180px, 240px) minmax(240px, 1fr)",
+            gap: 14,
+          }}
+        >
+          <div>
             <label style={styles.label}>Tipo de usuario</label>
-
             <select
               value={tipoUsuarioNuevaOrden}
-              onChange={(e) =>
-                setTipoUsuarioNuevaOrden(e.target.value)
-              }
+              onChange={(e) => setTipoUsuarioNuevaOrden(e.target.value)}
               style={styles.input}
             >
               <option value="TODOS">Todos</option>
@@ -5946,682 +6059,764 @@ if (!usuario) {
             </select>
           </div>
 
-          <div style={styles.filterFieldWide}>
-            <label style={styles.label}>
-              Buscar usuario / código
-            </label>
-
+          <div>
+            <label style={styles.label}>Buscar usuario o código</label>
             <input
               type="text"
               value={busquedaUsuarioNuevaOrden}
-              onChange={(e) =>
-                setBusquedaUsuarioNuevaOrden(e.target.value)
-              }
+              onChange={(e) => setBusquedaUsuarioNuevaOrden(e.target.value)}
               style={styles.input}
-              placeholder="Buscar usuario / código"
+              placeholder="Escribe nombre, cédula o código"
             />
           </div>
         </div>
 
-        <div style={{ marginTop: 16 }}>
-          {(Array.isArray(alumnosActivos) ? alumnosActivos : []).filter((a) => {
-            const texto =
-              busquedaUsuarioNuevaOrden.trim().toLowerCase();
+        <div
+          style={{
+            marginTop: 14,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+            gap: 10,
+          }}
+        >
+          {alumnosActivos
+            .filter((a) => {
+              const texto = busquedaUsuarioNuevaOrden.trim().toLowerCase();
+              const nombre = obtenerNombreAlumno(a).toLowerCase();
+              const codigo = String(
+                a.codigo || obtenerCedulaAlumno(a) || ""
+              ).toLowerCase();
 
-            const nombre =
-              `${a.nombres || ""} ${a.apellidos || ""}`.toLowerCase();
-
-            const codigo = String(
-              a.codigo || a.cedula || ""
-            ).toLowerCase();
-
-            return (
-              !texto ||
-              nombre.includes(texto) ||
-              codigo.includes(texto)
-            );
-          }).length === 0 ? (
-            <p style={{ color: "#6b7280", margin: 0 }}>
-              No se encontraron resultados.
-            </p>
-          ) : (
-            <div style={styles.tableWrap}>
-              <table style={styles.table}>
-                <thead>
-                  <tr>
-                    <th style={styles.th}>Nombre</th>
-                    <th style={styles.th}>Código</th>
-                    <th style={styles.th}>Saldo</th>
-                    <th style={styles.th}>Acción</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {(Array.isArray(alumnosActivos) ? alumnosActivos : [])
-                    .filter((a) => {
-                      const texto =
-                        busquedaUsuarioNuevaOrden
-                          .trim()
-                          .toLowerCase();
-
-                      const nombre =
-                        `${a.nombres || ""} ${
-                          a.apellidos || ""
-                        }`.toLowerCase();
-
-                      const codigo = String(
-                        a.codigo || a.cedula || ""
-                      ).toLowerCase();
-
-                      return (
-                        !texto ||
-                        nombre.includes(texto) ||
-                        codigo.includes(texto)
-                      );
-                    })
-                    .slice(0, 10)
-                    .map((a) => (
-                      <tr key={a.id}>
-                        <td style={styles.td}>
-                          {`${a.nombres || ""} ${
-                            a.apellidos || ""
-                          }`}
-                        </td>
-
-                        <td style={styles.td}>
-                          {a.codigo || a.cedula || "-"}
-                        </td>
-
-                        <td style={styles.td}>
-                          {formatearMoneda(a.saldo || 0)}
-                        </td>
-
-                        <td style={styles.td}>
-                          <button
-                            type="button"
-                            style={styles.button}
-                            onClick={() => {
-                              setAlumnoDetalle(a);
-
-                              setVentaForm((prev) => ({
-                                ...prev,
-                                alumno_id: a.id,
-                                metodo_pago: "RECARGA",
-                              }));
-
-                              setBusquedaUsuarioNuevaOrden(
-                                `${a.nombres || ""} ${
-                                  a.apellidos || ""
-                                }`
-                              );
-
-                              setModoNuevaOrden("consumidor_final");
-                            }}
-                          >
-                            Seleccionar
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+              return !texto || nombre.includes(texto) || codigo.includes(texto);
+            })
+            .slice(0, 12)
+            .map((a) => (
+              <button
+                type="button"
+                key={a.id}
+                onClick={() => {
+                  setVentaForm((prev) => ({
+                    ...prev,
+                    alumno_id: String(a.id),
+                    metodo_pago:
+                      prev.metodo_pago === "RECARGA"
+                        ? "RECARGA"
+                        : prev.metodo_pago,
+                  }));
+                  setModoNuevaOrden("consumidor_final");
+                  setBusquedaUsuarioNuevaOrden("");
+                }}
+                style={{
+                  border: "1px solid #cbd5e1",
+                  background: "#ffffff",
+                  borderRadius: 10,
+                  padding: 12,
+                  textAlign: "left",
+                  cursor: "pointer",
+                }}
+              >
+                <div style={{ fontWeight: 800, color: "#111827" }}>
+                  {obtenerNombreAlumno(a)}
+                </div>
+                <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
+                  {obtenerCedulaAlumno(a) || "Sin cédula"} · Saldo{" "}
+                  {formatearMoneda(a.saldo)}
+                </div>
+              </button>
+            ))}
         </div>
       </div>
     )}
 
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "minmax(260px, 320px) minmax(0, 1fr)",
-        gap: 20,
-        alignItems: "start",
-      }}
-    >
-      <div style={styles.box}>
-        <label style={styles.label}>
-          Escanea el código de barras
-        </label>
-
-        <input
-          type="text"
-          placeholder="Código de barras"
-          value={codigoBarraNuevaOrden}
-          onChange={(e) =>
-            setCodigoBarraNuevaOrden(e.target.value)
-          }
-          style={styles.input}
-        />
-
-        <div style={{ height: 12 }} />
-
-        <input
-          type="text"
-          placeholder="Busca productos"
-          value={busquedaProductoNuevaOrden}
-          onChange={(e) =>
-            setBusquedaProductoNuevaOrden(e.target.value)
-          }
-          style={styles.input}
-        />
-
-        <div style={{ height: 20 }} />
-
-        <h3 style={{ marginTop: 0 }}>Categorías</h3>
-
-        <div
+    {/* CONTENIDO PRINCIPAL */}
+    <form onSubmit={crearVenta}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "280px minmax(0, 1fr)",
+          minHeight: 650,
+        }}
+      >
+        {/* LATERAL */}
+        <aside
           style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 10,
+            background: "#eef4ff",
+            borderRight: "1px solid #dbe3f0",
+            padding: 16,
           }}
         >
+          <label style={{ ...styles.label, fontSize: 13 }}>
+            Escanea el código de barras
+          </label>
+          <input
+            type="text"
+            value={codigoBarraNuevaOrden}
+            onChange={(e) => setCodigoBarraNuevaOrden(e.target.value)}
+            placeholder="Código de barras"
+            style={{
+              ...styles.input,
+              background: "#ffffff",
+              marginBottom: 14,
+            }}
+          />
+
+          <input
+            type="text"
+            value={busquedaProductoNuevaOrden}
+            onChange={(e) => setBusquedaProductoNuevaOrden(e.target.value)}
+            placeholder="Buscar productos"
+            style={{
+              ...styles.input,
+              background: "#ffffff",
+              marginBottom: 18,
+            }}
+          />
+
+          <div
+            style={{
+              textAlign: "center",
+              fontSize: 20,
+              fontWeight: 900,
+              color: "#1623a7",
+              marginBottom: 12,
+            }}
+          >
+            Categorías
+          </div>
+
           <button
             type="button"
-            style={
-              categoriaNuevaOrden === "TODOS"
-                ? styles.ventasTabActive
-                : styles.ventasTab
-            }
             onClick={() => setCategoriaNuevaOrden("TODOS")}
+            style={{
+              width: "100%",
+              border:
+                categoriaNuevaOrden === "TODOS"
+                  ? "2px solid #2536db"
+                  : "1px solid #d1d5db",
+              background:
+                categoriaNuevaOrden === "TODOS" ? "#dbe7ff" : "#ffffff",
+              color: "#1726a4",
+              borderRadius: 8,
+              padding: "14px 12px",
+              marginBottom: 8,
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
           >
-            Todos los productos
+            TODOS
           </button>
 
           {[
             ...new Set(
-              (Array.isArray(productosActivos) ? productosActivos : [])
-                .map((p) => p.categoria)
+              productosActivos
+                .map((p) => String(p.categoria || "").trim())
                 .filter(Boolean)
             ),
           ].map((categoria) => (
             <button
-              key={categoria}
               type="button"
-              style={
-                categoriaNuevaOrden === categoria
-                  ? styles.ventasTabActive
-                  : styles.ventasTab
-              }
-              onClick={() =>
-                setCategoriaNuevaOrden(categoria)
-              }
+              key={categoria}
+              onClick={() => setCategoriaNuevaOrden(categoria)}
+              style={{
+                width: "100%",
+                border:
+                  categoriaNuevaOrden === categoria
+                    ? "2px solid #2536db"
+                    : "1px solid #d1d5db",
+                background:
+                  categoriaNuevaOrden === categoria ? "#dbe7ff" : "#ffffff",
+                color: "#1726a4",
+                borderRadius: 8,
+                padding: "14px 12px",
+                marginBottom: 8,
+                fontWeight: 800,
+                cursor: "pointer",
+                textTransform: "uppercase",
+              }}
             >
               {categoria}
             </button>
           ))}
-        </div>
-      </div>
 
-      <div style={styles.box}>
-        <p
-          style={{
-            textAlign: "center",
-            fontSize: "18px",
-            color: "#111827",
-            marginTop: 0,
-          }}
-        >
-          Configura la compra y agrega los productos a la orden
-        </p>
-
-        <div
-          style={{
-            border: "2px solid #2f3ddb",
-            borderRadius: 14,
-            padding: 16,
-            marginBottom: 20,
-            display: "grid",
-            gridTemplateColumns:
-              "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: 16,
-          }}
-        >
-          <div>
-            <label style={styles.label}>Local</label>
-
-            <select
-              value={localNuevaOrden}
-              onChange={(e) =>
-                setLocalNuevaOrden(e.target.value)
-              }
-              style={styles.input}
+          <div style={{ marginTop: 22 }}>
+            <button
+              type="button"
+              onClick={() => setModoNuevaOrden("identificar")}
+              style={{
+                width: "100%",
+                border: "1px solid #2536db",
+                background: "#ffffff",
+                color: "#2536db",
+                borderRadius: 8,
+                padding: "12px 10px",
+                fontWeight: 800,
+                cursor: "pointer",
+                marginBottom: 8,
+              }}
             >
-              <option value="PRINCIPAL">PRINCIPAL</option>
-            </select>
+              Identificar usuario
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setModoNuevaOrden("consumidor_final");
+                setVentaForm((prev) => ({
+                  ...prev,
+                  alumno_id: "",
+                  metodo_pago:
+                    prev.metodo_pago === "RECARGA"
+                      ? "EFECTIVO"
+                      : prev.metodo_pago,
+                }));
+              }}
+              style={{
+                width: "100%",
+                border: "1px solid #94a3b8",
+                background: "#ffffff",
+                color: "#334155",
+                borderRadius: 8,
+                padding: "12px 10px",
+                fontWeight: 800,
+                cursor: "pointer",
+              }}
+            >
+              Consumidor final
+            </button>
+          </div>
+        </aside>
+
+        {/* ÁREA DE PRODUCTOS */}
+        <section style={{ padding: 20, minWidth: 0 }}>
+          <div
+            style={{
+              textAlign: "center",
+              fontSize: 18,
+              marginBottom: 16,
+              color: "#111827",
+            }}
+          >
+            Configura la compra y selecciona los productos
           </div>
 
-          <div>
-            <label style={styles.label}>
-              Fecha de la orden
-            </label>
+          <div
+            style={{
+              border: "2px solid #2637d9",
+              borderRadius: 10,
+              padding: 14,
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 16,
+              maxWidth: 1100,
+              margin: "0 auto 22px auto",
+              background: "#eef4ff",
+            }}
+          >
+            <div>
+              <label style={styles.label}>Local</label>
+              <select
+                value={localNuevaOrden}
+                onChange={(e) => setLocalNuevaOrden(e.target.value)}
+                style={{ ...styles.input, background: "#ffffff" }}
+              >
+                <option value="PRINCIPAL">PRINCIPAL</option>
+              </select>
+            </div>
 
-            <input
-              type="date"
-              value={fechaNuevaOrden}
-              onChange={(e) =>
-                setFechaNuevaOrden(e.target.value)
-              }
-              style={styles.input}
-            />
+            <div>
+              <label style={styles.label}>Fecha de la orden</label>
+              <input
+                type="date"
+                value={fechaNuevaOrden}
+                onChange={(e) => setFechaNuevaOrden(e.target.value)}
+                style={{ ...styles.input, background: "#ffffff" }}
+              />
+            </div>
           </div>
-        </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns:
-              "repeat(auto-fit, minmax(260px, 1fr))",
-            gap: 18,
-          }}
-        >
-          {(Array.isArray(productosActivos) ? productosActivos : [])
-            .filter((p) => {
-              const texto =
-                busquedaProductoNuevaOrden
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(245px, 1fr))",
+              gap: 16,
+            }}
+          >
+            {productosActivos
+              .filter((p) => {
+                const texto = busquedaProductoNuevaOrden
                   .trim()
                   .toLowerCase();
 
-              const coincideTexto =
-                String(p.nombre || "")
-                  .toLowerCase()
-                  .includes(texto) ||
-                String(p.codigo || "")
-                  .toLowerCase()
-                  .includes(texto);
+                const coincideTexto =
+                  !texto ||
+                  String(p.nombre || "")
+                    .toLowerCase()
+                    .includes(texto) ||
+                  String(p.codigo || "")
+                    .toLowerCase()
+                    .includes(texto);
 
-              const coincideCategoria =
-                categoriaNuevaOrden === "TODOS" ||
-                !categoriaNuevaOrden ||
-                String(p.categoria || "") ===
-                  String(categoriaNuevaOrden);
+                const coincideCategoria =
+                  categoriaNuevaOrden === "TODOS" ||
+                  String(p.categoria || "") === categoriaNuevaOrden;
 
-              return coincideTexto && coincideCategoria;
-            })
-            .map((producto) => {
-              const stockDisponible = Number(
-                producto.stock || 0
-              );
+                return coincideTexto && coincideCategoria;
+              })
+              .map((producto) => {
+                const itemExistente = (
+                  Array.isArray(ventaItems) ? ventaItems : []
+                ).find(
+                  (item) =>
+                    String(item.producto_id) === String(producto.id)
+                );
 
-              return (
-                <div
-                  key={producto.id}
-                  style={{
-                    borderRadius: 16,
-                    background: "#fff",
-                    boxShadow:
-                      "0 8px 20px rgba(0,0,0,0.06)",
-                    padding: 16,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 12,
-                  }}
-                >
-                  <div style={{ display: "flex", gap: 14 }}>
+                const sinStock = Number(producto.stock || 0) <= 0;
+
+                return (
+                  <article
+                    key={producto.id}
+                    style={{
+                      border: itemExistente
+                        ? "2px solid #2536db"
+                        : "1px solid #e5e7eb",
+                      borderRadius: 14,
+                      background: "#ffffff",
+                      padding: 14,
+                      boxShadow: "0 8px 18px rgba(15,23,42,0.08)",
+                    }}
+                  >
                     <div
                       style={{
-                        width: 110,
-                        height: 90,
-                        borderRadius: 14,
-                        background: "#eee",
-                        overflow: "hidden",
-                        flexShrink: 0,
+                        display: "grid",
+                        gridTemplateColumns: "105px 1fr",
+                        gap: 14,
+                        alignItems: "center",
                       }}
                     >
-                      <img
-                        src={
-                          producto.imagen ||
-                          "https://cdn-icons-png.flaticon.com/512/1046/1046784.png"
-                        }
-                        alt={producto.nombre || "Producto"}
+                      <div
                         style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                        }}
-                      />
-                    </div>
-
-                    <div style={{ flex: 1 }}>
-                      <strong
-                        style={{
-                          display: "block",
-                          marginBottom: 6,
+                          height: 95,
+                          borderRadius: 12,
+                          overflow: "hidden",
+                          background: "#dbe7ff",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 42,
                         }}
                       >
-                        {producto.nombre}
-                      </strong>
+                        {producto.imagen ? (
+                          <img
+                            src={producto.imagen}
+                            alt={producto.nombre || "Producto"}
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                            }}
+                          />
+                        ) : (
+                          "🍽️"
+                        )}
+                      </div>
 
-                      <div style={{ marginBottom: 6 }}>
-                        Costo:{" "}
-                        {formatearMoneda(producto.precio)}
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 18,
+                            fontWeight: 900,
+                            color: "#111827",
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          {producto.nombre}
+                        </div>
+
+                        <div
+                          style={{
+                            marginTop: 8,
+                            fontSize: 15,
+                            fontWeight: 700,
+                          }}
+                        >
+                          Costo: {formatearMoneda(producto.precio)}
+                        </div>
+
+                        <div
+                          style={{
+                            display: "inline-block",
+                            marginTop: 8,
+                            padding: "4px 12px",
+                            borderRadius: 999,
+                            background: sinStock ? "#fee2e2" : "#dcfce7",
+                            color: sinStock ? "#b91c1c" : "#166534",
+                            fontSize: 12,
+                            fontWeight: 800,
+                          }}
+                        >
+                          Stock: {Number(producto.stock || 0)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={sinStock}
+                      onClick={() => {
+                        if (itemExistente) {
+                          const indice = ventaItems.findIndex(
+                            (item) =>
+                              String(item.producto_id) ===
+                              String(producto.id)
+                          );
+
+                          const nuevaCantidad =
+                            Number(itemExistente.cantidad || 0) + 1;
+
+                          if (
+                            nuevaCantidad > Number(producto.stock || 0)
+                          ) {
+                            alert(
+                              `No puedes superar el stock disponible: ${producto.stock}`
+                            );
+                            return;
+                          }
+
+                          actualizarItemVenta(
+                            indice,
+                            "cantidad",
+                            String(nuevaCantidad)
+                          );
+                          return;
+                        }
+
+                        setVentaItems((prev) => [
+                          ...(Array.isArray(prev) ? prev : []),
+                          {
+                            producto_id: String(producto.id),
+                            cantidad: "1",
+                          },
+                        ]);
+                      }}
+                      style={{
+                        width: "100%",
+                        marginTop: 14,
+                        border: "none",
+                        borderRadius: 8,
+                        padding: "12px 10px",
+                        background: sinStock ? "#cbd5e1" : "#bcd0ff",
+                        color: sinStock ? "#64748b" : "#1726a4",
+                        fontWeight: 900,
+                        cursor: sinStock ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {sinStock ? "Sin stock" : "Agregar producto"}
+                    </button>
+                  </article>
+                );
+              })}
+          </div>
+
+          {/* RESUMEN DE LA ORDEN */}
+          <div
+            style={{
+              marginTop: 24,
+              borderTop: "1px solid #e5e7eb",
+              paddingTop: 20,
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1fr) minmax(280px, 360px)",
+              gap: 20,
+            }}
+          >
+            <div>
+              <h3 style={{ marginTop: 0 }}>Productos agregados</h3>
+
+              {(Array.isArray(ventaItemsCalculados)
+                ? ventaItemsCalculados
+                : []
+              ).length === 0 ? (
+                <div
+                  style={{
+                    border: "1px dashed #cbd5e1",
+                    borderRadius: 10,
+                    padding: 24,
+                    color: "#64748b",
+                    textAlign: "center",
+                  }}
+                >
+                  Todavía no has agregado productos.
+                </div>
+              ) : (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {ventaItemsCalculados.map((item, index) => (
+                    <div
+                      key={`${item.producto_id}-${index}`}
+                      style={{
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 10,
+                        padding: 12,
+                        display: "grid",
+                        gridTemplateColumns: "1fr auto auto",
+                        alignItems: "center",
+                        gap: 12,
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 800 }}>
+                          {item.producto?.nombre || "Producto"}
+                        </div>
+                        <div style={{ fontSize: 13, color: "#64748b" }}>
+                          {formatearMoneda(item.precio)} cada uno ·{" "}
+                          {formatearMoneda(item.total)}
+                        </div>
                       </div>
 
                       <div
                         style={{
-                          display: "inline-block",
-                          padding: "6px 10px",
-                          borderRadius: 999,
-                          background:
-                            stockDisponible > 3
-                              ? "#d1fae5"
-                              : "#fee2e2",
-                          color:
-                            stockDisponible > 3
-                              ? "#065f46"
-                              : "#991b1b",
-                          fontWeight: "bold",
-                          fontSize: "13px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
                         }}
                       >
-                        Stock: {stockDisponible}
-                      </div>
-                    </div>
-                  </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const cantidad =
+                              Number(item.cantidad || 0) - 1;
 
-                  <button
-                    type="button"
-                    disabled={stockDisponible <= 0}
-                    style={{
-                      ...styles.button,
-                      opacity:
-                        stockDisponible <= 0 ? 0.55 : 1,
-                      cursor:
-                        stockDisponible <= 0
-                          ? "not-allowed"
-                          : "pointer",
-                    }}
-                    onClick={() => {
-                      if (stockDisponible <= 0) {
-                        alert(
-                          "Este producto no tiene stock disponible"
-                        );
-                        return;
-                      }
+                            if (cantidad <= 0) {
+                              eliminarItemVenta(index);
+                              return;
+                            }
 
-                      setVentaItems((prev) => {
-                        const listaActual = Array.isArray(prev) ? prev : [];
-
-                        const existe = listaActual.find(
-                          (item) =>
-                            Number(item.producto_id) ===
-                            Number(producto.id)
-                        );
-
-                        if (existe) {
-                          const cantidadActual = Number(
-                            existe.cantidad || 0
-                          );
-
-                          if (
-                            cantidadActual >= stockDisponible
-                          ) {
-                            alert(
-                              `No puedes agregar más unidades. Stock disponible: ${stockDisponible}`
+                            actualizarItemVenta(
+                              index,
+                              "cantidad",
+                              String(cantidad)
                             );
-                            return prev;
-                          }
+                          }}
+                          style={{
+                            width: 34,
+                            height: 34,
+                            borderRadius: 8,
+                            border: "1px solid #cbd5e1",
+                            background: "#ffffff",
+                            cursor: "pointer",
+                            fontWeight: 900,
+                          }}
+                        >
+                          −
+                        </button>
 
-                          return listaActual.map((item) =>
-                            Number(item.producto_id) ===
-                            Number(producto.id)
-                              ? {
-                                  ...item,
-                                  cantidad:
-                                    cantidadActual + 1,
-                                }
-                              : item
-                          );
-                        }
+                        <strong>{Number(item.cantidad || 0)}</strong>
 
-                        return [
-                          ...listaActual,
-                          {
-                            producto_id: producto.id,
-                            cantidad: 1,
-                          },
-                        ];
-                      });
-                    }}
-                  >
-                    {stockDisponible <= 0
-                      ? "Sin stock"
-                      : "Agregar producto"}
-                  </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const disponible = Number(
+                              item.producto?.stock || 0
+                            );
+                            const cantidad =
+                              Number(item.cantidad || 0) + 1;
+
+                            if (cantidad > disponible) {
+                              alert(
+                                `No puedes superar el stock disponible: ${disponible}`
+                              );
+                              return;
+                            }
+
+                            actualizarItemVenta(
+                              index,
+                              "cantidad",
+                              String(cantidad)
+                            );
+                          }}
+                          style={{
+                            width: 34,
+                            height: 34,
+                            borderRadius: 8,
+                            border: "1px solid #cbd5e1",
+                            background: "#ffffff",
+                            cursor: "pointer",
+                            fontWeight: 900,
+                          }}
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => eliminarItemVenta(index)}
+                        style={{
+                          border: "none",
+                          background: "#fee2e2",
+                          color: "#b91c1c",
+                          borderRadius: 8,
+                          padding: "9px 11px",
+                          cursor: "pointer",
+                          fontWeight: 800,
+                        }}
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              );
-            })}
-        </div>
+              )}
+            </div>
 
-        <div style={{ height: 20 }} />
-
-        <div style={styles.box}>
-          <h3 style={{ marginTop: 0 }}>Resumen de orden</h3>
-
-          {(Array.isArray(ventaItemsCalculados) ? ventaItemsCalculados : []).length === 0 ? (
-            <p>No hay productos agregados.</p>
-          ) : (
             <div
               style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 12,
+                border: "1px solid #dbe3f0",
+                borderRadius: 12,
+                padding: 16,
+                background: "#f8fafc",
               }}
             >
-              {(Array.isArray(ventaItemsCalculados) ? ventaItemsCalculados : []).map((item, index) => (
-                <div
-                  key={`${item.producto_id}-${index}`}
-                  style={styles.itemVentaCard}
+              <label style={styles.label}>Método de pago</label>
+              <select
+                value={ventaForm.metodo_pago}
+                onChange={(e) =>
+                  setVentaForm((prev) => ({
+                    ...prev,
+                    metodo_pago: e.target.value,
+                  }))
+                }
+                style={styles.input}
+              >
+                <option value="EFECTIVO">Efectivo</option>
+                <option value="TRANSFERENCIA">Transferencia</option>
+                <option
+                  value="RECARGA"
+                  disabled={!alumnoVentaSeleccionado}
                 >
-                  <div style={styles.itemVentaResumen}>
-                    <span>{item.nombre || "Producto"}</span>
-                    <span>
-                      Cantidad: {Number(item.cantidad || 0)}
-                    </span>
-                    <span>
-                      Total: {formatearMoneda(item.total)}
-                    </span>
-                  </div>
+                  Saldo del alumno
+                </option>
+              </select>
 
+              <div style={{ height: 12 }} />
+
+              <label style={styles.label}>Observación</label>
+              <input
+                type="text"
+                value={ventaForm.observacion}
+                onChange={(e) =>
+                  setVentaForm((prev) => ({
+                    ...prev,
+                    observacion: e.target.value,
+                  }))
+                }
+                placeholder="Observación"
+                style={styles.input}
+              />
+
+              {ventaForm.metodo_pago === "RECARGA" &&
+                alumnoVentaSeleccionado && (
                   <div
                     style={{
-                      display: "flex",
-                      gap: 10,
-                      alignItems: "center",
-                      flexWrap: "wrap",
+                      marginTop: 12,
+                      borderRadius: 8,
+                      background: "#dcfce7",
+                      color: "#166534",
+                      padding: 10,
+                      fontWeight: 800,
                     }}
                   >
-                    <button
-                      type="button"
-                      style={styles.outlineButton}
-                      onClick={() => {
-                        const nuevaCantidad =
-                          Number(item.cantidad || 1) - 1;
-
-                        if (nuevaCantidad <= 0) {
-                          eliminarItemVenta(index);
-                          return;
-                        }
-
-                        actualizarItemVenta(
-                          index,
-                          "cantidad",
-                          nuevaCantidad
-                        );
-                      }}
-                    >
-                      −
-                    </button>
-
-                    <strong
-                      style={{
-                        minWidth: 35,
-                        textAlign: "center",
-                        fontSize: 16,
-                      }}
-                    >
-                      {Number(item.cantidad || 0)}
-                    </strong>
-
-                    <button
-                      type="button"
-                      style={styles.outlineButton}
-                      onClick={() => {
-                        const productoOriginal = (
-                          Array.isArray(productosActivos)
-                            ? productosActivos
-                            : []
-                        ).find(
-                            (producto) =>
-                              Number(producto.id) ===
-                              Number(item.producto_id)
-                          );
-
-                        const stockDisponible = Number(
-                          productoOriginal?.stock || 0
-                        );
-
-                        const nuevaCantidad =
-                          Number(item.cantidad || 0) + 1;
-
-                        if (
-                          nuevaCantidad > stockDisponible
-                        ) {
-                          alert(
-                            `No puedes superar el stock disponible: ${stockDisponible}`
-                          );
-                          return;
-                        }
-
-                        actualizarItemVenta(
-                          index,
-                          "cantidad",
-                          nuevaCantidad
-                        );
-                      }}
-                    >
-                      +
-                    </button>
-
-                    <button
-                      type="button"
-                      style={styles.smallDangerButton}
-                      onClick={() =>
-                        eliminarItemVenta(index)
-                      }
-                    >
-                      Quitar
-                    </button>
+                    Saldo disponible:{" "}
+                    {formatearMoneda(
+                      alumnoVentaSeleccionado.saldo || 0
+                    )}
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                )}
 
-          <div style={{ height: 16 }} />
-
-          <label style={styles.label}>
-            Método de pago
-          </label>
-
-          <select
-            value={ventaForm.metodo_pago}
-            onChange={(e) =>
-              setVentaForm((prev) => ({
-                ...prev,
-                metodo_pago: e.target.value,
-              }))
-            }
-            style={styles.input}
-          >
-            <option value="EFECTIVO">Efectivo</option>
-            <option value="TRANSFERENCIA">
-              Transferencia
-            </option>
-            <option value="RECARGA">
-              Saldo del alumno
-            </option>
-          </select>
-
-          <div style={{ height: 12 }} />
-
-          <label style={styles.label}>Observación</label>
-
-          <input
-            type="text"
-            placeholder="Observación"
-            value={ventaForm.observacion}
-            onChange={(e) =>
-              setVentaForm((prev) => ({
-                ...prev,
-                observacion: e.target.value,
-              }))
-            }
-            style={styles.input}
-          />
-
-          {ventaForm.metodo_pago === "RECARGA" &&
-            alumnoVentaSeleccionado && (
               <div
                 style={{
-                  ...styles.infoBox,
-                  marginTop: 12,
+                  marginTop: 16,
+                  borderRadius: 10,
+                  background: "#2528b8",
+                  color: "#ffffff",
+                  padding: 16,
+                  textAlign: "center",
                 }}
               >
-                <strong>Saldo disponible:</strong>{" "}
-                {formatearMoneda(
-                  alumnoVentaSeleccionado.saldo || 0
-                )}
+                <div style={{ fontSize: 13 }}>Total de la orden</div>
+                <div style={{ fontSize: 30, fontWeight: 900 }}>
+                  {formatearMoneda(totalVentaCalculado)}
+                </div>
               </div>
-            )}
 
-          <div style={{ height: 12 }} />
+              <button
+                type="submit"
+                disabled={
+                  (Array.isArray(ventaItemsCalculados)
+                    ? ventaItemsCalculados
+                    : []
+                  ).length === 0
+                }
+                style={{
+                  width: "100%",
+                  marginTop: 14,
+                  border: "none",
+                  borderRadius: 9,
+                  padding: "13px 12px",
+                  background:
+                    (Array.isArray(ventaItemsCalculados)
+                      ? ventaItemsCalculados
+                      : []
+                    ).length === 0
+                      ? "#94a3b8"
+                      : "#ff8748",
+                  color: "#ffffff",
+                  fontWeight: 900,
+                  cursor:
+                    (Array.isArray(ventaItemsCalculados)
+                      ? ventaItemsCalculados
+                      : []
+                    ).length === 0
+                      ? "not-allowed"
+                      : "pointer",
+                }}
+              >
+                Crear orden
+              </button>
 
-          <div style={styles.totalVentaBox}>
-            Total venta:{" "}
-            {formatearMoneda(totalVentaCalculado)}
+              <button
+                type="button"
+                onClick={() => {
+                  const confirmar =
+                    (Array.isArray(ventaItems) ? ventaItems : []).length ===
+                      0 ||
+                    window.confirm(
+                      "¿Deseas cancelar esta orden y eliminar los productos agregados?"
+                    );
+
+                  if (!confirmar) return;
+                  limpiarFormularioVenta();
+                }}
+                style={{
+                  width: "100%",
+                  marginTop: 10,
+                  border: "1px solid #dc2626",
+                  borderRadius: 9,
+                  padding: "12px 12px",
+                  background: "#ffffff",
+                  color: "#b91c1c",
+                  fontWeight: 900,
+                  cursor: "pointer",
+                }}
+              >
+                Cancelar orden
+              </button>
+            </div>
           </div>
-
-          <div style={styles.filterButtons}>
-            <button
-              type="button"
-              style={{
-                ...styles.button,
-                opacity:
-                  (Array.isArray(ventaItemsCalculados) ? ventaItemsCalculados : []).length === 0
-                    ? 0.6
-                    : 1,
-              }}
-              disabled={(Array.isArray(ventaItemsCalculados) ? ventaItemsCalculados : []).length === 0}
-              onClick={crearVenta}
-            >
-              Generar venta
-            </button>
-
-            <button
-              type="button"
-              style={styles.cancelButton}
-              onClick={() => {
-                const confirmar =
-                  (Array.isArray(ventaItems) ? ventaItems : []).length === 0 ||
-                  window.confirm(
-                    "¿Deseas cancelar esta orden y eliminar los productos agregados?"
-                  );
-
-                if (!confirmar) return;
-
-                limpiarFormularioVenta();
-              }}
-            >
-              Cancelar orden
-            </button>
-          </div>
-        </div>
+        </section>
       </div>
-    </div>
+    </form>
   </div>
 )}
+
             {vistaVentasInterna === "consultar" && (
               <>
                 <div style={styles.box}>
