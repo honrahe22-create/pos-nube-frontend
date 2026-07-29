@@ -43,6 +43,24 @@ export default function AlumnosModulo({
   setHistorialConsumoAlumno
 }) {
   const [busquedaHistorial, setBusquedaHistorial] = useState("");
+  const [mostrarFiltroAlumnos, setMostrarFiltroAlumnos] = useState(false);
+  const [busquedaAlumnos, setBusquedaAlumnos] = useState("");
+
+  const alumnosFiltradosBusqueda = alumnosFiltrados.filter((alumno) => {
+    const texto = busquedaAlumnos.trim().toLowerCase();
+
+    if (!texto) return true;
+
+    const nombres = String(alumno?.nombres || "").toLowerCase();
+    const apellidos = String(alumno?.apellidos || "").toLowerCase();
+    const cedula = String(obtenerCedulaAlumno(alumno) || "").toLowerCase();
+
+    return (
+      nombres.includes(texto) ||
+      apellidos.includes(texto) ||
+      cedula.includes(texto)
+    );
+  });
 
   const regresarListado = () => {
     setAlumnoDetalle(null);
@@ -106,7 +124,39 @@ export default function AlumnosModulo({
               <option value="inactivos">Inactivos</option>
             </select>
 
-            <button style={styles.refreshButton} onClick={cargarAlumnos}>
+            <button
+              type="button"
+              style={styles.secondaryButton}
+              onClick={() => {
+                setMostrarFiltroAlumnos((valorActual) => !valorActual);
+
+                if (mostrarFiltroAlumnos) {
+                  setBusquedaAlumnos("");
+                }
+              }}
+            >
+              {mostrarFiltroAlumnos ? "Cerrar filtro" : "Filtrar alumno"}
+            </button>
+
+            {mostrarFiltroAlumnos && (
+              <input
+                type="text"
+                value={busquedaAlumnos}
+                onChange={(e) => setBusquedaAlumnos(e.target.value)}
+                placeholder="Nombre, apellido o cédula"
+                style={{
+                  ...styles.input,
+                  width: 260,
+                  margin: 0,
+                }}
+              />
+            )}
+
+            <button
+              type="button"
+              style={styles.refreshButton}
+              onClick={cargarAlumnos}
+            >
               Refrescar
             </button>
           </>
@@ -392,7 +442,7 @@ export default function AlumnosModulo({
             onClick={() => {
               const filas = [
                 ["ID", "Nombres", "Apellidos", "Cédula", "Curso", "Paralelo", "Saldo", "Estado"],
-                ...alumnosFiltrados.map((a) => [
+                ...alumnosFiltradosBusqueda.map((a) => [
                   a.id || "",
                   a.nombres || "",
                   a.apellidos || "",
@@ -421,7 +471,7 @@ export default function AlumnosModulo({
           </button>
         </div>
 
-        {alumnosFiltrados.length === 0 ? (
+        {alumnosFiltradosBusqueda.length === 0 ? (
           <p>No hay alumnos para este filtro.</p>
         ) : (
           <div style={styles.tableWrap}>
@@ -441,7 +491,7 @@ export default function AlumnosModulo({
               </thead>
 
               <tbody>
-                {alumnosFiltrados.map((a) => {
+                {alumnosFiltradosBusqueda.map((a) => {
                   const activo = a.activo !== false;
 
                   return (

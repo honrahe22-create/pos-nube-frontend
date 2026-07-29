@@ -211,6 +211,8 @@ const [vistaProfesoresInterna, setVistaProfesoresInterna] = useState("profesores
 const [profesores, setProfesores] = useState([]);
 
 const [filtroProfesores, setFiltroProfesores] = useState("todos");
+const [busquedaProfesores, setBusquedaProfesores] = useState("");
+const [mostrarFiltroProfesores, setMostrarFiltroProfesores] = useState(false);
 
 const [profesorForm, setProfesorForm] = useState({
   cedula: "",
@@ -356,6 +358,34 @@ const [egresoForm, setEgresoForm] = useState({
   const productosFiltrados = useMemo(() => {
     return productos;
   }, [productos]);
+
+  const profesoresFiltrados = useMemo(() => {
+    const texto = busquedaProfesores.trim().toLowerCase();
+
+    return profesores.filter((profesor) => {
+      const coincideEstado =
+        filtroProfesores === "todos"
+          ? true
+          : filtroProfesores === "inactivos"
+          ? profesor.activo === false
+          : profesor.activo !== false;
+
+      if (!coincideEstado) return false;
+      if (!texto) return true;
+
+      const nombres = String(profesor.nombres || "").toLowerCase();
+      const apellidos = String(profesor.apellidos || "").toLowerCase();
+      const cedula = String(profesor.cedula || "").toLowerCase();
+      const nombreCompleto = `${nombres} ${apellidos}`.trim();
+
+      return (
+        nombres.includes(texto) ||
+        apellidos.includes(texto) ||
+        cedula.includes(texto) ||
+        nombreCompleto.includes(texto)
+      );
+    });
+  }, [profesores, filtroProfesores, busquedaProfesores]);
 
   const productosInventario = useMemo(() => {
     const texto = inventarioBusqueda.trim().toLowerCase();
@@ -1664,6 +1694,215 @@ if (institucionIdLogin) {
   }
 };
 
+
+  const limpiarFormularioProfesor = () => {
+    setProfesorForm({
+      cedula: "",
+      nombres: "",
+      apellidos: "",
+      email: "",
+      codigo: "",
+      telefono: "",
+      saldo: "",
+      es_profesor: true,
+    });
+    setEditandoProfesorId(null);
+  };
+
+  const cargarProfesores = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      if (!token || !institucionId) {
+        setProfesores([]);
+        return;
+      }
+
+      const res = await fetch(
+        `${API_URL}/api/profesores?institucion_id=${institucionId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error("Error backend profesores:", data);
+        setProfesores([]);
+        return;
+      }
+
+      const lista = Array.isArray(data)
+        ? data
+        : Array.isArray(data.profesores)
+        ? data.profesores
+        : [];
+
+      setProfesores(lista);
+
+      setProfesorDetalle((detalleActual) => {
+        if (!detalleActual) return null;
+
+        return (
+          lista.find(
+            (profesor) =>
+              Number(profesor.id) === Number(detalleActual.id)
+          ) || null
+        );
+      });
+    } catch (error) {
+      console.error("Error cargando profesores:", error);
+      setProfesores([]);
+    }
+  };
+
+  const guardarProfesor = async (e) => {
+    e.preventDefault();
+
+    try {
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      if (!token || !institucionId) {
+        alert("Sesión o institución no válida");
+        return;
+      }
+
+      const saldoNumero = Number(profesorForm.saldo || 0);
+
+      if (Number.isNaN(saldoNumero) || saldoNumero < 0) {
+        alert("El crédito debe ser un número válido mayor o igual a 0.");
+        return;
+      }
+
+      const payload = {
+        institucion_id: Number(institucionId),
+        cedula: profesorForm.cedula.trim(),
+        nombres: profesorForm.nombres.trim(),
+        apellidos: profesorForm.apellidos.trim(),
+        email: profesorForm.email.trim(),
+        codigo: profesorForm.codigo.trim(),
+        telefono: profesorForm.telefono.trim(),
+        saldo: saldoNumero,
+        es_profesor: profesorForm.es_profesor !== false,
+      };
+
+      const url = editandoProfesorId
+        ? `${API_URL}/api/profesores/${editandoProfesorId}`
+        : `${API_URL}/api/profesores`;
+
+      const res = await fetch(url, {
+        method: editandoProfesorId ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(
+          data.message ||
+            (editandoProfesorId
+              ? "No se pudo actualizar el profesor"
+              : "No se pudo crear el profesor")
+        );
+        return;
+      }
+
+      limpiarFormularioProfesor();
+      await cargarProfesores();
+
+      alert(
+        editandoProfesorId
+          ? "Profesor actualizado correctamente"
+          : "Profesor creado correctamente"
+      );
+    } catch (error) {
+      console.error("Error guardando profesor:", error);
+      alert("No se pudo guardar el profesor");
+    }
+  };
+
+  const desactivarProfesor = async (profesor) => {
+    const confirmado = window.confirm(
+      `¿Deseas desactivar al profesor ${profesor.nombres || ""} ${
+        profesor.apellidos || ""
+      }?`
+    );
+
+    if (!confirmado) return;
+
+    try {
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(
+        `${API_URL}/api/profesores/${profesor.id}/desactivar`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.message || "No se pudo desactivar el profesor");
+        return;
+      }
+
+      if (
+        profesorDetalle &&
+        Number(profesorDetalle.id) === Number(profesor.id)
+      ) {
+        setProfesorDetalle(null);
+      }
+
+      await cargarProfesores();
+      alert("Profesor desactivado correctamente");
+    } catch (error) {
+      console.error("Error desactivando profesor:", error);
+      alert("No se pudo desactivar el profesor");
+    }
+  };
+
+  const reactivarProfesor = async (profesor) => {
+    try {
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(
+        `${API_URL}/api/profesores/${profesor.id}/reactivar`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.message || "No se pudo reactivar el profesor");
+        return;
+      }
+
+      await cargarProfesores();
+      alert("Profesor reactivado correctamente");
+    } catch (error) {
+      console.error("Error reactivando profesor:", error);
+      alert("No se pudo reactivar el profesor");
+    }
+  };
+
   const cargarRecargas = async () => {
     try {
       const token = localStorage.getItem("token");
@@ -2577,6 +2816,7 @@ const consultarProductosPorDia = () => {
       cargarResumen();
       cargarProductos();
       cargarAlumnos();
+      cargarProfesores();
       cargarRecargas();
       cargarVentas();
     }
@@ -2591,6 +2831,10 @@ const consultarProductosPorDia = () => {
 
   if (vista === "alumnos" || vista === "recargas" || vista === "ventas") {
     cargarAlumnos();
+  }
+
+  if (vista === "profesores") {
+    cargarProfesores();
   }
 
   if (vista === "dashboard" || vista === "reportes") {
@@ -2635,6 +2879,8 @@ const consultarProductosPorDia = () => {
     setResumen(null);
     setProductos([]);
     setAlumnos([]);
+    setProfesores([]);
+    setProfesorDetalle(null);
     setRecargas([]);
     setVentas([]);
     setCorreo("");
@@ -4789,29 +5035,47 @@ if (!usuario) {
       </div>
 
       <div style={styles.headerActions}>
-        <button
-          type="button"
-          style={
-            vistaProfesoresInterna === "profesores"
-              ? styles.ventasTabActive
-              : styles.ventasTab
-          }
-          onClick={() => setVistaProfesoresInterna("profesores")}
-        >
-          Profesores
-        </button>
+        {profesorDetalle ? (
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={() => {
+              setProfesorDetalle(null);
+              setVistaProfesorDetalle("ordenes");
+              setBusquedaProfesores("");
+              setMostrarFiltroProfesores(false);
+              limpiarFormularioProfesor();
+            }}
+          >
+            ← Regresar al listado de profesores
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              style={
+                vistaProfesoresInterna === "profesores"
+                  ? styles.ventasTabActive
+                  : styles.ventasTab
+              }
+              onClick={() => setVistaProfesoresInterna("profesores")}
+            >
+              Profesores
+            </button>
 
-        <button
-          type="button"
-          style={
-            vistaProfesoresInterna === "creditos"
-              ? styles.ventasTabActive
-              : styles.ventasTab
-          }
-          onClick={() => setVistaProfesoresInterna("creditos")}
-        >
-          Créditos Profesores
-        </button>
+            <button
+              type="button"
+              style={
+                vistaProfesoresInterna === "creditos"
+                  ? styles.ventasTabActive
+                  : styles.ventasTab
+              }
+              onClick={() => setVistaProfesoresInterna("creditos")}
+            >
+              Créditos Profesores
+            </button>
+          </>
+        )}
       </div>
     </div>
 
@@ -4820,45 +5084,7 @@ if (!usuario) {
         <div style={styles.box}>
           <h3>{editandoProfesorId ? "Editar profesor" : "Nuevo profesor"}</h3>
 
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-
-              if (editandoProfesorId) {
-                setProfesores((prev) =>
-                  prev.map((p) =>
-                    p.id === editandoProfesorId
-                      ? { ...p, ...profesorForm }
-                      : p
-                  )
-                );
-              } else {
-                setProfesores((prev) => [
-                  {
-                    id: Date.now(),
-                    ...profesorForm,
-                    credito: Number(profesorForm.saldo || 0),
-                    activo: true,
-                  },
-                  ...prev,
-                ]);
-              }
-
-              setProfesorForm({
-                cedula: "",
-                nombres: "",
-                apellidos: "",
-                email: "",
-                codigo: "",
-                telefono: "",
-                saldo: "",
-                es_profesor: true,
-              });
-
-              setEditandoProfesorId(null);
-            }}
-            style={styles.form}
-          >
+          <form onSubmit={guardarProfesor} style={styles.form}>
             <input
               type="text"
               placeholder="Cédula / RUC"
@@ -4941,19 +5167,7 @@ if (!usuario) {
               <button
                 type="button"
                 style={styles.cancelButton}
-                onClick={() => {
-                  setEditandoProfesorId(null);
-                  setProfesorForm({
-                    cedula: "",
-                    nombres: "",
-                    apellidos: "",
-                    email: "",
-                    codigo: "",
-                    telefono: "",
-                    saldo: "",
-                    es_profesor: true,
-                  });
-                }}
+                onClick={limpiarFormularioProfesor}
               >
                 Cancelar edición
               </button>
@@ -4966,6 +5180,30 @@ if (!usuario) {
             <h3 style={{ margin: 0 }}>Lista de profesores</h3>
 
             <div style={styles.headerActions}>
+              <button
+                type="button"
+                style={styles.outlineButton}
+                onClick={() => {
+                  setMostrarFiltroProfesores((prev) => !prev);
+                  if (mostrarFiltroProfesores) {
+                    setBusquedaProfesores("");
+                  }
+                }}
+              >
+                {mostrarFiltroProfesores ? "Cerrar filtro" : "Filtrar profesor"}
+              </button>
+
+              {mostrarFiltroProfesores && (
+                <input
+                  type="text"
+                  value={busquedaProfesores}
+                  onChange={(e) => setBusquedaProfesores(e.target.value)}
+                  placeholder="Nombres, apellidos o cédula"
+                  style={{ ...styles.input, minWidth: 260, margin: 0 }}
+                  autoFocus
+                />
+              )}
+
               <select
                 value={filtroProfesores}
                 onChange={(e) => setFiltroProfesores(e.target.value)}
@@ -4992,7 +5230,7 @@ if (!usuario) {
                       "Credito",
                       "Estado",
                     ],
-                    ...profesores.map((p) => [
+                    ...profesoresFiltrados.map((p) => [
                       p.id || "",
                       p.nombres || "",
                       p.apellidos || "",
@@ -5029,11 +5267,7 @@ if (!usuario) {
             </div>
           </div>
 
-          {profesores.filter((p) => {
-            if (filtroProfesores === "todos") return true;
-            if (filtroProfesores === "inactivos") return p.activo === false;
-            return p.activo !== false;
-          }).length === 0 ? (
+          {profesoresFiltrados.length === 0 ? (
             <p>No hay profesores para este filtro.</p>
           ) : (
             <div style={styles.tableWrap}>
@@ -5052,15 +5286,7 @@ if (!usuario) {
                   </tr>
                 </thead>
                 <tbody>
-                  {profesores
-                    .filter((p) => {
-                      if (filtroProfesores === "todos") return true;
-                      if (filtroProfesores === "inactivos") {
-                        return p.activo === false;
-                      }
-                      return p.activo !== false;
-                    })
-                    .map((p) => {
+                  {profesoresFiltrados.map((p) => {
                       const activo = p.activo !== false;
 
                       return (
@@ -5144,14 +5370,7 @@ if (!usuario) {
                                     : styles.disabledIconButton
                                 }
                                 onClick={() =>
-                                  activo &&
-                                  setProfesores((prev) =>
-                                    prev.map((item) =>
-                                      item.id === p.id
-                                        ? { ...item, activo: false }
-                                        : item
-                                    )
-                                  )
+                                  activo && desactivarProfesor(p)
                                 }
                                 disabled={!activo}
                                 title="Eliminar"
@@ -5163,15 +5382,7 @@ if (!usuario) {
                                 <button
                                   type="button"
                                   style={styles.restoreIconButton}
-                                  onClick={() =>
-                                    setProfesores((prev) =>
-                                      prev.map((item) =>
-                                        item.id === p.id
-                                          ? { ...item, activo: true }
-                                          : item
-                                      )
-                                    )
-                                  }
+                                  onClick={() => reactivarProfesor(p)}
                                   title="Restaurar"
                                 >
                                   ↩️
