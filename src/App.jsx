@@ -1498,6 +1498,87 @@ const exportarVentasExcel = () => {
     );
   };
 
+  const handleCrearCuenta = async (e) => {
+    e.preventDefault();
+    setMensajeCrearCuenta("");
+    setCargandoCrearCuenta(true);
+
+    if (!crearCuentaForm.institucion_id) {
+      setMensajeCrearCuenta("Debes seleccionar una institución");
+      setCargandoCrearCuenta(false);
+      return;
+    }
+
+    if (!crearCuentaForm.nombre.trim()) {
+      setMensajeCrearCuenta("Debes ingresar el nombre del usuario");
+      setCargandoCrearCuenta(false);
+      return;
+    }
+
+    if (!crearCuentaForm.correo.trim()) {
+      setMensajeCrearCuenta("Debes ingresar el correo");
+      setCargandoCrearCuenta(false);
+      return;
+    }
+
+    if (!crearCuentaForm.password) {
+      setMensajeCrearCuenta("Debes ingresar una contraseña");
+      setCargandoCrearCuenta(false);
+      return;
+    }
+
+    if (crearCuentaForm.password !== crearCuentaForm.confirmar_password) {
+      setMensajeCrearCuenta("La confirmación de contraseña no coincide");
+      setCargandoCrearCuenta(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/api/auth/crear-cuenta`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          institucion_id: Number(crearCuentaForm.institucion_id),
+          nombre: crearCuentaForm.nombre.trim(),
+          correo: crearCuentaForm.correo.trim(),
+          password: crearCuentaForm.password,
+          confirmar_password: crearCuentaForm.confirmar_password,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMensajeCrearCuenta(
+          data.message || data.error || "No se pudo crear la cuenta"
+        );
+        return;
+      }
+
+      setMensajeCrearCuenta("Cuenta creada correctamente");
+
+      setCrearCuentaForm({
+        institucion_id: "",
+        nombre: "",
+        correo: "",
+        password: "",
+        confirmar_password: "",
+      });
+
+      window.setTimeout(() => {
+        setMostrarCrearCuenta(false);
+        setMensajeCrearCuenta("");
+      }, 1200);
+    } catch (error) {
+      console.error("Error creando cuenta:", error);
+      setMensajeCrearCuenta("No se pudo conectar con el servidor");
+    } finally {
+      setCargandoCrearCuenta(false);
+    }
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setMensaje("");
@@ -1518,48 +1599,6 @@ const exportarVentasExcel = () => {
   institucion_id: Number(loginInstitucionId),
 }),
       });
-
-      const handleCrearCuenta = async (e) => {
-  e.preventDefault();
-  setMensajeCrearCuenta("");
-  setCargandoCrearCuenta(true);
-
-  if (crearCuentaForm.password !== crearCuentaForm.confirmar_password) {
-    setMensajeCrearCuenta("La confirmación de contraseña no coincide");
-    setCargandoCrearCuenta(false);
-    return;
-  }
-
-  try {
-    const res = await fetch(`${API_URL}/api/auth/crear-cuenta`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(crearCuentaForm),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      setMensajeCrearCuenta(data.message || "No se pudo crear la cuenta");
-      return;
-    }
-
-    setMensajeCrearCuenta("Cuenta creada correctamente");
-    setCrearCuentaForm({
-      institucion_id: "",
-      nombre: "",
-      correo: "",
-      password: "",
-      confirmar_password: "",
-    });
-  } catch (error) {
-    setMensajeCrearCuenta("No se pudo conectar con el servidor");
-  } finally {
-    setCargandoCrearCuenta(false);
-  }
-};
 
       const data = await res.json();
 
