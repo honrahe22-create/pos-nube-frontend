@@ -370,9 +370,109 @@ export default function AlumnosModulo({
                 <strong style={paymon.familyAccessTitle}>
                   Acceso de consulta para padres o representantes
                 </strong>
-                <div style={paymon.familyAccessText}>
-                  Enlace: {window.location.origin}/?consulta=alumno
-                </div>
+                <div
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
+    marginTop: 8,
+    marginBottom: 8,
+  }}
+>
+  <span style={{ color: "#047857", fontWeight: 700 }}>
+    Enlace:
+  </span>
+
+  <button
+    type="button"
+    title="Haz clic para copiar el enlace"
+    onClick={async () => {
+      const enlace =
+        `${window.location.origin}/?consulta=alumno`;
+
+      try {
+        await navigator.clipboard.writeText(enlace);
+
+        alert(
+          "Enlace copiado correctamente. Ya puedes pegarlo en WhatsApp."
+        );
+      } catch (error) {
+        const campoTemporal =
+          document.createElement("textarea");
+
+        campoTemporal.value = enlace;
+        campoTemporal.style.position = "fixed";
+        campoTemporal.style.opacity = "0";
+
+        document.body.appendChild(campoTemporal);
+        campoTemporal.select();
+        document.execCommand("copy");
+        document.body.removeChild(campoTemporal);
+
+        alert(
+          "Enlace copiado correctamente. Ya puedes pegarlo en WhatsApp."
+        );
+      }
+    }}
+    style={{
+      border: "none",
+      background: "transparent",
+      color: "#0563c1",
+      textDecoration: "underline",
+      padding: 0,
+      fontSize: 15,
+      cursor: "pointer",
+      overflowWrap: "anywhere",
+      textAlign: "left",
+    }}
+  >
+    {window.location.origin}/?consulta=alumno
+  </button>
+
+  <button
+    type="button"
+    onClick={async () => {
+      const enlace =
+        `${window.location.origin}/?consulta=alumno`;
+
+      try {
+        await navigator.clipboard.writeText(enlace);
+
+        alert(
+          "Enlace copiado correctamente. Ya puedes enviarlo."
+        );
+      } catch (error) {
+        const campoTemporal =
+          document.createElement("textarea");
+
+        campoTemporal.value = enlace;
+        campoTemporal.style.position = "fixed";
+        campoTemporal.style.opacity = "0";
+
+        document.body.appendChild(campoTemporal);
+        campoTemporal.select();
+        document.execCommand("copy");
+        document.body.removeChild(campoTemporal);
+
+        alert(
+          "Enlace copiado correctamente. Ya puedes enviarlo."
+        );
+      }
+    }}
+    style={{
+      border: "none",
+      background: "#047857",
+      color: "#ffffff",
+      borderRadius: 7,
+      padding: "8px 13px",
+      fontWeight: 700,
+      cursor: "pointer",
+    }}
+  >
+    Copiar enlace
+  </button>
+</div>
                 <div style={paymon.familyAccessText}>
                   Cédula: {obtenerCedulaAlumno(alumnoDetalle) || "-"}
                 </div>
