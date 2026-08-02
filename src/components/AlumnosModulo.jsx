@@ -50,6 +50,7 @@ export default function AlumnosModulo({
   const [importandoAlumnos, setImportandoAlumnos] = useState(false);
   const [codigoAccesoGenerado, setCodigoAccesoGenerado] = useState(null);
   const [generandoCodigoAcceso, setGenerandoCodigoAcceso] = useState(false);
+  const [mostrarFormularioAlumno, setMostrarFormularioAlumno] = useState(false);
 
   const normalizarEncabezado = (valor) =>
     String(valor || "")
@@ -502,6 +503,7 @@ export default function AlumnosModulo({
                 onClick={() => {
                   iniciarEdicionAlumno(alumnoDetalle);
                   setAlumnoDetalle(null);
+                  setMostrarFormularioAlumno(true);
                 }}
               >
                 Editar perfil ✎
@@ -768,11 +770,42 @@ export default function AlumnosModulo({
     })()}
 
     {!alumnoDetalle && (
-    <div style={styles.twoColumn}>
-      <div style={styles.box}>
-        <h3>{editandoAlumnoId ? "Editar alumno" : "Nuevo alumno"}</h3>
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      {mostrarFormularioAlumno && (
+      <div style={{ ...styles.box, width: "100%" }}>
+        <div style={styles.pageHeaderSmall}>
+          <h3 style={{ margin: 0 }}>
+            {editandoAlumnoId ? "Editar alumno" : "Nuevo alumno"}
+          </h3>
 
-        <form onSubmit={editandoAlumnoId ? actualizarAlumno : crearAlumno} style={styles.form}>
+          <button
+            type="button"
+            style={styles.cancelButton}
+            onClick={() => {
+              limpiarFormularioAlumno();
+              setMostrarFormularioAlumno(false);
+            }}
+          >
+            Cerrar ✕
+          </button>
+        </div>
+
+        <form
+          onSubmit={async (e) => {
+            if (editandoAlumnoId) {
+              await actualizarAlumno(e);
+            } else {
+              await crearAlumno(e);
+            }
+            setMostrarFormularioAlumno(false);
+          }}
+          style={{
+            ...styles.form,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+            gap: 14,
+          }}
+        >
           <input type="text" placeholder="Cédula" value={alumnoForm.cedula} onChange={(e) => setAlumnoForm({ ...alumnoForm, cedula: e.target.value })} style={styles.input} required />
           <input type="text" placeholder="Nombres" value={alumnoForm.nombres} onChange={(e) => setAlumnoForm({ ...alumnoForm, nombres: e.target.value })} style={styles.input} required />
           <input type="text" placeholder="Apellidos" value={alumnoForm.apellidos} onChange={(e) => setAlumnoForm({ ...alumnoForm, apellidos: e.target.value })} style={styles.input} required />
@@ -780,19 +813,25 @@ export default function AlumnosModulo({
           <input type="text" placeholder="Paralelo" value={alumnoForm.paralelo} onChange={(e) => setAlumnoForm({ ...alumnoForm, paralelo: e.target.value })} style={styles.input} />
           <input type="number" step="0.01" placeholder="Saldo inicial" value={alumnoForm.saldo} onChange={(e) => setAlumnoForm({ ...alumnoForm, saldo: e.target.value })} style={styles.input} />
 
-          <button type="submit" style={styles.button}>
+          <button type="submit" style={{ ...styles.button, minHeight: 48 }}>
             {editandoAlumnoId ? "Actualizar alumno" : "Guardar alumno"}
           </button>
 
-          {editandoAlumnoId && (
-            <button type="button" style={styles.cancelButton} onClick={limpiarFormularioAlumno}>
-              Cancelar edición
-            </button>
-          )}
+          <button
+            type="button"
+            style={styles.cancelButton}
+            onClick={() => {
+              limpiarFormularioAlumno();
+              setMostrarFormularioAlumno(false);
+            }}
+          >
+            Cancelar
+          </button>
         </form>
       </div>
+      )}
 
-      <div style={styles.box}>
+      <div style={{ ...styles.box, width: "100%" }}>
         <div style={styles.pageHeaderSmall}>
           <h3 style={{ margin: 0 }}>
             Lista de alumnos{" "}
@@ -806,6 +845,17 @@ export default function AlumnosModulo({
           </h3>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              style={styles.button}
+              onClick={() => {
+                limpiarFormularioAlumno();
+                setMostrarFormularioAlumno(true);
+              }}
+            >
+              + Nuevo alumno
+            </button>
+
             <button
               type="button"
               style={styles.secondaryButton}
@@ -982,7 +1032,11 @@ setHistorialConsumoAlumno(
                           <button
                             type="button"
                             style={activo ? styles.editIconButton : styles.disabledIconButton}
-                            onClick={() => activo && iniciarEdicionAlumno(a)}
+                            onClick={() => {
+                              if (!activo) return;
+                              iniciarEdicionAlumno(a);
+                              setMostrarFormularioAlumno(true);
+                            }}
                             disabled={!activo}
                             title="Editar alumno"
                           >

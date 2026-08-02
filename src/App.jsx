@@ -231,6 +231,7 @@ const [profesorForm, setProfesorForm] = useState({
 const [editandoProfesorId, setEditandoProfesorId] = useState(null);
 const [profesorDetalle, setProfesorDetalle] = useState(null);
 const [vistaProfesorDetalle, setVistaProfesorDetalle] = useState("ordenes");
+const [mostrarFormularioProfesor, setMostrarFormularioProfesor] = useState(false);
 
    const [ventasFiltros, setVentasFiltros] = useState({
   tipo_fecha: "created_at",
@@ -2069,6 +2070,7 @@ if (institucionIdLogin) {
       }
 
       limpiarFormularioProfesor();
+      setMostrarFormularioProfesor(false);
       await cargarProfesores();
 
       alert(
@@ -5679,11 +5681,35 @@ if (!usuario) {
     </div>
 
     {vistaProfesoresInterna === "profesores" && !profesorDetalle && (
-      <div style={styles.twoColumn}>
-        <div style={styles.box}>
-          <h3>{editandoProfesorId ? "Editar profesor" : "Nuevo profesor"}</h3>
+      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        {mostrarFormularioProfesor && (
+        <div style={{ ...styles.box, width: "100%" }}>
+          <div style={styles.pageHeaderSmall}>
+            <h3 style={{ margin: 0 }}>
+              {editandoProfesorId ? "Editar profesor" : "Nuevo profesor"}
+            </h3>
 
-          <form onSubmit={guardarProfesor} style={styles.form}>
+            <button
+              type="button"
+              style={styles.cancelButton}
+              onClick={() => {
+                limpiarFormularioProfesor();
+                setMostrarFormularioProfesor(false);
+              }}
+            >
+              Cerrar ✕
+            </button>
+          </div>
+
+          <form
+            onSubmit={guardarProfesor}
+            style={{
+              ...styles.form,
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+              gap: 14,
+            }}
+          >
             <input
               type="text"
               placeholder="Cédula / RUC"
@@ -5758,27 +5784,40 @@ if (!usuario) {
               style={styles.input}
             />
 
-            <button type="submit" style={styles.button}>
+            <button type="submit" style={{ ...styles.button, minHeight: 48 }}>
               {editandoProfesorId ? "Actualizar profesor" : "Guardar profesor"}
             </button>
 
-            {editandoProfesorId && (
-              <button
-                type="button"
-                style={styles.cancelButton}
-                onClick={limpiarFormularioProfesor}
-              >
-                Cancelar edición
-              </button>
-            )}
+            <button
+              type="button"
+              style={styles.cancelButton}
+              onClick={() => {
+                limpiarFormularioProfesor();
+                setMostrarFormularioProfesor(false);
+              }}
+            >
+              Cancelar
+            </button>
           </form>
         </div>
+        )}
 
-        <div style={styles.box}>
+        <div style={{ ...styles.box, width: "100%" }}>
           <div style={styles.pageHeaderSmall}>
             <h3 style={{ margin: 0 }}>Lista de profesores</h3>
 
             <div style={styles.headerActions}>
+              <button
+                type="button"
+                style={styles.button}
+                onClick={() => {
+                  limpiarFormularioProfesor();
+                  setMostrarFormularioProfesor(true);
+                }}
+              >
+                + Nuevo profesor
+              </button>
+
               <input
                 ref={inputImportarProfesoresRef}
                 type="file"
@@ -5943,6 +5982,7 @@ if (!usuario) {
                                 style={styles.editIconButton}
                                 onClick={() => {
                                   setEditandoProfesorId(p.id);
+                                  setMostrarFormularioProfesor(true);
                                   setProfesorForm({
                                     cedula: p.cedula || "",
                                     nombres: p.nombres || "",
@@ -6126,6 +6166,7 @@ if (!usuario) {
               style={{ ...styles.outlineButton, background: "#ffffff", color: "#2435bd" }}
               onClick={() => {
                 setEditandoProfesorId(profesorDetalle.id);
+                setMostrarFormularioProfesor(true);
                 setProfesorForm({
                   cedula: profesorDetalle.cedula || "",
                   nombres: profesorDetalle.nombres || "",
