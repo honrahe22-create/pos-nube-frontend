@@ -16,6 +16,18 @@ const fechaHora = (valor) => {
   return fecha.toLocaleString("es-EC");
 };
 
+const extraerCodigoAcceso = (valor) => {
+  const texto = String(valor || "").toUpperCase();
+
+  // Acepta el código solo: GUJS96JS
+  const codigoSolo = texto.trim().match(/^[A-Z2-9]{8}$/);
+  if (codigoSolo) return codigoSolo[0];
+
+  // También acepta el texto completo copiado desde la ficha del alumno.
+  const candidatos = texto.match(/[A-Z2-9]{8}/g) || [];
+  return candidatos.length ? candidatos[candidatos.length - 1] : texto.trim();
+};
+
 export default function ConsultaAlumnoPublica({ API_URL }) {
   const [form, setForm] = useState({
     institucion_id: "",
@@ -45,7 +57,7 @@ export default function ConsultaAlumnoPublica({ API_URL }) {
         body: JSON.stringify({
           institucion_id: Number(form.institucion_id),
           cedula: form.cedula.trim(),
-          codigo: form.codigo.trim().toUpperCase(),
+          codigo: extraerCodigoAcceso(form.codigo),
         }),
       });
 
@@ -139,14 +151,21 @@ export default function ConsultaAlumnoPublica({ API_URL }) {
             <input
               required
               value={form.codigo}
-              onChange={(e) =>
+              onChange={(e) => {
+                const valorPegado = e.target.value;
+                const codigoExtraido = extraerCodigoAcceso(valorPegado);
+
                 setForm((anterior) => ({
                   ...anterior,
-                  codigo: e.target.value.toUpperCase(),
-                }))
-              }
-              placeholder="Código entregado por la institución"
+                  codigo:
+                    codigoExtraido.length === 8
+                      ? codigoExtraido
+                      : valorPegado.toUpperCase(),
+                }));
+              }}
+              placeholder="Ejemplo: GUJS96JS"
               style={{ ...ui.input, letterSpacing: 3, textTransform: "uppercase" }}
+              maxLength={80}
               autoComplete="one-time-code"
             />
 

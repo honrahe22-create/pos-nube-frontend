@@ -40,10 +40,7 @@ export default function AlumnosModulo({
   obtenerInstitucionActivaId,
   setHistorialVentasAlumno,
   setHistorialRecargasAlumno,
-  setHistorialConsumoAlumno,
-  descargarPlantillaAlumnos,
-  importarAlumnosArchivo,
-  inputImportarAlumnosRef
+  setHistorialConsumoAlumno
 }) {
   const [busquedaHistorial, setBusquedaHistorial] = useState("");
   const [mostrarFiltroAlumnos, setMostrarFiltroAlumnos] = useState(false);
@@ -80,12 +77,22 @@ export default function AlumnosModulo({
   };
 
   const generarAccesoFamilia = async () => {
-    if (!alumnoDetalle?.id) return;
+    if (!alumnoDetalle?.id) {
+      alert("Selecciona un alumno válido.");
+      return;
+    }
 
     try {
       setGenerandoCodigoAcceso(true);
+
       const token = localStorage.getItem("token");
       const institucionId = obtenerInstitucionActivaId();
+
+      if (!token || !institucionId) {
+        alert("Sesión o institución no válida.");
+        return;
+      }
+
       const respuesta = await fetch(
         `${API_URL}/api/consulta-alumno/alumnos/${alumnoDetalle.id}/generar-codigo`,
         {
@@ -94,19 +101,34 @@ export default function AlumnosModulo({
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ institucion_id: Number(institucionId) }),
+          body: JSON.stringify({
+            institucion_id: Number(institucionId),
+          }),
         }
       );
+
       const data = await respuesta.json();
+
       if (!respuesta.ok) {
-        alert(data.message || "No se pudo generar el acceso familiar");
+        alert(data.message || "No se pudo generar el acceso para la familia.");
         return;
       }
+
       setCodigoAccesoGenerado(data);
-      alert(`Código familiar generado: ${data.codigo}`);
+
+      const enlace = `${window.location.origin}/?consulta=alumno`;
+
+      try {
+        await navigator.clipboard.writeText(
+          `Consulta de saldo: ${enlace}\nInstitución: ${institucionId}\nCédula: ${obtenerCedulaAlumno(alumnoDetalle)}\nCódigo: ${data.codigo}`
+        );
+        alert("Acceso generado. Los datos también se copiaron al portapapeles.");
+      } catch {
+        alert(`Acceso generado correctamente. Código: ${data.codigo}`);
+      }
     } catch (error) {
-      console.error(error);
-      alert("No se pudo generar el acceso familiar");
+      console.error("Error generando acceso familiar:", error);
+      alert("No se pudo generar el acceso para la familia.");
     } finally {
       setGenerandoCodigoAcceso(false);
     }
@@ -153,30 +175,6 @@ export default function AlumnosModulo({
           </button>
         ) : (
           <>
-            <input
-              ref={inputImportarAlumnosRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              onChange={importarAlumnosArchivo}
-              style={{ display: "none" }}
-            />
-
-            <button
-              type="button"
-              style={styles.secondaryButton}
-              onClick={descargarPlantillaAlumnos}
-            >
-              Descargar plantilla
-            </button>
-
-            <button
-              type="button"
-              style={styles.secondaryButton}
-              onClick={() => inputImportarAlumnosRef.current?.click()}
-            >
-              Importar Excel
-            </button>
-
             <select
               value={filtroAlumnos}
               onChange={(e) => setFiltroAlumnos(e.target.value)}
@@ -316,7 +314,9 @@ export default function AlumnosModulo({
           {codigoAccesoGenerado && (
             <div style={paymon.familyAccessPanel}>
               <div>
-                <strong style={paymon.familyAccessTitle}>Acceso para padres o representantes</strong>
+                <strong style={paymon.familyAccessTitle}>
+                  Acceso de consulta para padres o representantes
+                </strong>
                 <div style={paymon.familyAccessText}>
                   Enlace: {window.location.origin}/?consulta=alumno
                 </div>
@@ -324,28 +324,50 @@ export default function AlumnosModulo({
                   Cédula: {obtenerCedulaAlumno(alumnoDetalle) || "-"}
                 </div>
               </div>
+
               <div style={paymon.familyCodeBox}>
-                <span style={paymon.familyCodeLabel}>Código</span>
-                <strong style={paymon.familyCodeValue}>{codigoAccesoGenerado.codigo}</strong>
+                <span style={paymon.familyCodeLabel}>Código temporal</span>
+                <strong style={paymon.familyCodeValue}>
+                  {codigoAccesoGenerado.codigo}
+                </strong>
               </div>
-              <button
-                type="button"
-                style={paymon.copyButton}
-                onClick={async () => {
-                  const texto = `Consulta: ${window.location.origin}/?consulta=alumno
-Institución: ${obtenerInstitucionActivaId()}
-Cédula: ${obtenerCedulaAlumno(alumnoDetalle)}
-Código: ${codigoAccesoGenerado.codigo}`;
-                  try {
-                    await navigator.clipboard.writeText(texto);
-                    alert("Datos copiados");
-                  } catch {
-                    alert(texto);
-                  }
-                }}
-              >
-                Copiar acceso
-              </button>
+
+              <div style={paymon.familyButtons}>
+                <button
+                  type="button"
+                  style={paymon.copyButton}
+                  onClick={async () => {
+                    const codigo = codigoAccesoGenerado.codigo;
+
+                    try {
+                      await navigator.clipboard.writeText(codigo);
+                      alert(`Código copiado: ${codigo}`);
+                    } catch {
+                      alert(`Código de acceso: ${codigo}`);
+                    }
+                  }}
+                >
+                  Copiar código
+                </button>
+
+                <button
+                  type="button"
+                  style={paymon.copyFullButton}
+                  onClick={async () => {
+                    const enlace = `${window.location.origin}/?consulta=alumno`;
+                    const texto = `Consulta de saldo: ${enlace}\nInstitución: ${obtenerInstitucionActivaId()}\nCédula: ${obtenerCedulaAlumno(alumnoDetalle)}\nCódigo: ${codigoAccesoGenerado.codigo}`;
+
+                    try {
+                      await navigator.clipboard.writeText(texto);
+                      alert("Acceso completo copiado.");
+                    } catch {
+                      alert(texto);
+                    }
+                  }}
+                >
+                  Copiar acceso completo
+                </button>
+              </div>
             </div>
           )}
 
@@ -804,7 +826,9 @@ const paymon = {
   familyCodeBox: { background: "#fff", border: "1px dashed #10b981", borderRadius: 10, padding: "10px 18px", textAlign: "center" },
   familyCodeLabel: { display: "block", color: "#64748b", fontSize: 12, marginBottom: 4 },
   familyCodeValue: { color: "#065f46", fontSize: 24, letterSpacing: 3 },
+  familyButtons: { display: "flex", gap: 10, flexWrap: "wrap" },
   copyButton: { border: 0, background: "#047857", color: "#fff", borderRadius: 8, padding: "11px 17px", fontWeight: 700, cursor: "pointer" },
+  copyFullButton: { border: "1px solid #047857", background: "#fff", color: "#047857", borderRadius: 8, padding: "11px 17px", fontWeight: 700, cursor: "pointer" },
   orangeButton: { border: 0, background: "#ff8548", color: "#fff", borderRadius: 9, padding: "14px 24px", fontWeight: 700, cursor: "pointer" },
   profileGrid: { padding: "34px 6% 22px", display: "grid", gridTemplateColumns: "minmax(230px,1fr) minmax(260px,1fr) minmax(230px,.75fr)", gap: 30, alignItems: "stretch" },
   dataCardPlain: { padding: "8px 12px" }, dataCard: { padding: "24px 28px", borderRadius: 12, boxShadow: "0 6px 18px rgba(15,23,42,.12)" },
