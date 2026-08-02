@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import AlumnosModulo from "./components/AlumnosModulo";
+import ConsultaAlumnoPublica from "./components/ConsultaAlumnoPublica";
 
 const API_URL = "https://pos-nube-backend.onrender.com";
 
@@ -186,6 +187,8 @@ const [stockTransferencia, setStockTransferencia] = useState(null);
 
 const [stockEditado, setStockEditado] = useState({});
 const inputImportarStockRef = useRef(null);
+const inputImportarAlumnosRef = useRef(null);
+const inputImportarProfesoresRef = useRef(null);
 
 const [mostrarFormularioProducto, setMostrarFormularioProducto] = useState(false);
 const [filtroCategoriaProductos, setFiltroCategoriaProductos] = useState("");
@@ -1695,6 +1698,255 @@ if (institucionIdLogin) {
 };
 
 
+  const normalizarEncabezadoImportacion = (valor) =>
+    String(valor || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "_");
+
+  const descargarExcelPlantilla = (nombreArchivo, hoja, encabezados, ejemplo) => {
+    const datos = [encabezados, ejemplo];
+    const worksheet = XLSX.utils.aoa_to_sheet(datos);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, hoja);
+    XLSX.writeFile(workbook, nombreArchivo);
+  };
+
+  const descargarPlantillaAlumnos = () => {
+    descargarExcelPlantilla(
+      "plantilla_alumnos.xlsx",
+      "Alumnos",
+      ["Cedula", "Codigo", "Nombres", "Apellidos", "Curso", "Paralelo", "Correo", "Estado"],
+      ["1723456789", "A001", "Juan", "Perez", "8vo", "A", "juan@correo.com", "ACTIVO"]
+    );
+  };
+
+  const descargarPlantillaProfesores = () => {
+    descargarExcelPlantilla(
+      "plantilla_profesores.xlsx",
+      "Profesores",
+      ["Cedula", "Codigo", "Nombres", "Apellidos", "Correo", "Telefono", "Estado"],
+      ["0912345678", "P001", "Maria", "Lopez", "maria@correo.com", "0999999999", "ACTIVO"]
+    );
+  };
+
+  const leerArchivoImportacion = (archivo) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (evento) => {
+        try {
+          const workbook = XLSX.read(evento.target.result, { type: "array" });
+          const nombreHoja = workbook.SheetNames[0];
+          if (!nombreHoja) throw new Error("El archivo no contiene hojas");
+          const filas = XLSX.utils.sheet_to_json(workbook.Sheets[nombreHoja], {
+            defval: "",
+            raw: false,
+          });
+          resolve(filas);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
+      reader.readAsArrayBuffer(archivo);
+    });
+
+  const normalizarFilaImportada = (fila) => {
+    const normalizada = {};
+    Object.entries(fila || {}).forEach(([clave, valor]) => {
+      normalizada[normalizarEncabezadoImportacion(clave)] = String(valor ?? "").trim();
+    });
+    return normalizada;
+  };
+
+  const estadoImportadoActivo = (valor) => {
+    const texto = String(valor || "ACTIVO").trim().toUpperCase();
+    return !["INACTIVO", "INACTIVA", "FALSE", "0", "NO"].includes(texto);
+  };
+
+  const importarAlumnosArchivo = async (event) => {
+    const archivo = event.target.files?.[0];
+    event.target.value = "";
+    if (!archivo) return;
+
+    try {
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+      if (!token || !institucionId) {
+        alert("Sesión o institución no válida");
+        return;
+      }
+
+      const filas = (await leerArchivoImportacion(archivo)).map(normalizarFilaImportada);
+      if (!filas.length) {
+        alert("El archivo no contiene registros");
+        return;
+      }
+
+      let creados = 0;
+      let actualizados = 0;
+      let errores = 0;
+      const detalleErrores = [];
+      const alumnosActuales = Array.isArray(alumnos) ? [...alumnos] : [];
+
+      for (let indice = 0; indice < filas.length; indice += 1) {
+        const fila = filas[indice];
+        const cedula = fila.cedula || fila.identificacion || fila.documento || "";
+        const codigo = fila.codigo || "";
+        const nombres = fila.nombres || fila.nombre || "";
+        const apellidos = fila.apellidos || fila.apellido || "";
+
+        if (!cedula || !nombres || !apellidos) {
+          errores += 1;
+          detalleErrores.push(`Fila ${indice + 2}: faltan cédula, nombres o apellidos`);
+          continue;
+        }
+
+        const existente = alumnosActuales.find((a) =>
+          String(obtenerCedulaAlumno(a) || "").trim() === String(cedula).trim()
+        );
+
+        const payload = {
+          institucion_id: Number(institucionId),
+          cedula,
+          codigo,
+          nombres,
+          apellidos,
+          curso: fila.curso || "",
+          paralelo: fila.paralelo || "",
+          correo: fila.correo || fila.email || "",
+          saldo: existente ? Number(existente.saldo || 0) : 0,
+          activo: estadoImportadoActivo(fila.estado),
+        };
+
+        try {
+          const respuesta = await fetch(
+            existente ? `${API_URL}/api/alumnos/${existente.id}` : `${API_URL}/api/alumnos`,
+            {
+              method: existente ? "PUT" : "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify(payload),
+            }
+          );
+          const data = await respuesta.json();
+          if (!respuesta.ok) throw new Error(data.message || "Error guardando alumno");
+          if (existente) actualizados += 1;
+          else {
+            creados += 1;
+            alumnosActuales.push(data);
+          }
+        } catch (error) {
+          errores += 1;
+          detalleErrores.push(`Fila ${indice + 2}: ${error.message}`);
+        }
+      }
+
+      await cargarAlumnos();
+      alert(
+        `Importación de alumnos finalizada.\n\nNuevos: ${creados}\nActualizados: ${actualizados}\nErrores: ${errores}` +
+          (detalleErrores.length ? `\n\nPrimeros errores:\n${detalleErrores.slice(0, 8).join("\n")}` : "")
+      );
+    } catch (error) {
+      console.error("Error importando alumnos:", error);
+      alert(`No se pudo importar alumnos: ${error.message}`);
+    }
+  };
+
+  const importarProfesoresArchivo = async (event) => {
+    const archivo = event.target.files?.[0];
+    event.target.value = "";
+    if (!archivo) return;
+
+    try {
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+      if (!token || !institucionId) {
+        alert("Sesión o institución no válida");
+        return;
+      }
+
+      const filas = (await leerArchivoImportacion(archivo)).map(normalizarFilaImportada);
+      if (!filas.length) {
+        alert("El archivo no contiene registros");
+        return;
+      }
+
+      let creados = 0;
+      let actualizados = 0;
+      let errores = 0;
+      const detalleErrores = [];
+      const profesoresActuales = Array.isArray(profesores) ? [...profesores] : [];
+
+      for (let indice = 0; indice < filas.length; indice += 1) {
+        const fila = filas[indice];
+        const cedula = fila.cedula || fila.identificacion || fila.documento || "";
+        const nombres = fila.nombres || fila.nombre || "";
+        const apellidos = fila.apellidos || fila.apellido || "";
+
+        if (!cedula || !nombres || !apellidos) {
+          errores += 1;
+          detalleErrores.push(`Fila ${indice + 2}: faltan cédula, nombres o apellidos`);
+          continue;
+        }
+
+        const existente = profesoresActuales.find((p) =>
+          String(p.cedula || "").trim() === String(cedula).trim()
+        );
+
+        const payload = {
+          institucion_id: Number(institucionId),
+          cedula,
+          codigo: fila.codigo || "",
+          nombres,
+          apellidos,
+          email: fila.correo || fila.email || "",
+          telefono: fila.telefono || fila.celular || "",
+          saldo: existente ? Number(existente.saldo || existente.credito || 0) : 0,
+          es_profesor: true,
+          activo: estadoImportadoActivo(fila.estado),
+        };
+
+        try {
+          const respuesta = await fetch(
+            existente ? `${API_URL}/api/profesores/${existente.id}` : `${API_URL}/api/profesores`,
+            {
+              method: existente ? "PUT" : "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify(payload),
+            }
+          );
+          const data = await respuesta.json();
+          if (!respuesta.ok) throw new Error(data.message || "Error guardando profesor");
+          if (existente) actualizados += 1;
+          else {
+            creados += 1;
+            profesoresActuales.push(data);
+          }
+        } catch (error) {
+          errores += 1;
+          detalleErrores.push(`Fila ${indice + 2}: ${error.message}`);
+        }
+      }
+
+      await cargarProfesores();
+      alert(
+        `Importación de profesores finalizada.\n\nNuevos: ${creados}\nActualizados: ${actualizados}\nErrores: ${errores}` +
+          (detalleErrores.length ? `\n\nPrimeros errores:\n${detalleErrores.slice(0, 8).join("\n")}` : "")
+      );
+    } catch (error) {
+      console.error("Error importando profesores:", error);
+      alert(`No se pudo importar profesores: ${error.message}`);
+    }
+  };
+
   const limpiarFormularioProfesor = () => {
     setProfesorForm({
       cedula: "",
@@ -2898,6 +3150,13 @@ const consultarProductosPorDia = () => {
     limpiarFiltrosRecargas();
     limpiarFiltrosCierreCaja();
   };
+
+const esConsultaPublicaAlumno =
+  new URLSearchParams(window.location.search).get("consulta") === "alumno";
+
+if (esConsultaPublicaAlumno) {
+  return <ConsultaAlumnoPublica API_URL={API_URL} />;
+}
 
 if (!usuario) {
   return (
@@ -5021,6 +5280,9 @@ if (!usuario) {
     setHistorialVentasAlumno={setHistorialVentasAlumno}
     setHistorialRecargasAlumno={setHistorialRecargasAlumno}
     setHistorialConsumoAlumno={setHistorialConsumoAlumno}
+    descargarPlantillaAlumnos={descargarPlantillaAlumnos}
+    importarAlumnosArchivo={importarAlumnosArchivo}
+    inputImportarAlumnosRef={inputImportarAlumnosRef}
   />
 )}
 
@@ -5180,6 +5442,30 @@ if (!usuario) {
             <h3 style={{ margin: 0 }}>Lista de profesores</h3>
 
             <div style={styles.headerActions}>
+              <input
+                ref={inputImportarProfesoresRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={importarProfesoresArchivo}
+                style={{ display: "none" }}
+              />
+
+              <button
+                type="button"
+                style={styles.secondaryButton}
+                onClick={descargarPlantillaProfesores}
+              >
+                Descargar plantilla
+              </button>
+
+              <button
+                type="button"
+                style={styles.secondaryButton}
+                onClick={() => inputImportarProfesoresRef.current?.click()}
+              >
+                Importar Excel
+              </button>
+
               <button
                 type="button"
                 style={styles.outlineButton}

@@ -40,11 +40,16 @@ export default function AlumnosModulo({
   obtenerInstitucionActivaId,
   setHistorialVentasAlumno,
   setHistorialRecargasAlumno,
-  setHistorialConsumoAlumno
+  setHistorialConsumoAlumno,
+  descargarPlantillaAlumnos,
+  importarAlumnosArchivo,
+  inputImportarAlumnosRef
 }) {
   const [busquedaHistorial, setBusquedaHistorial] = useState("");
   const [mostrarFiltroAlumnos, setMostrarFiltroAlumnos] = useState(false);
   const [busquedaAlumnos, setBusquedaAlumnos] = useState("");
+  const [codigoAccesoGenerado, setCodigoAccesoGenerado] = useState(null);
+  const [generandoCodigoAcceso, setGenerandoCodigoAcceso] = useState(false);
 
   const alumnosFiltradosBusqueda = alumnosFiltrados.filter((alumno) => {
     const texto = busquedaAlumnos.trim().toLowerCase();
@@ -70,7 +75,41 @@ export default function AlumnosModulo({
     setHistorialRecargasAlumno([]);
     setHistorialConsumoAlumno([]);
     setBusquedaHistorial("");
+    setCodigoAccesoGenerado(null);
     limpiarFormularioAlumno();
+  };
+
+  const generarAccesoFamilia = async () => {
+    if (!alumnoDetalle?.id) return;
+
+    try {
+      setGenerandoCodigoAcceso(true);
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+      const respuesta = await fetch(
+        `${API_URL}/api/consulta-alumno/alumnos/${alumnoDetalle.id}/generar-codigo`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ institucion_id: Number(institucionId) }),
+        }
+      );
+      const data = await respuesta.json();
+      if (!respuesta.ok) {
+        alert(data.message || "No se pudo generar el acceso familiar");
+        return;
+      }
+      setCodigoAccesoGenerado(data);
+      alert(`Código familiar generado: ${data.codigo}`);
+    } catch (error) {
+      console.error(error);
+      alert("No se pudo generar el acceso familiar");
+    } finally {
+      setGenerandoCodigoAcceso(false);
+    }
   };
 
   const exportarOrdenesAlumno = (ordenes) => {
@@ -114,6 +153,30 @@ export default function AlumnosModulo({
           </button>
         ) : (
           <>
+            <input
+              ref={inputImportarAlumnosRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={importarAlumnosArchivo}
+              style={{ display: "none" }}
+            />
+
+            <button
+              type="button"
+              style={styles.secondaryButton}
+              onClick={descargarPlantillaAlumnos}
+            >
+              Descargar plantilla
+            </button>
+
+            <button
+              type="button"
+              style={styles.secondaryButton}
+              onClick={() => inputImportarAlumnosRef.current?.click()}
+            >
+              Importar Excel
+            </button>
+
             <select
               value={filtroAlumnos}
               onChange={(e) => setFiltroAlumnos(e.target.value)}
@@ -231,6 +294,14 @@ export default function AlumnosModulo({
               </button>
               <button
                 type="button"
+                style={paymon.familyButton}
+                onClick={generarAccesoFamilia}
+                disabled={generandoCodigoAcceso}
+              >
+                {generandoCodigoAcceso ? "Generando..." : "Acceso familias 🔐"}
+              </button>
+              <button
+                type="button"
                 style={paymon.monthButton}
                 onClick={() => alert("La compra mensual se habilitará en el siguiente ajuste.")}
               >
@@ -241,6 +312,42 @@ export default function AlumnosModulo({
               </button>
             </div>
           </div>
+
+          {codigoAccesoGenerado && (
+            <div style={paymon.familyAccessPanel}>
+              <div>
+                <strong style={paymon.familyAccessTitle}>Acceso para padres o representantes</strong>
+                <div style={paymon.familyAccessText}>
+                  Enlace: {window.location.origin}/?consulta=alumno
+                </div>
+                <div style={paymon.familyAccessText}>
+                  Cédula: {obtenerCedulaAlumno(alumnoDetalle) || "-"}
+                </div>
+              </div>
+              <div style={paymon.familyCodeBox}>
+                <span style={paymon.familyCodeLabel}>Código</span>
+                <strong style={paymon.familyCodeValue}>{codigoAccesoGenerado.codigo}</strong>
+              </div>
+              <button
+                type="button"
+                style={paymon.copyButton}
+                onClick={async () => {
+                  const texto = `Consulta: ${window.location.origin}/?consulta=alumno
+Institución: ${obtenerInstitucionActivaId()}
+Cédula: ${obtenerCedulaAlumno(alumnoDetalle)}
+Código: ${codigoAccesoGenerado.codigo}`;
+                  try {
+                    await navigator.clipboard.writeText(texto);
+                    alert("Datos copiados");
+                  } catch {
+                    alert(texto);
+                  }
+                }}
+              >
+                Copiar acceso
+              </button>
+            </div>
+          )}
 
           <div style={paymon.profileGrid}>
             <div style={paymon.dataCardPlain}>
@@ -689,7 +796,15 @@ const paymon = {
   studentBadge: { background: "#eef2ff", color: "#3137d8", padding: "8px 18px", borderRadius: 12 }, activeBadge: { background: "#dff7e8", color: "#166534", padding: "8px 18px", borderRadius: 12 }, inactiveBadge: { background: "#fee2e2", color: "#991b1b", padding: "8px 18px", borderRadius: 12 },
   heroActions: { display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" },
   whiteButton: { border: 0, background: "#fff", color: "#2428b8", borderRadius: 7, padding: "14px 20px", fontWeight: 700, cursor: "pointer" },
+  familyButton: { border: 0, background: "#10b981", color: "#fff", borderRadius: 7, padding: "14px 20px", fontWeight: 700, cursor: "pointer" },
   monthButton: { border: 0, background: "#6d88ef", color: "#fff", borderRadius: 7, padding: "14px 20px", fontWeight: 700, cursor: "pointer" },
+  familyAccessPanel: { margin: "20px 5% 4px", padding: "18px 22px", border: "1px solid #a7f3d0", background: "#ecfdf5", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, flexWrap: "wrap" },
+  familyAccessTitle: { color: "#065f46", display: "block", marginBottom: 6 },
+  familyAccessText: { color: "#047857", fontSize: 14, overflowWrap: "anywhere" },
+  familyCodeBox: { background: "#fff", border: "1px dashed #10b981", borderRadius: 10, padding: "10px 18px", textAlign: "center" },
+  familyCodeLabel: { display: "block", color: "#64748b", fontSize: 12, marginBottom: 4 },
+  familyCodeValue: { color: "#065f46", fontSize: 24, letterSpacing: 3 },
+  copyButton: { border: 0, background: "#047857", color: "#fff", borderRadius: 8, padding: "11px 17px", fontWeight: 700, cursor: "pointer" },
   orangeButton: { border: 0, background: "#ff8548", color: "#fff", borderRadius: 9, padding: "14px 24px", fontWeight: 700, cursor: "pointer" },
   profileGrid: { padding: "34px 6% 22px", display: "grid", gridTemplateColumns: "minmax(230px,1fr) minmax(260px,1fr) minmax(230px,.75fr)", gap: 30, alignItems: "stretch" },
   dataCardPlain: { padding: "8px 12px" }, dataCard: { padding: "24px 28px", borderRadius: 12, boxShadow: "0 6px 18px rgba(15,23,42,.12)" },
