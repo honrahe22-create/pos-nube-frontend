@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import * as XLSX from "xlsx";
 
 export default function AlumnosModulo({
   styles,
@@ -45,8 +46,170 @@ export default function AlumnosModulo({
   const [busquedaHistorial, setBusquedaHistorial] = useState("");
   const [mostrarFiltroAlumnos, setMostrarFiltroAlumnos] = useState(false);
   const [busquedaAlumnos, setBusquedaAlumnos] = useState("");
+  const inputImportarAlumnosRef = useRef(null);
+  const [importandoAlumnos, setImportandoAlumnos] = useState(false);
   const [codigoAccesoGenerado, setCodigoAccesoGenerado] = useState(null);
   const [generandoCodigoAcceso, setGenerandoCodigoAcceso] = useState(false);
+
+  const normalizarEncabezado = (valor) =>
+    String(valor || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "_");
+
+  const descargarPlantillaAlumnos = () => {
+    const datos = [
+      {
+        Cedula: "1712345678",
+        Codigo: "A001",
+        Nombres: "Juan",
+        Apellidos: "Perez",
+        Curso: "8vo",
+        Paralelo: "A",
+        Correo: "juan@email.com",
+        Telefono: "0999999999",
+        Estado: "Activo",
+      },
+    ];
+
+    const hoja = XLSX.utils.json_to_sheet(datos);
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Alumnos");
+    XLSX.writeFile(libro, "plantilla_alumnos.xlsx");
+  };
+
+  const importarAlumnosArchivo = async (evento) => {
+    const archivo = evento.target.files?.[0];
+    evento.target.value = "";
+
+    if (!archivo) return;
+
+    try {
+      setImportandoAlumnos(true);
+
+      const extension = archivo.name.split(".").pop()?.toLowerCase();
+      if (!["xlsx", "xls", "csv"].includes(extension)) {
+        alert("Selecciona un archivo XLSX, XLS o CSV.");
+        return;
+      }
+
+      const buffer = await archivo.arrayBuffer();
+      const libro = XLSX.read(buffer, { type: "array" });
+      const hoja = libro.Sheets[libro.SheetNames[0]];
+      const filasOriginales = XLSX.utils.sheet_to_json(hoja, {
+        defval: "",
+        raw: false,
+      });
+
+      if (!filasOriginales.length) {
+        alert("El archivo no contiene registros.");
+        return;
+      }
+
+      const filas = filasOriginales.map((fila) => {
+        const normalizada = {};
+        Object.entries(fila).forEach(([clave, valor]) => {
+          normalizada[normalizarEncabezado(clave)] = valor;
+        });
+        return normalizada;
+      });
+
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      if (!token || !institucionId) {
+        alert("No se pudo identificar la sesión o institución.");
+        return;
+      }
+
+      let creados = 0;
+      let actualizados = 0;
+      const errores = [];
+
+      for (let indice = 0; indice < filas.length; indice += 1) {
+        const fila = filas[indice];
+        const cedula = String(
+          fila.cedula || fila.cedula_ruc || fila.identificacion || ""
+        ).trim();
+        const nombres = String(fila.nombres || fila.nombre || "").trim();
+        const apellidos = String(fila.apellidos || fila.apellido || "").trim();
+
+        if (!cedula || !nombres || !apellidos) {
+          errores.push(`Fila ${indice + 2}: faltan cédula, nombres o apellidos.`);
+          continue;
+        }
+
+        const existente = alumnosFiltrados.find(
+          (alumno) => String(obtenerCedulaAlumno(alumno) || "").trim() === cedula
+        );
+
+        const estadoTexto = String(fila.estado || "Activo").trim().toLowerCase();
+        const datos = {
+          institucion_id: Number(institucionId),
+          cedula,
+          codigo: String(fila.codigo || cedula).trim(),
+          nombres,
+          apellidos,
+          curso: String(fila.curso || "").trim(),
+          paralelo: String(fila.paralelo || "").trim(),
+          correo: String(fila.correo || fila.email || "").trim(),
+          telefono: String(fila.telefono || fila.celular || "").trim(),
+          saldo: existente ? Number(existente.saldo || 0) : 0,
+          activo: !["inactivo", "false", "0", "no"].includes(estadoTexto),
+        };
+
+        const url = existente
+          ? `${API_URL}/api/alumnos/${existente.id}`
+          : `${API_URL}/api/alumnos`;
+        const metodo = existente ? "PUT" : "POST";
+
+        const respuesta = await fetch(url, {
+          method: metodo,
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(datos),
+        });
+
+        const resultado = await respuesta.json().catch(() => ({}));
+
+        if (!respuesta.ok) {
+          errores.push(
+            `Fila ${indice + 2} (${cedula}): ${
+              resultado.message || resultado.error || "error al guardar"
+            }`
+          );
+          continue;
+        }
+
+        if (existente) actualizados += 1;
+        else creados += 1;
+      }
+
+      await cargarAlumnos();
+
+      const resumen = [
+        "Importación finalizada.",
+        `Nuevos: ${creados}`,
+        `Actualizados: ${actualizados}`,
+        `Errores: ${errores.length}`,
+      ];
+
+      if (errores.length) {
+        resumen.push("", "Primeros errores:", ...errores.slice(0, 8));
+      }
+
+      alert(resumen.join("\n"));
+    } catch (error) {
+      console.error("Error importando alumnos:", error);
+      alert("No se pudo importar el archivo de alumnos.");
+    } finally {
+      setImportandoAlumnos(false);
+    }
+  };
 
   const alumnosFiltradosBusqueda = alumnosFiltrados.filter((alumno) => {
     const texto = busquedaAlumnos.trim().toLowerCase();
@@ -366,115 +529,37 @@ export default function AlumnosModulo({
 
           {codigoAccesoGenerado && (
             <div style={paymon.familyAccessPanel}>
-              <div>
+              <div style={paymon.familyAccessInfo}>
                 <strong style={paymon.familyAccessTitle}>
                   Acceso de consulta para padres o representantes
                 </strong>
-                <div
-  style={{
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    flexWrap: "wrap",
-    marginTop: 8,
-    marginBottom: 8,
-  }}
->
-  <span style={{ color: "#047857", fontWeight: 700 }}>
-    Enlace:
-  </span>
 
-  <button
-    type="button"
-    title="Haz clic para copiar el enlace"
-    onClick={async () => {
-      const enlace =
-        `${window.location.origin}/?consulta=alumno`;
+                <label style={paymon.accessFieldLabel}>Enlace público</label>
+                <div style={paymon.accessFieldRow}>
+                  <input
+                    type="text"
+                    readOnly
+                    value={`${window.location.origin}/?consulta=alumno`}
+                    style={paymon.accessReadonlyInput}
+                    onFocus={(e) => e.target.select()}
+                  />
+                  <button
+                    type="button"
+                    style={paymon.copyLinkButton}
+                    onClick={() =>
+                      copiarTextoSeguro(
+                        `${window.location.origin}/?consulta=alumno`,
+                        "Enlace copiado. Ya puedes enviarlo al representante."
+                      )
+                    }
+                  >
+                    Copiar enlace
+                  </button>
+                </div>
 
-      try {
-        await navigator.clipboard.writeText(enlace);
-
-        alert(
-          "Enlace copiado correctamente. Ya puedes pegarlo en WhatsApp."
-        );
-      } catch (error) {
-        const campoTemporal =
-          document.createElement("textarea");
-
-        campoTemporal.value = enlace;
-        campoTemporal.style.position = "fixed";
-        campoTemporal.style.opacity = "0";
-
-        document.body.appendChild(campoTemporal);
-        campoTemporal.select();
-        document.execCommand("copy");
-        document.body.removeChild(campoTemporal);
-
-        alert(
-          "Enlace copiado correctamente. Ya puedes pegarlo en WhatsApp."
-        );
-      }
-    }}
-    style={{
-      border: "none",
-      background: "transparent",
-      color: "#0563c1",
-      textDecoration: "underline",
-      padding: 0,
-      fontSize: 15,
-      cursor: "pointer",
-      overflowWrap: "anywhere",
-      textAlign: "left",
-    }}
-  >
-    {window.location.origin}/?consulta=alumno
-  </button>
-
-  <button
-    type="button"
-    onClick={async () => {
-      const enlace =
-        `${window.location.origin}/?consulta=alumno`;
-
-      try {
-        await navigator.clipboard.writeText(enlace);
-
-        alert(
-          "Enlace copiado correctamente. Ya puedes enviarlo."
-        );
-      } catch (error) {
-        const campoTemporal =
-          document.createElement("textarea");
-
-        campoTemporal.value = enlace;
-        campoTemporal.style.position = "fixed";
-        campoTemporal.style.opacity = "0";
-
-        document.body.appendChild(campoTemporal);
-        campoTemporal.select();
-        document.execCommand("copy");
-        document.body.removeChild(campoTemporal);
-
-        alert(
-          "Enlace copiado correctamente. Ya puedes enviarlo."
-        );
-      }
-    }}
-    style={{
-      border: "none",
-      background: "#047857",
-      color: "#ffffff",
-      borderRadius: 7,
-      padding: "8px 13px",
-      fontWeight: 700,
-      cursor: "pointer",
-    }}
-  >
-    Copiar enlace
-  </button>
-</div>
                 <div style={paymon.familyAccessText}>
-                  Cédula: {obtenerCedulaAlumno(alumnoDetalle) || "-"}
+                  Cédula o código del alumno:{" "}
+                  <strong>{obtenerCedulaAlumno(alumnoDetalle) || "-"}</strong>
                 </div>
               </div>
 
@@ -483,12 +568,9 @@ export default function AlumnosModulo({
                 <strong style={paymon.familyCodeValue}>
                   {codigoAccesoGenerado.codigo}
                 </strong>
-              </div>
-
-              <div style={paymon.familyButtons}>
                 <button
                   type="button"
-                  style={paymon.copyButton}
+                  style={paymon.copyCodeMiniButton}
                   onClick={() =>
                     copiarTextoSeguro(
                       codigoAccesoGenerado.codigo,
@@ -498,18 +580,20 @@ export default function AlumnosModulo({
                 >
                   Copiar código
                 </button>
+              </div>
 
+              <div style={paymon.familyButtons}>
                 <button
                   type="button"
                   style={paymon.copyFullButton}
                   onClick={() =>
                     copiarTextoSeguro(
                       obtenerTextoAccesoCompleto(),
-                      "Acceso completo copiado. Ya puedes pegarlo en WhatsApp o correo."
+                      "Mensaje completo copiado. Ya puedes pegarlo en WhatsApp o correo."
                     )
                   }
                 >
-                  Copiar acceso completo
+                  Copiar mensaje completo
                 </button>
 
                 <button
@@ -721,11 +805,37 @@ export default function AlumnosModulo({
             </span>
           </h3>
 
-          <button
-            type="button"
-            style={styles.secondaryButton}
-            onClick={() => {
-              const filas = [
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              style={styles.secondaryButton}
+              onClick={descargarPlantillaAlumnos}
+            >
+              Descargar plantilla
+            </button>
+
+            <button
+              type="button"
+              style={styles.secondaryButton}
+              disabled={importandoAlumnos}
+              onClick={() => inputImportarAlumnosRef.current?.click()}
+            >
+              {importandoAlumnos ? "Importando..." : "Importar Excel"}
+            </button>
+
+            <input
+              ref={inputImportarAlumnosRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={importarAlumnosArchivo}
+              style={{ display: "none" }}
+            />
+
+            <button
+              type="button"
+              style={styles.secondaryButton}
+              onClick={() => {
+                const filas = [
                 ["ID", "Nombres", "Apellidos", "Cédula", "Curso", "Paralelo", "Saldo", "Estado"],
                 ...alumnosFiltradosBusqueda.map((a) => [
                   a.id || "",
@@ -751,9 +861,10 @@ export default function AlumnosModulo({
               link.click();
               URL.revokeObjectURL(url);
             }}
-          >
-            Exportar
-          </button>
+            >
+              Exportar
+            </button>
+          </div>
         </div>
 
         {alumnosFiltradosBusqueda.length === 0 ? (
@@ -976,14 +1087,19 @@ const paymon = {
   whiteButton: { border: 0, background: "#fff", color: "#2428b8", borderRadius: 7, padding: "14px 20px", fontWeight: 700, cursor: "pointer" },
   familyButton: { border: 0, background: "#10b981", color: "#fff", borderRadius: 7, padding: "14px 20px", fontWeight: 700, cursor: "pointer" },
   monthButton: { border: 0, background: "#6d88ef", color: "#fff", borderRadius: 7, padding: "14px 20px", fontWeight: 700, cursor: "pointer" },
-  familyAccessPanel: { margin: "20px 5% 4px", padding: "18px 22px", border: "1px solid #a7f3d0", background: "#ecfdf5", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, flexWrap: "wrap" },
-  familyAccessTitle: { color: "#065f46", display: "block", marginBottom: 6 },
-  familyAccessText: { color: "#047857", fontSize: 14, overflowWrap: "anywhere" },
-  familyCodeBox: { background: "#fff", border: "1px dashed #10b981", borderRadius: 10, padding: "10px 18px", textAlign: "center" },
+  familyAccessPanel: { margin: "20px 5% 4px", padding: "20px 22px", border: "1px solid #a7f3d0", background: "#ecfdf5", borderRadius: 12, display: "grid", gridTemplateColumns: "minmax(320px, 1fr) auto", gap: 18, alignItems: "center" },
+  familyAccessInfo: { minWidth: 0 },
+  familyAccessTitle: { color: "#065f46", display: "block", marginBottom: 12, fontSize: 17 },
+  familyAccessText: { color: "#047857", fontSize: 14, overflowWrap: "anywhere", marginTop: 10 },
+  accessFieldLabel: { display: "block", color: "#065f46", fontSize: 13, fontWeight: 700, marginBottom: 5 },
+  accessFieldRow: { display: "flex", gap: 8, flexWrap: "wrap" },
+  accessReadonlyInput: { flex: "1 1 320px", minWidth: 0, border: "1px solid #6ee7b7", background: "#fff", borderRadius: 8, padding: "11px 12px", color: "#064e3b", fontSize: 14 },
+  copyLinkButton: { border: 0, background: "#047857", color: "#fff", borderRadius: 8, padding: "11px 16px", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" },
+  familyCodeBox: { background: "#fff", border: "1px dashed #10b981", borderRadius: 10, padding: "12px 18px", textAlign: "center", minWidth: 210 },
   familyCodeLabel: { display: "block", color: "#64748b", fontSize: 12, marginBottom: 4 },
-  familyCodeValue: { color: "#065f46", fontSize: 24, letterSpacing: 3 },
-  familyButtons: { display: "flex", gap: 10, flexWrap: "wrap" },
-  copyButton: { border: 0, background: "#047857", color: "#fff", borderRadius: 8, padding: "11px 17px", fontWeight: 700, cursor: "pointer" },
+  familyCodeValue: { display: "block", color: "#065f46", fontSize: 24, letterSpacing: 3, marginBottom: 10 },
+  copyCodeMiniButton: { border: 0, background: "#047857", color: "#fff", borderRadius: 7, padding: "8px 12px", fontWeight: 700, cursor: "pointer" },
+  familyButtons: { gridColumn: "1 / -1", display: "flex", gap: 10, flexWrap: "wrap" },
   copyFullButton: { border: "1px solid #047857", background: "#fff", color: "#047857", borderRadius: 8, padding: "11px 17px", fontWeight: 700, cursor: "pointer" },
   whatsappButton: { border: 0, background: "#25D366", color: "#fff", borderRadius: 8, padding: "11px 17px", fontWeight: 700, cursor: "pointer" },
   orangeButton: { border: 0, background: "#ff8548", color: "#fff", borderRadius: 9, padding: "14px 24px", fontWeight: 700, cursor: "pointer" },
