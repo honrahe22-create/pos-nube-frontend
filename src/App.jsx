@@ -2895,6 +2895,336 @@ const consultarProductosPorDia = () => {
     }
   };
 
+  const escaparHtmlTicket = (valor) =>
+    String(valor ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
+  const imprimirTicketVenta = (ticket) => {
+    if (!ticket) {
+      alert("No existen datos para imprimir el ticket.");
+      return;
+    }
+
+    const items = Array.isArray(ticket.detalle) ? ticket.detalle : [];
+    const institucionNombre =
+      ticket.institucion_nombre ||
+      institucionActiva?.nombre ||
+      "POS NUBE";
+
+    const alumnoNombre =
+      ticket.alumno_nombre ||
+      "Consumidor final";
+
+    const fechaVenta = ticket.created_at
+      ? new Date(ticket.created_at)
+      : new Date();
+
+    const filasProductos = items
+      .map((item) => {
+        const cantidad = Number(item.cantidad || 0);
+        const precio = Number(item.precio_unitario || 0);
+        const total = Number(item.total || cantidad * precio);
+
+        return `
+          <tr>
+            <td class="producto">
+              ${escaparHtmlTicket(item.nombre || item.producto_nombre || "Producto")}
+              <div class="cantidad">${cantidad} x $${precio.toFixed(2)}</div>
+            </td>
+            <td class="valor">$${total.toFixed(2)}</td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    const mostrarSaldo =
+      ticket.saldo_anterior !== null &&
+      ticket.saldo_anterior !== undefined;
+
+    const html = `
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Ticket #${escaparHtmlTicket(ticket.id)}</title>
+          <style>
+            @page {
+              size: 80mm auto;
+              margin: 2mm;
+            }
+
+            html, body {
+              width: 76mm;
+              margin: 0;
+              padding: 0;
+              background: #ffffff;
+              color: #000000;
+              font-family: Arial, Helvetica, sans-serif;
+              font-size: 12px;
+            }
+
+            * {
+              box-sizing: border-box;
+            }
+
+            .ticket {
+              width: 72mm;
+              margin: 0 auto;
+              padding: 2mm 1mm 8mm;
+            }
+
+            .centrado {
+              text-align: center;
+            }
+
+            .titulo {
+              font-size: 18px;
+              font-weight: 800;
+              margin-bottom: 2px;
+            }
+
+            .institucion {
+              font-size: 14px;
+              font-weight: 700;
+            }
+
+            .separador {
+              border-top: 1px dashed #000;
+              margin: 7px 0;
+            }
+
+            .datos {
+              line-height: 1.45;
+            }
+
+            table {
+              width: 100%;
+              border-collapse: collapse;
+            }
+
+            td {
+              vertical-align: top;
+              padding: 3px 0;
+            }
+
+            .producto {
+              width: 74%;
+              padding-right: 5px;
+            }
+
+            .cantidad {
+              font-size: 10px;
+            }
+
+            .valor {
+              width: 26%;
+              text-align: right;
+              white-space: nowrap;
+            }
+
+            .total {
+              font-size: 18px;
+              font-weight: 800;
+            }
+
+            .pie {
+              margin-top: 8px;
+              text-align: center;
+              line-height: 1.4;
+            }
+
+            @media print {
+              .ticket {
+                page-break-after: always;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="ticket">
+            <div class="centrado">
+              <div class="titulo">POS NUBE</div>
+              <div class="institucion">${escaparHtmlTicket(institucionNombre)}</div>
+            </div>
+
+            <div class="separador"></div>
+
+            <div class="datos">
+              <div><strong>Orden:</strong> #${escaparHtmlTicket(ticket.id)}</div>
+              <div><strong>Fecha:</strong> ${escaparHtmlTicket(
+                fechaVenta.toLocaleString("es-EC")
+              )}</div>
+              <div><strong>Cliente:</strong> ${escaparHtmlTicket(alumnoNombre)}</div>
+              ${
+                ticket.alumno_codigo
+                  ? `<div><strong>Cédula/Código:</strong> ${escaparHtmlTicket(
+                      ticket.alumno_codigo
+                    )}</div>`
+                  : ""
+              }
+              <div><strong>Cajero:</strong> ${escaparHtmlTicket(
+                usuario?.correo || usuario?.nombre || "Administrador"
+              )}</div>
+            </div>
+
+            <div class="separador"></div>
+
+            <table>
+              <tbody>
+                ${filasProductos}
+              </tbody>
+            </table>
+
+            <div class="separador"></div>
+
+            <table>
+              <tbody>
+                <tr>
+                  <td><strong>Subtotal</strong></td>
+                  <td class="valor">$${Number(ticket.subtotal || 0).toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td class="total">TOTAL</td>
+                  <td class="valor total">$${Number(ticket.total || 0).toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td><strong>Forma de pago</strong></td>
+                  <td class="valor">${escaparHtmlTicket(
+                    ticket.metodo_pago === "SALDO"
+                      ? "SALDO DEL ALUMNO"
+                      : ticket.metodo_pago || "EFECTIVO"
+                  )}</td>
+                </tr>
+                ${
+                  mostrarSaldo
+                    ? `
+                      <tr>
+                        <td><strong>Saldo anterior</strong></td>
+                        <td class="valor">$${Number(ticket.saldo_anterior || 0).toFixed(2)}</td>
+                      </tr>
+                      <tr>
+                        <td><strong>Saldo restante</strong></td>
+                        <td class="valor">$${Number(ticket.saldo_restante || 0).toFixed(2)}</td>
+                      </tr>
+                    `
+                    : ""
+                }
+              </tbody>
+            </table>
+
+            ${
+              ticket.observacion
+                ? `
+                  <div class="separador"></div>
+                  <div><strong>Observación:</strong> ${escaparHtmlTicket(
+                    ticket.observacion
+                  )}</div>
+                `
+                : ""
+            }
+
+            <div class="separador"></div>
+
+            <div class="pie">
+              Gracias por su compra
+              <br />
+              Conserve este comprobante
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("title", "Impresión de ticket");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "1px";
+    iframe.style.height = "1px";
+    iframe.style.border = "0";
+    iframe.style.opacity = "0";
+    iframe.style.pointerEvents = "none";
+
+    document.body.appendChild(iframe);
+
+    const documento = iframe.contentWindow?.document;
+
+    if (!documento || !iframe.contentWindow) {
+      document.body.removeChild(iframe);
+      alert("No se pudo abrir el servicio de impresión.");
+      return;
+    }
+
+    documento.open();
+    documento.write(html);
+    documento.close();
+
+    const ejecutarImpresion = () => {
+      try {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      } catch (error) {
+        console.error("Error imprimiendo ticket:", error);
+        alert(
+          "La venta quedó guardada, pero no se pudo iniciar la impresión. Puedes reimprimirla desde Consultar ventas."
+        );
+      } finally {
+        window.setTimeout(() => {
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+        }, 2500);
+      }
+    };
+
+    window.setTimeout(ejecutarImpresion, 450);
+  };
+
+  const obtenerTicketVenta = async (ventaId) => {
+    const token = localStorage.getItem("token");
+    const institucionId = obtenerInstitucionActivaId();
+
+    if (!token || !institucionId) {
+      throw new Error("Sesión o institución no válida");
+    }
+
+    const respuesta = await fetch(
+      `${API_URL}/api/ventas/${ventaId}/ticket?institucion_id=${institucionId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const data = await respuesta.json();
+
+    if (!respuesta.ok) {
+      throw new Error(
+        data.message ||
+          data.error ||
+          "No se pudo obtener el ticket"
+      );
+    }
+
+    return data.ticket || data;
+  };
+
+  const reimprimirTicketVenta = async (venta) => {
+    try {
+      const ticket = await obtenerTicketVenta(venta.id);
+      imprimirTicketVenta(ticket);
+    } catch (error) {
+      console.error("Error reimprimiendo ticket:", error);
+      alert(error.message || "No se pudo reimprimir el ticket.");
+    }
+  };
+
   const crearVenta = async (e) => {
   e.preventDefault();
 
@@ -2998,6 +3328,13 @@ const consultarProductosPorDia = () => {
           "Error creando venta"
       );
       return;
+    }
+
+    // Imprimir únicamente después de que el backend confirmó la venta.
+    // En el iMin Falcon 1, el navegador enviará el ticket a la impresora integrada.
+    // En otros equipos se usará el servicio de impresión disponible en el navegador.
+    if (data.ticket) {
+      imprimirTicketVenta(data.ticket);
     }
 
     // Actualizar datos
@@ -7819,6 +8156,7 @@ if (!usuario) {
                             <th style={styles.th}>Estado</th>
                             <th style={styles.th}>Forma Pago</th>
                             <th style={styles.th}>Tipo orden</th>
+                            <th style={styles.th}>Acciones</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -7837,6 +8175,25 @@ if (!usuario) {
                               </td>
                               <td style={styles.td}>{v.metodo_visual}</td>
                               <td style={styles.td}>Normal</td>
+                              <td style={styles.td}>
+                                <button
+                                  type="button"
+                                  style={{
+                                    border: "1px solid #1d4ed8",
+                                    background: "#eff6ff",
+                                    color: "#1d4ed8",
+                                    borderRadius: 7,
+                                    padding: "8px 11px",
+                                    fontWeight: 700,
+                                    cursor: "pointer",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                  onClick={() => reimprimirTicketVenta(v)}
+                                  title={`Reimprimir ticket de la orden #${v.id}`}
+                                >
+                                  🖨 Reimprimir
+                                </button>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
