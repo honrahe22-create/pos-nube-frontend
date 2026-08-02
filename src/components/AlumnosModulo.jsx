@@ -134,6 +134,59 @@ export default function AlumnosModulo({
     }
   };
 
+  const copiarTextoSeguro = async (texto, mensajeExito) => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(texto);
+        alert(mensajeExito);
+        return true;
+      }
+
+      const areaTemporal = document.createElement("textarea");
+      areaTemporal.value = texto;
+      areaTemporal.setAttribute("readonly", "");
+      areaTemporal.style.position = "fixed";
+      areaTemporal.style.opacity = "0";
+      document.body.appendChild(areaTemporal);
+      areaTemporal.select();
+
+      const copiado = document.execCommand("copy");
+      document.body.removeChild(areaTemporal);
+
+      if (copiado) {
+        alert(mensajeExito);
+        return true;
+      }
+
+      window.prompt("Copia manualmente este texto:", texto);
+      return false;
+    } catch (error) {
+      console.error("No se pudo copiar:", error);
+      window.prompt("Copia manualmente este texto:", texto);
+      return false;
+    }
+  };
+
+  const obtenerTextoAccesoCompleto = () => {
+    if (!codigoAccesoGenerado?.codigo || !alumnoDetalle) return "";
+
+    const enlace = `${window.location.origin}/?consulta=alumno`;
+    const institucionId = obtenerInstitucionActivaId();
+    const cedula = obtenerCedulaAlumno(alumnoDetalle) || "-";
+    const nombre = `${alumnoDetalle.nombres || ""} ${alumnoDetalle.apellidos || ""}`.trim();
+
+    return [
+      "ACCESO DE CONSULTA POS NUBE",
+      `Alumno: ${nombre || "Alumno"}`,
+      `Enlace: ${enlace}`,
+      `Institución: ${institucionId}`,
+      `Cédula o código: ${cedula}`,
+      `Código de acceso: ${codigoAccesoGenerado.codigo}`,
+      "",
+      "Este acceso es únicamente para consultar saldo, recargas y movimientos.",
+    ].join("\n");
+  };
+
   const exportarOrdenesAlumno = (ordenes) => {
     const filas = [["Orden", "Nombre", "Apellido", "Fecha", "Total", "Forma de pago", "Estado"], ...ordenes.map((v) => [v.id || "", alumnoDetalle?.nombres || "", alumnoDetalle?.apellidos || "", v.created_at || "", Number(v.total || 0).toFixed(2), v.metodo_pago || "", v.estado || "Pagada"])];
     const csv = filas.map((fila) => fila.map((valor) => `"${String(valor).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -336,16 +389,12 @@ export default function AlumnosModulo({
                 <button
                   type="button"
                   style={paymon.copyButton}
-                  onClick={async () => {
-                    const codigo = codigoAccesoGenerado.codigo;
-
-                    try {
-                      await navigator.clipboard.writeText(codigo);
-                      alert(`Código copiado: ${codigo}`);
-                    } catch {
-                      alert(`Código de acceso: ${codigo}`);
-                    }
-                  }}
+                  onClick={() =>
+                    copiarTextoSeguro(
+                      codigoAccesoGenerado.codigo,
+                      `Código copiado: ${codigoAccesoGenerado.codigo}`
+                    )
+                  }
                 >
                   Copiar código
                 </button>
@@ -353,19 +402,26 @@ export default function AlumnosModulo({
                 <button
                   type="button"
                   style={paymon.copyFullButton}
-                  onClick={async () => {
-                    const enlace = `${window.location.origin}/?consulta=alumno`;
-                    const texto = `Consulta de saldo: ${enlace}\nInstitución: ${obtenerInstitucionActivaId()}\nCédula: ${obtenerCedulaAlumno(alumnoDetalle)}\nCódigo: ${codigoAccesoGenerado.codigo}`;
-
-                    try {
-                      await navigator.clipboard.writeText(texto);
-                      alert("Acceso completo copiado.");
-                    } catch {
-                      alert(texto);
-                    }
-                  }}
+                  onClick={() =>
+                    copiarTextoSeguro(
+                      obtenerTextoAccesoCompleto(),
+                      "Acceso completo copiado. Ya puedes pegarlo en WhatsApp o correo."
+                    )
+                  }
                 >
                   Copiar acceso completo
+                </button>
+
+                <button
+                  type="button"
+                  style={paymon.whatsappButton}
+                  onClick={() => {
+                    const texto = obtenerTextoAccesoCompleto();
+                    const url = `https://wa.me/?text=${encodeURIComponent(texto)}`;
+                    window.open(url, "_blank", "noopener,noreferrer");
+                  }}
+                >
+                  Compartir por WhatsApp
                 </button>
               </div>
             </div>
@@ -829,6 +885,7 @@ const paymon = {
   familyButtons: { display: "flex", gap: 10, flexWrap: "wrap" },
   copyButton: { border: 0, background: "#047857", color: "#fff", borderRadius: 8, padding: "11px 17px", fontWeight: 700, cursor: "pointer" },
   copyFullButton: { border: "1px solid #047857", background: "#fff", color: "#047857", borderRadius: 8, padding: "11px 17px", fontWeight: 700, cursor: "pointer" },
+  whatsappButton: { border: 0, background: "#25D366", color: "#fff", borderRadius: 8, padding: "11px 17px", fontWeight: 700, cursor: "pointer" },
   orangeButton: { border: 0, background: "#ff8548", color: "#fff", borderRadius: 9, padding: "14px 24px", fontWeight: 700, cursor: "pointer" },
   profileGrid: { padding: "34px 6% 22px", display: "grid", gridTemplateColumns: "minmax(230px,1fr) minmax(260px,1fr) minmax(230px,.75fr)", gap: 30, alignItems: "stretch" },
   dataCardPlain: { padding: "8px 12px" }, dataCard: { padding: "24px 28px", borderRadius: 12, boxShadow: "0 6px 18px rgba(15,23,42,.12)" },
