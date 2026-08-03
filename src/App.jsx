@@ -154,6 +154,8 @@ const [ordenDetalleAlumno, setOrdenDetalleAlumno] = useState(null);
     alumno_id: "",
     monto: "",
     metodo_pago: "EFECTIVO",
+    numero_comprobante: "",
+    banco: "",
     observacion: "",
   });
 
@@ -498,9 +500,16 @@ const [egresoForm, setEgresoForm] = useState({
       ...recarga,
       alumno_nombre: nombreAlumno,
       fecha_base: recarga.created_at || recarga.fecha || null,
-      operador_nombre: usuario?.nombre || "Sistema",
-      estado_visual: "Aceptada",
-      documento_visual: recarga.id ? String(recarga.id) : "-",
+      operador_nombre:
+        recarga.usuario_nombre ||
+        recarga.usuario_correo ||
+        usuario?.nombre ||
+        usuario?.correo ||
+        "Sistema",
+      estado_visual: recarga.estado || "ACEPTADA",
+      documento_visual:
+        recarga.numero_comprobante ||
+        (recarga.metodo_pago === "TRANSFERENCIA" ? "Sin comprobante" : "-"),
       dinero_entregado: Number(recarga.monto || 0),
       dinero_recargado: Number(recarga.monto || 0),
       tipo_visual:
@@ -850,6 +859,8 @@ const totalRecargasVista = useMemo(() => {
       alumno_id: "",
       monto: "",
       metodo_pago: "EFECTIVO",
+      numero_comprobante: "",
+      banco: "",
       observacion: "",
     });
   };
@@ -865,7 +876,64 @@ const totalRecargasVista = useMemo(() => {
 };
 
 const exportarRecargasExcel = () => {
-  // tu código actual aquí (no lo toco)
+  if (!recargasFiltradas.length) {
+    alert("No hay recargas para exportar");
+    return;
+  }
+
+  try {
+    const encabezados = [
+      "Fecha y Hora",
+      "Alumno",
+      "Curso",
+      "Paralelo",
+      "Monto",
+      "Forma de pago",
+      "No. comprobante",
+      "Banco",
+      "Operador",
+      "Estado",
+      "Observación",
+    ];
+
+    const filas = recargasFiltradas.map((r) => [
+      formatearFechaHora(r.fecha_base),
+      r.alumno_nombre || "",
+      r.curso || "",
+      r.paralelo || "",
+      Number(r.monto || 0).toFixed(2),
+      r.tipo_visual || r.metodo_pago || "",
+      r.numero_comprobante || "",
+      r.banco || "",
+      r.operador_nombre || "",
+      r.estado_visual || "",
+      r.observacion || "",
+    ]);
+
+    const contenido = [encabezados, ...filas]
+      .map((fila) =>
+        fila
+          .map((valor) => `"${String(valor ?? "").replace(/"/g, '""')}"`)
+          .join(",")
+      )
+      .join("\n");
+
+    const blob = new Blob(["\ufeff" + contenido], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `recargas_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error("Error exportando recargas:", error);
+    alert("No se pudo exportar el historial de recargas.");
+  }
 };
 
 // ===== STOCK =====
@@ -2994,7 +3062,15 @@ const consultarProductosPorDia = () => {
       }
 
       if (!recargaForm.alumno_id || Number(recargaForm.monto || 0) <= 0) {
-        alert("Debes seleccionar alumno y monto válido");
+        alert("Debes seleccionar un alumno y registrar un monto válido.");
+        return;
+      }
+
+      if (
+        recargaForm.metodo_pago === "TRANSFERENCIA" &&
+        !String(recargaForm.numero_comprobante || "").trim()
+      ) {
+        alert("Debes ingresar el No. de comprobante de la transferencia.");
         return;
       }
 
@@ -3003,6 +3079,14 @@ const consultarProductosPorDia = () => {
         alumno_id: Number(recargaForm.alumno_id),
         monto: Number(recargaForm.monto || 0),
         metodo_pago: recargaForm.metodo_pago,
+        numero_comprobante:
+          recargaForm.metodo_pago === "TRANSFERENCIA"
+            ? String(recargaForm.numero_comprobante || "").trim()
+            : null,
+        banco:
+          recargaForm.metodo_pago === "TRANSFERENCIA"
+            ? String(recargaForm.banco || "").trim()
+            : null,
         observacion: recargaForm.observacion,
       };
 
@@ -6947,9 +7031,9 @@ if (!usuario) {
   <>
     <div style={styles.pageHeader}>
       <div>
-        <h1 style={styles.dashboardTitle}>Recargas en efectivo</h1>
+        <h1 style={styles.dashboardTitle}>Recargas</h1>
         <p style={styles.dashboardSubtitle}>
-          Lista de recargas realizadas
+          Registrar y consultar recargas en efectivo o transferencia
         </p>
       </div>
 
@@ -6963,6 +7047,165 @@ if (!usuario) {
         Refrescar
       </button>
     </div>
+
+    {/* NUEVA RECARGA */}
+
+    <div style={styles.box}>
+      <div style={styles.pageHeaderSmall}>
+        <div>
+          <h3 style={{ margin: 0 }}>Nueva recarga</h3>
+          <p style={{ margin: "6px 0 0", color: "#64748b" }}>
+            En transferencias, el No. de comprobante es obligatorio.
+          </p>
+        </div>
+      </div>
+
+      <form onSubmit={crearRecarga}>
+        <div style={styles.filtersGridPaymon}>
+          <div style={styles.filterField}>
+            <label style={styles.filterLabelTop}>Alumno</label>
+            <select
+              value={recargaForm.alumno_id}
+              onChange={(e) =>
+                setRecargaForm({
+                  ...recargaForm,
+                  alumno_id: e.target.value,
+                })
+              }
+              style={styles.input}
+              required
+            >
+              <option value="">Seleccionar alumno</option>
+              {alumnosActivos.map((alumno) => (
+                <option key={alumno.id} value={alumno.id}>
+                  {obtenerNombreAlumno(alumno)}
+                  {alumno.curso ? ` - ${alumno.curso}` : ""}
+                  {alumno.paralelo ? ` ${alumno.paralelo}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.filterLabelTop}>Monto</label>
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={recargaForm.monto}
+              onChange={(e) =>
+                setRecargaForm({
+                  ...recargaForm,
+                  monto: e.target.value,
+                })
+              }
+              style={styles.input}
+              placeholder="0.00"
+              required
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.filterLabelTop}>Forma de pago</label>
+            <select
+              value={recargaForm.metodo_pago}
+              onChange={(e) =>
+                setRecargaForm({
+                  ...recargaForm,
+                  metodo_pago: e.target.value,
+                  numero_comprobante:
+                    e.target.value === "TRANSFERENCIA"
+                      ? recargaForm.numero_comprobante
+                      : "",
+                  banco:
+                    e.target.value === "TRANSFERENCIA"
+                      ? recargaForm.banco
+                      : "",
+                })
+              }
+              style={styles.input}
+            >
+              <option value="EFECTIVO">Efectivo</option>
+              <option value="TRANSFERENCIA">Transferencia</option>
+            </select>
+          </div>
+
+          {recargaForm.metodo_pago === "TRANSFERENCIA" && (
+            <>
+              <div style={styles.filterField}>
+                <label style={styles.filterLabelTop}>
+                  No. comprobante *
+                </label>
+                <input
+                  type="text"
+                  value={recargaForm.numero_comprobante}
+                  onChange={(e) =>
+                    setRecargaForm({
+                      ...recargaForm,
+                      numero_comprobante: e.target.value,
+                    })
+                  }
+                  style={styles.input}
+                  placeholder="Ej. 458963214"
+                  maxLength={100}
+                  required
+                />
+              </div>
+
+              <div style={styles.filterField}>
+                <label style={styles.filterLabelTop}>Banco</label>
+                <input
+                  type="text"
+                  value={recargaForm.banco}
+                  onChange={(e) =>
+                    setRecargaForm({
+                      ...recargaForm,
+                      banco: e.target.value,
+                    })
+                  }
+                  style={styles.input}
+                  placeholder="Banco (opcional)"
+                  maxLength={150}
+                />
+              </div>
+            </>
+          )}
+
+          <div style={styles.filterField}>
+            <label style={styles.filterLabelTop}>Observación</label>
+            <input
+              type="text"
+              value={recargaForm.observacion}
+              onChange={(e) =>
+                setRecargaForm({
+                  ...recargaForm,
+                  observacion: e.target.value,
+                })
+              }
+              style={styles.input}
+              placeholder="Observación opcional"
+              maxLength={500}
+            />
+          </div>
+        </div>
+
+        <div style={styles.filterButtons}>
+          <button type="submit" style={styles.button}>
+            Registrar recarga
+          </button>
+
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={limpiarFormularioRecarga}
+          >
+            Limpiar
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <div style={{ height: 20 }} />
 
     {/* FILTROS */}
 
@@ -7097,7 +7340,9 @@ if (!usuario) {
                 <th style={styles.th}>Operador</th>
                 <th style={styles.th}>Tipo</th>
                 <th style={styles.th}>Estado</th>
-                <th style={styles.th}>Documento</th>
+                <th style={styles.th}>No. comprobante</th>
+                <th style={styles.th}>Banco</th>
+                <th style={styles.th}>Observación</th>
               </tr>
             </thead>
 
@@ -7137,6 +7382,14 @@ if (!usuario) {
 
                   <td style={styles.td}>
                     {r.documento_visual}
+                  </td>
+
+                  <td style={styles.td}>
+                    {r.banco || "-"}
+                  </td>
+
+                  <td style={styles.td}>
+                    {r.observacion || "-"}
                   </td>
 
                 </tr>
