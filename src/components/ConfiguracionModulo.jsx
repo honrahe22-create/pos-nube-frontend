@@ -1,0 +1,780 @@
+import { useEffect, useMemo, useState } from "react";
+
+const formatearFechaHora = (valor) => {
+  if (!valor) return "-";
+  const fecha = new Date(valor);
+  if (Number.isNaN(fecha.getTime())) return "-";
+  return fecha.toLocaleString("es-EC");
+};
+
+export default function ConfiguracionModulo({
+  API_URL,
+  usuario,
+  institucion,
+  institucionId,
+  onCerrarSesion,
+}) {
+  const [vistaInterna, setVistaInterna] = useState("general");
+  const [resumen, setResumen] = useState(null);
+  const [auditoria, setAuditoria] = useState([]);
+  const [cargando, setCargando] = useState(false);
+  const [descargando, setDescargando] = useState(false);
+  const [mensaje, setMensaje] = useState("");
+
+  const [impresora, setImpresora] = useState(() => {
+    const guardada = localStorage.getItem("posnube_impresora");
+    return guardada
+      ? JSON.parse(guardada)
+      : {
+          tipo: "IMIN_80",
+          ancho: "80",
+          impresion_automatica: true,
+        };
+  });
+
+  const nombreInstitucion =
+    institucion?.nombre || "Institución";
+
+  const esAdministrador = ["ADMIN", "SUPER_ADMIN"].includes(
+    String(usuario?.rol || "").toUpperCase()
+  );
+
+  const ultimoRespaldo = useMemo(() => {
+    const clave = `posnube_ultimo_respaldo_${institucionId}`;
+    return localStorage.getItem(clave);
+  }, [institucionId, descargando]);
+
+  const cargarDatos = async () => {
+    if (!institucionId) return;
+
+    try {
+      setCargando(true);
+      setMensaje("");
+
+      const token = localStorage.getItem("token");
+
+      const [respuestaResumen, respuestaAuditoria] =
+        await Promise.all([
+          fetch(
+            `${API_URL}/api/configuracion/resumen?institucion_id=${institucionId}`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          ),
+          fetch(
+            `${API_URL}/api/configuracion/auditoria?institucion_id=${institucionId}&limite=100`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          ),
+        ]);
+
+      const dataResumen = await respuestaResumen.json();
+      const dataAuditoria = await respuestaAuditoria.json();
+
+      if (!respuestaResumen.ok) {
+        throw new Error(
+          dataResumen.message ||
+            "No se pudo cargar la configuración"
+        );
+      }
+
+      setResumen(dataResumen);
+      setAuditoria(
+        respuestaAuditoria.ok && Array.isArray(dataAuditoria)
+          ? dataAuditoria
+          : []
+      );
+    } catch (error) {
+      console.error("Error cargando configuración:", error);
+      setMensaje(error.message);
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarDatos();
+  }, [institucionId]);
+
+  const descargarRespaldo = async () => {
+    try {
+      setDescargando(true);
+      setMensaje("");
+
+      const token = localStorage.getItem("token");
+
+      const respuesta = await fetch(
+        `${API_URL}/api/configuracion/respaldo?institucion_id=${institucionId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!respuesta.ok) {
+        const data = await respuesta.json();
+        throw new Error(
+          data.message || "No se pudo generar el respaldo"
+        );
+      }
+
+      const blob = await respuesta.blob();
+      const encabezado =
+        respuesta.headers.get("content-disposition") || "";
+
+      const coincidencia = encabezado.match(/filename="([^"]+)"/);
+      const nombreArchivo =
+        coincidencia?.[1] ||
+        `POSNUBE_RESPALDO_${new Date()
+          .toISOString()
+          .slice(0, 10)}.json`;
+
+      const url = window.URL.createObjectURL(blob);
+      const enlace = document.createElement("a");
+      enlace.href = url;
+      enlace.download = nombreArchivo;
+      document.body.appendChild(enlace);
+      enlace.click();
+      document.body.removeChild(enlace);
+      window.URL.revokeObjectURL(url);
+
+      const ahora = new Date().toISOString();
+      localStorage.setItem(
+        `posnube_ultimo_respaldo_${institucionId}`,
+        ahora
+      );
+
+      setMensaje(
+        "Respaldo descargado correctamente. Guárdalo también en Google Drive, OneDrive o una memoria externa."
+      );
+
+      await cargarDatos();
+    } catch (error) {
+      console.error("Error descargando respaldo:", error);
+      setMensaje(error.message);
+    } finally {
+      setDescargando(false);
+    }
+  };
+
+  const guardarImpresora = () => {
+    localStorage.setItem(
+      "posnube_impresora",
+      JSON.stringify(impresora)
+    );
+
+    setMensaje(
+      "Configuración de impresora guardada en este dispositivo."
+    );
+  };
+
+  if (!esAdministrador) {
+    return (
+      <div style={ui.card}>
+        <h2>Configuración</h2>
+        <div style={ui.error}>
+          Este módulo está disponible únicamente para administradores.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={ui.wrapper}>
+      <div style={ui.header}>
+        <div>
+          <h2 style={ui.title}>Configuración</h2>
+          <p style={ui.subtitle}>
+            Seguridad, respaldos y opciones de {nombreInstitucion}.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          style={ui.refreshButton}
+          onClick={cargarDatos}
+          disabled={cargando}
+        >
+          {cargando ? "Actualizando..." : "Actualizar"}
+        </button>
+      </div>
+
+      <div style={ui.tabs}>
+        {[
+          ["general", "General"],
+          ["seguridad", "Seguridad"],
+          ["respaldos", "Copias de seguridad"],
+          ["auditoria", "Auditoría"],
+          ["impresoras", "Impresoras"],
+        ].map(([id, texto]) => (
+          <button
+            key={id}
+            type="button"
+            style={
+              vistaInterna === id
+                ? ui.tabActive
+                : ui.tab
+            }
+            onClick={() => setVistaInterna(id)}
+          >
+            {texto}
+          </button>
+        ))}
+      </div>
+
+      {mensaje && (
+        <div
+          style={
+            mensaje.toLowerCase().includes("no se pudo")
+              ? ui.error
+              : ui.success
+          }
+        >
+          {mensaje}
+        </div>
+      )}
+
+      {vistaInterna === "general" && (
+        <div>
+          <div style={ui.metrics}>
+            <div style={ui.metric}>
+              <span style={ui.metricLabel}>Institución</span>
+              <strong style={ui.metricText}>
+                {nombreInstitucion}
+              </strong>
+            </div>
+
+            <div style={ui.metric}>
+              <span style={ui.metricLabel}>Usuario conectado</span>
+              <strong style={ui.metricText}>
+                {usuario?.correo || usuario?.nombre || "-"}
+              </strong>
+            </div>
+
+            <div style={ui.metric}>
+              <span style={ui.metricLabel}>Rol</span>
+              <strong style={ui.metricText}>
+                {usuario?.rol || "-"}
+              </strong>
+            </div>
+
+            <div style={ui.metric}>
+              <span style={ui.metricLabel}>Base de datos</span>
+              <strong style={ui.metricText}>
+                PostgreSQL en Render
+              </strong>
+            </div>
+          </div>
+
+          <div style={ui.card}>
+            <h3 style={ui.sectionTitle}>
+              Información almacenada
+            </h3>
+
+            <div style={ui.countGrid}>
+              {Object.entries(resumen?.conteos || {}).map(
+                ([nombre, cantidad]) => (
+                  <div key={nombre} style={ui.countItem}>
+                    <span style={ui.countName}>
+                      {nombre.replaceAll("_", " ")}
+                    </span>
+                    <strong style={ui.countValue}>
+                      {Number(cantidad || 0)}
+                    </strong>
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {vistaInterna === "seguridad" && (
+        <div style={ui.grid}>
+          <div style={ui.card}>
+            <h3 style={ui.sectionTitle}>
+              Protecciones activas
+            </h3>
+
+            <div style={ui.securityList}>
+              <div>✓ Contraseñas protegidas con bcrypt</div>
+              <div>✓ Sesiones mediante JWT</div>
+              <div>✓ Consultas SQL parametrizadas</div>
+              <div>✓ Separación de datos por institución</div>
+              <div>✓ Conexión HTTPS mediante Render</div>
+              <div>✓ Acceso de respaldos solo para administradores</div>
+            </div>
+          </div>
+
+          <div style={ui.card}>
+            <h3 style={ui.sectionTitle}>
+              Sesión actual
+            </h3>
+
+            <p style={ui.paragraph}>
+              Usuario: <strong>{usuario?.correo}</strong>
+            </p>
+            <p style={ui.paragraph}>
+              Institución: <strong>{nombreInstitucion}</strong>
+            </p>
+            <p style={ui.paragraph}>
+              No compartas la contraseña del administrador con cajeros.
+            </p>
+
+            <button
+              type="button"
+              style={ui.dangerButton}
+              onClick={onCerrarSesion}
+            >
+              Cerrar sesión en este equipo
+            </button>
+          </div>
+
+          <div style={ui.notice}>
+            <strong>Recomendación:</strong> usa una contraseña distinta
+            para cada institución, de al menos 10 caracteres, y cambia
+            las claves cuando un empleado deje de trabajar.
+          </div>
+        </div>
+      )}
+
+      {vistaInterna === "respaldos" && (
+        <div style={ui.grid}>
+          <div style={ui.card}>
+            <h3 style={ui.sectionTitle}>
+              Respaldo completo de la institución
+            </h3>
+
+            <p style={ui.paragraph}>
+              Descarga alumnos, profesores, productos, ventas,
+              detalles de ventas, recargas, inventario, usuarios sin
+              contraseñas y auditoría.
+            </p>
+
+            <div style={ui.backupInfo}>
+              <span>Último respaldo descargado</span>
+              <strong>
+                {ultimoRespaldo
+                  ? formatearFechaHora(ultimoRespaldo)
+                  : "Todavía no se ha descargado"}
+              </strong>
+            </div>
+
+            <button
+              type="button"
+              style={ui.primaryButton}
+              onClick={descargarRespaldo}
+              disabled={descargando}
+            >
+              {descargando
+                ? "Generando respaldo..."
+                : "Descargar respaldo ahora"}
+            </button>
+          </div>
+
+          <div style={ui.card}>
+            <h3 style={ui.sectionTitle}>
+              Dónde guardar la copia
+            </h3>
+
+            <div style={ui.securityList}>
+              <div>1. Descárgala desde este módulo.</div>
+              <div>2. Guarda una copia en Google Drive o OneDrive.</div>
+              <div>3. Conserva otra copia en una memoria externa.</div>
+              <div>4. Realiza al menos un respaldo cada semana.</div>
+            </div>
+
+            <div style={ui.warning}>
+              La restauración automática todavía no está habilitada
+              para evitar que una carga equivocada elimine información.
+              El archivo descargado permite recuperar los datos de forma
+              controlada desde PostgreSQL.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {vistaInterna === "auditoria" && (
+        <div style={ui.card}>
+          <div style={ui.header}>
+            <div>
+              <h3 style={ui.sectionTitle}>Historial de auditoría</h3>
+              <p style={ui.subtitle}>
+                Registra respaldos y acciones administrativas.
+              </p>
+            </div>
+          </div>
+
+          <div style={ui.tableWrap}>
+            <table style={ui.table}>
+              <thead>
+                <tr>
+                  <th style={ui.th}>Fecha</th>
+                  <th style={ui.th}>Usuario</th>
+                  <th style={ui.th}>Acción</th>
+                  <th style={ui.th}>Detalle</th>
+                  <th style={ui.th}>IP</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!auditoria.length ? (
+                  <tr>
+                    <td colSpan="5" style={ui.empty}>
+                      Todavía no hay acciones registradas.
+                    </td>
+                  </tr>
+                ) : (
+                  auditoria.map((item) => (
+                    <tr key={item.id}>
+                      <td style={ui.td}>
+                        {formatearFechaHora(item.created_at)}
+                      </td>
+                      <td style={ui.td}>
+                        {item.usuario_correo ||
+                          item.usuario_nombre ||
+                          "Sistema"}
+                      </td>
+                      <td style={ui.td}>
+                        <span style={ui.badge}>
+                          {item.accion}
+                        </span>
+                      </td>
+                      <td style={ui.td}>
+                        {item.detalle || "-"}
+                      </td>
+                      <td style={ui.td}>
+                        {item.ip || "-"}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {vistaInterna === "impresoras" && (
+        <div style={ui.card}>
+          <h3 style={ui.sectionTitle}>
+            Configuración de impresión
+          </h3>
+
+          <div style={ui.formGrid}>
+            <label style={ui.label}>
+              Tipo de dispositivo
+              <select
+                style={ui.input}
+                value={impresora.tipo}
+                onChange={(e) =>
+                  setImpresora({
+                    ...impresora,
+                    tipo: e.target.value,
+                  })
+                }
+              >
+                <option value="IMIN_80">
+                  iMin Falcon 1 integrada
+                </option>
+                <option value="TERMICA_WINDOWS">
+                  Impresora térmica instalada en Windows
+                </option>
+                <option value="NAVEGADOR">
+                  Cualquier impresora del navegador
+                </option>
+              </select>
+            </label>
+
+            <label style={ui.label}>
+              Ancho del papel
+              <select
+                style={ui.input}
+                value={impresora.ancho}
+                onChange={(e) =>
+                  setImpresora({
+                    ...impresora,
+                    ancho: e.target.value,
+                  })
+                }
+              >
+                <option value="80">80 mm</option>
+                <option value="58">58 mm</option>
+              </select>
+            </label>
+
+            <label style={ui.checkRow}>
+              <input
+                type="checkbox"
+                checked={impresora.impresion_automatica}
+                onChange={(e) =>
+                  setImpresora({
+                    ...impresora,
+                    impresion_automatica: e.target.checked,
+                  })
+                }
+              />
+              Imprimir automáticamente después de guardar una venta
+            </label>
+          </div>
+
+          <button
+            type="button"
+            style={ui.primaryButton}
+            onClick={guardarImpresora}
+          >
+            Guardar configuración de impresora
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const ui = {
+  wrapper: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 18,
+  },
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 16,
+    flexWrap: "wrap",
+  },
+  title: {
+    margin: 0,
+    color: "#1726a8",
+  },
+  subtitle: {
+    margin: "5px 0 0",
+    color: "#64748b",
+  },
+  tabs: {
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
+    background: "#ffffff",
+    borderRadius: 12,
+    padding: 10,
+  },
+  tab: {
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#334155",
+    borderRadius: 8,
+    padding: "10px 14px",
+    cursor: "pointer",
+    fontWeight: 700,
+  },
+  tabActive: {
+    border: "1px solid #1726a8",
+    background: "#1726a8",
+    color: "#ffffff",
+    borderRadius: 8,
+    padding: "10px 14px",
+    cursor: "pointer",
+    fontWeight: 700,
+  },
+  metrics: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+    gap: 14,
+    marginBottom: 18,
+  },
+  metric: {
+    background: "#ffffff",
+    borderRadius: 12,
+    padding: 18,
+    border: "1px solid #e2e8f0",
+  },
+  metricLabel: {
+    display: "block",
+    color: "#64748b",
+    marginBottom: 8,
+    fontSize: 13,
+  },
+  metricText: {
+    color: "#1726a8",
+    overflowWrap: "anywhere",
+  },
+  card: {
+    background: "#ffffff",
+    borderRadius: 13,
+    padding: 22,
+    border: "1px solid #e2e8f0",
+  },
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+    gap: 18,
+  },
+  sectionTitle: {
+    margin: "0 0 14px",
+    color: "#0f172a",
+  },
+  countGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+    gap: 12,
+  },
+  countItem: {
+    background: "#eff6ff",
+    borderRadius: 10,
+    padding: 14,
+  },
+  countName: {
+    display: "block",
+    color: "#475569",
+    textTransform: "capitalize",
+    marginBottom: 5,
+  },
+  countValue: {
+    color: "#1726a8",
+    fontSize: 24,
+  },
+  securityList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 11,
+    color: "#334155",
+    lineHeight: 1.45,
+  },
+  paragraph: {
+    color: "#475569",
+    lineHeight: 1.5,
+  },
+  notice: {
+    gridColumn: "1 / -1",
+    background: "#eff6ff",
+    border: "1px solid #bfdbfe",
+    color: "#1e40af",
+    borderRadius: 10,
+    padding: 16,
+  },
+  warning: {
+    marginTop: 16,
+    background: "#fff7ed",
+    border: "1px solid #fed7aa",
+    color: "#9a3412",
+    borderRadius: 9,
+    padding: 13,
+    lineHeight: 1.45,
+  },
+  backupInfo: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 5,
+    margin: "18px 0",
+    padding: 14,
+    background: "#f8fafc",
+    borderRadius: 9,
+  },
+  primaryButton: {
+    border: 0,
+    background: "#1726a8",
+    color: "#ffffff",
+    borderRadius: 8,
+    padding: "12px 17px",
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+  refreshButton: {
+    border: "1px solid #1726a8",
+    background: "#ffffff",
+    color: "#1726a8",
+    borderRadius: 8,
+    padding: "10px 14px",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  dangerButton: {
+    border: 0,
+    background: "#dc2626",
+    color: "#ffffff",
+    borderRadius: 8,
+    padding: "11px 15px",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  success: {
+    background: "#dcfce7",
+    border: "1px solid #86efac",
+    color: "#166534",
+    borderRadius: 9,
+    padding: 13,
+  },
+  error: {
+    background: "#fee2e2",
+    border: "1px solid #fecaca",
+    color: "#991b1b",
+    borderRadius: 9,
+    padding: 13,
+  },
+  tableWrap: {
+    overflowX: "auto",
+  },
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+  },
+  th: {
+    padding: "12px 10px",
+    textAlign: "left",
+    background: "#e8efff",
+    color: "#1726a8",
+    whiteSpace: "nowrap",
+  },
+  td: {
+    padding: "12px 10px",
+    borderBottom: "1px solid #e2e8f0",
+    verticalAlign: "top",
+  },
+  empty: {
+    textAlign: "center",
+    padding: 28,
+    color: "#64748b",
+  },
+  badge: {
+    display: "inline-block",
+    background: "#dbeafe",
+    color: "#1e40af",
+    borderRadius: 999,
+    padding: "4px 8px",
+    fontSize: 12,
+    fontWeight: 700,
+  },
+  formGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+    gap: 16,
+    marginBottom: 18,
+  },
+  label: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 7,
+    fontWeight: 700,
+    color: "#334155",
+  },
+  input: {
+    border: "1px solid #cbd5e1",
+    borderRadius: 8,
+    padding: "11px 12px",
+    background: "#ffffff",
+  },
+  checkRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    color: "#334155",
+    fontWeight: 700,
+  },
+};

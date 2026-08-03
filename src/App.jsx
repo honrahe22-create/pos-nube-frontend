@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import AlumnosModulo from "./components/AlumnosModulo";
 import ConsultaAlumnoPublica from "./components/ConsultaAlumnoPublica";
+import ConfiguracionModulo from "./components/ConfiguracionModulo";
 
 const API_URL = "https://pos-nube-backend.onrender.com";
 
@@ -4019,6 +4020,13 @@ if (!usuario) {
       texto: "Productos por día",
       activo: vista === "reporte_productos_dia",
       accion: () => setVista("reporte_productos_dia"),
+    },
+    {
+      id: "configuracion",
+      icono: "⚙",
+      texto: "Configuración",
+      activo: vista === "configuracion",
+      accion: () => setVista("configuracion"),
     },
   ].map((opcion) => (
     <button
@@ -8421,6 +8429,17 @@ if (!usuario) {
     </div>
   );
 }
+
+{vista === "configuracion" && (
+  <ConfiguracionModulo
+    API_URL={API_URL}
+    usuario={usuario}
+    institucion={institucionActiva}
+    institucionId={institucionActivaId}
+    onCerrarSesion={cerrarSesion}
+  />
+)}
+
 
 const styles = {
   page: {
