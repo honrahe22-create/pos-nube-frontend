@@ -1499,6 +1499,102 @@ const exportarVentasExcel = () => {
     );
   };
 
+  const handleCambiarAcceso = async (e) => {
+    e.preventDefault();
+    setMensajeCambiarAcceso("");
+    setCargandoCambiarAcceso(true);
+
+    const institucionId = Number(cambiarAccesoForm.institucion_id);
+    const correoActual = String(cambiarAccesoForm.correo_actual || "").trim();
+    const passwordActual = String(cambiarAccesoForm.password_actual || "");
+    const nuevoCorreo = String(cambiarAccesoForm.nuevo_correo || "").trim();
+    const nuevaPassword = String(cambiarAccesoForm.nueva_password || "");
+    const confirmarPassword = String(
+      cambiarAccesoForm.confirmar_password || ""
+    );
+
+    if (!institucionId) {
+      setMensajeCambiarAcceso("Debes seleccionar una institución");
+      setCargandoCambiarAcceso(false);
+      return;
+    }
+
+    if (
+      !correoActual ||
+      !passwordActual ||
+      !nuevoCorreo ||
+      !nuevaPassword ||
+      !confirmarPassword
+    ) {
+      setMensajeCambiarAcceso("Todos los campos son obligatorios");
+      setCargandoCambiarAcceso(false);
+      return;
+    }
+
+    if (nuevaPassword !== confirmarPassword) {
+      setMensajeCambiarAcceso(
+        "La confirmación de contraseña no coincide"
+      );
+      setCargandoCambiarAcceso(false);
+      return;
+    }
+
+    if (nuevaPassword.length < 6) {
+      setMensajeCambiarAcceso(
+        "La nueva contraseña debe tener al menos 6 caracteres"
+      );
+      setCargandoCambiarAcceso(false);
+      return;
+    }
+
+    try {
+      const respuesta = await fetch(`${API_URL}/api/auth/cambiar-acceso`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          institucion_id: institucionId,
+          correo_actual: correoActual,
+          password_actual: passwordActual,
+          nuevo_correo: nuevoCorreo,
+          nueva_password: nuevaPassword,
+          confirmar_password: confirmarPassword,
+        }),
+      });
+
+      const data = await respuesta.json();
+
+      if (!respuesta.ok) {
+        setMensajeCambiarAcceso(
+          data.message || data.error || "No se pudo cambiar el acceso"
+        );
+        return;
+      }
+
+      setMensajeCambiarAcceso("Acceso actualizado correctamente");
+
+      setCambiarAccesoForm({
+        institucion_id: "",
+        correo_actual: "",
+        password_actual: "",
+        nuevo_correo: "",
+        nueva_password: "",
+        confirmar_password: "",
+      });
+
+      window.setTimeout(() => {
+        setMostrarCambiarAcceso(false);
+        setMensajeCambiarAcceso("");
+      }, 1200);
+    } catch (error) {
+      console.error("Error cambiando acceso:", error);
+      setMensajeCambiarAcceso("No se pudo conectar con el servidor");
+    } finally {
+      setCargandoCambiarAcceso(false);
+    }
+  };
+
   const handleCrearCuenta = async (e) => {
     e.preventDefault();
     setMensajeCrearCuenta("");
