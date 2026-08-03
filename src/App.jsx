@@ -8425,21 +8425,21 @@ if (!usuario) {
           </>
         )}
 
+
+        {vista === "configuracion" && (
+          <ConfiguracionModulo
+            API_URL={API_URL}
+            usuario={usuario}
+            institucion={institucionActiva}
+            institucionId={institucionActivaId}
+            onCerrarSesion={cerrarSesion}
+          />
+        )}
+
               </main>
     </div>
   );
 }
-
-{vista === "configuracion" && (
-  <ConfiguracionModulo
-    API_URL={API_URL}
-    usuario={usuario}
-    institucion={institucionActiva}
-    institucionId={institucionActivaId}
-    onCerrarSesion={cerrarSesion}
-  />
-)}
-
 
 const styles = {
   page: {
