@@ -632,6 +632,20 @@ const totalRecargasVista = useMemo(() => {
         alumno_nombre: nombreAlumno,
         metodo_visual: metodoVisual,
         fecha_base: venta.created_at || venta.fecha || null,
+        items: Array.isArray(venta.items)
+          ? venta.items
+          : Array.isArray(venta.detalles)
+          ? venta.detalles
+          : [],
+        operador_visual:
+          venta.operador ||
+          venta.operador_nombre ||
+          venta.operador_correo ||
+          "Sistema",
+        ubicacion_visual:
+          venta.ubicacion_visual ||
+          venta.ubicacion ||
+          "PRINCIPAL",
       };
     });
   }, [ventas, alumnos]);
@@ -2448,116 +2462,210 @@ if (institucionIdLogin) {
     }
   };
 
+  const obtenerVentasParaReporteProductos = (filtros) => {
+    let lista = [...ventasEnriquecidas];
+
+    if (filtros.fecha_inicio) {
+      lista = lista.filter((venta) => {
+        const fecha = formatearFechaInput(venta.fecha_base);
+        return fecha && fecha >= filtros.fecha_inicio;
+      });
+    }
+
+    if (filtros.fecha_fin) {
+      lista = lista.filter((venta) => {
+        const fecha = formatearFechaInput(venta.fecha_base);
+        return fecha && fecha <= filtros.fecha_fin;
+      });
+    }
+
+    if (filtros.operador) {
+      lista = lista.filter(
+        (venta) =>
+          String(venta.operador_visual || "") ===
+          String(filtros.operador)
+      );
+    }
+
+    if (filtros.ubicacion) {
+      lista = lista.filter(
+        (venta) =>
+          String(venta.ubicacion_visual || "PRINCIPAL") ===
+          String(filtros.ubicacion)
+      );
+    }
+
+    return lista;
+  };
+
+  const construirResumenProductosVendidos = (listaVentas) => {
+    const mapa = {};
+
+    listaVentas.forEach((venta) => {
+      const items = Array.isArray(venta.items) ? venta.items : [];
+
+      items.forEach((item) => {
+        const productoId =
+          item.producto_id ||
+          item.id ||
+          item.codigo ||
+          item.nombre ||
+          "producto";
+
+        const clave = String(productoId);
+        const nombre =
+          item.producto_nombre ||
+          item.nombre ||
+          item.descripcion ||
+          "Producto";
+
+        if (!mapa[clave]) {
+          mapa[clave] = {
+            id: clave,
+            producto_id: item.producto_id || item.id || null,
+            nombre,
+            codigo:
+              item.codigo ||
+              item.producto_codigo ||
+              item.producto_id ||
+              "-",
+            categoria: item.categoria || "-",
+            descripcion:
+              item.descripcion ||
+              item.producto_nombre ||
+              item.nombre ||
+              "-",
+            cantidad: 0,
+            total: 0,
+          };
+        }
+
+        mapa[clave].cantidad += Number(item.cantidad || 0);
+        mapa[clave].total += Number(
+          item.total ||
+            Number(item.cantidad || 0) *
+              Number(item.precio_unitario || item.precio || 0)
+        );
+      });
+    });
+
+    return Object.values(mapa);
+  };
+
   const consultarProductos = () => {
-  let lista = [...ventasEnriquecidas];
+    const ventasFiltradasReporte =
+      obtenerVentasParaReporteProductos(productosFiltros);
 
-  if (productosFiltros.fecha_inicio) {
-    lista = lista.filter((venta) => {
-      const fecha = formatearFechaInput(venta.fecha_base);
-      return fecha && fecha >= productosFiltros.fecha_inicio;
-    });
-  }
+    const vendidos =
+      construirResumenProductosVendidos(ventasFiltradasReporte);
 
-  if (productosFiltros.fecha_fin) {
-    lista = lista.filter((venta) => {
-      const fecha = formatearFechaInput(venta.fecha_base);
-      return fecha && fecha <= productosFiltros.fecha_fin;
-    });
-  }
+    if (productosFiltros.comprado === "NO") {
+      const idsVendidos = new Set(
+        vendidos.map((item) => String(item.producto_id || item.id))
+      );
 
-  const mapa = {};
-
-  lista.forEach((venta) => {
-    const items = Array.isArray(venta.items)
-      ? venta.items
-      : Array.isArray(venta.detalles)
-      ? venta.detalles
-      : [];
-
-    items.forEach((item) => {
-      const nombre =
-        item.producto_nombre ||
-        item.nombre ||
-        item.descripcion ||
-        "Producto";
-
-      const codigo =
-        item.producto_id ||
-        item.codigo ||
-        "-";
-
-      const categoria =
-        item.categoria ||
-        "-";
-
-      const descripcion =
-        item.descripcion ||
-        item.producto_nombre ||
-        item.nombre ||
-        "-";
-
-      if (!mapa[nombre]) {
-        mapa[nombre] = {
-          id: `${nombre}-${codigo}`,
-          nombre,
-          codigo,
-          categoria,
-          descripcion,
+      const noVendidos = productosActivos
+        .filter(
+          (producto) =>
+            !idsVendidos.has(String(producto.id))
+        )
+        .map((producto) => ({
+          id: `no-vendido-${producto.id}`,
+          producto_id: producto.id,
+          nombre: producto.nombre || "Producto",
+          codigo: producto.codigo || producto.id || "-",
+          categoria: producto.categoria || "-",
+          descripcion: producto.descripcion || "-",
           cantidad: 0,
           total: 0,
-        };
-      }
+        }));
 
-      mapa[nombre].cantidad += Number(item.cantidad || 0);
-      mapa[nombre].total += Number(item.total || 0);
+      setProductosVendidos(noVendidos);
+      return;
+    }
+
+    setProductosVendidos(vendidos);
+  };
+
+  const consultarProductosPorDia = () => {
+    const ventasFiltradasReporte =
+      obtenerVentasParaReporteProductos({
+        ...productosPorDiaFiltros,
+        operador: "",
+      });
+
+    const mapa = {};
+
+    ventasFiltradasReporte.forEach((venta) => {
+      const items = Array.isArray(venta.items) ? venta.items : [];
+      const fecha = venta.fecha_base
+        ? new Date(venta.fecha_base)
+        : null;
+      const dia =
+        fecha && !Number.isNaN(fecha.getTime())
+          ? fecha.getDay()
+          : null;
+
+      items.forEach((item) => {
+        const productoId =
+          item.producto_id ||
+          item.id ||
+          item.nombre ||
+          "producto";
+        const clave = String(productoId);
+        const nombre =
+          item.producto_nombre ||
+          item.nombre ||
+          item.descripcion ||
+          "Producto";
+
+        if (!mapa[clave]) {
+          mapa[clave] = {
+            id: clave,
+            producto_id: item.producto_id || item.id || null,
+            producto: nombre,
+            categoria: item.categoria || "-",
+            domingo: 0,
+            lunes: 0,
+            martes: 0,
+            miercoles: 0,
+            jueves: 0,
+            viernes: 0,
+            sabado: 0,
+          };
+        }
+
+        const cantidad = Number(item.cantidad || 0);
+
+        if (dia === 0) mapa[clave].domingo += cantidad;
+        if (dia === 1) mapa[clave].lunes += cantidad;
+        if (dia === 2) mapa[clave].martes += cantidad;
+        if (dia === 3) mapa[clave].miercoles += cantidad;
+        if (dia === 4) mapa[clave].jueves += cantidad;
+        if (dia === 5) mapa[clave].viernes += cantidad;
+        if (dia === 6) mapa[clave].sabado += cantidad;
+      });
     });
-  });
 
-  setProductosVendidos(Object.values(mapa));
-};
+    let resultado = Object.values(mapa);
 
-const consultarProductosPorDia = () => {
-  let lista = [...ventasEnriquecidas];
+    if (productosPorDiaFiltros.comprado === "NO") {
+      const idsVendidos = new Set(
+        resultado.map((item) =>
+          String(item.producto_id || item.id)
+        )
+      );
 
-  if (productosPorDiaFiltros.fecha_inicio) {
-    lista = lista.filter((venta) => {
-      const fecha = formatearFechaInput(venta.fecha_base);
-      return fecha && fecha >= productosPorDiaFiltros.fecha_inicio;
-    });
-  }
-
-  if (productosPorDiaFiltros.fecha_fin) {
-    lista = lista.filter((venta) => {
-      const fecha = formatearFechaInput(venta.fecha_base);
-      return fecha && fecha <= productosPorDiaFiltros.fecha_fin;
-    });
-  }
-
-  const mapa = {};
-
-  lista.forEach((venta) => {
-    const items = Array.isArray(venta.items)
-      ? venta.items
-      : Array.isArray(venta.detalles)
-      ? venta.detalles
-      : [];
-
-    items.forEach((item) => {
-      const nombre =
-        item.producto_nombre ||
-        item.nombre ||
-        item.descripcion ||
-        "Producto";
-
-      const categoria = item.categoria || "-";
-
-      const fecha = venta.fecha_base ? new Date(venta.fecha_base) : null;
-      const dia = fecha && !Number.isNaN(fecha.getTime()) ? fecha.getDay() : null;
-
-      if (!mapa[nombre]) {
-        mapa[nombre] = {
-          producto: nombre,
-          categoria,
+      resultado = productosActivos
+        .filter(
+          (producto) =>
+            !idsVendidos.has(String(producto.id))
+        )
+        .map((producto) => ({
+          id: `no-vendido-${producto.id}`,
+          producto_id: producto.id,
+          producto: producto.nombre || "Producto",
+          categoria: producto.categoria || "-",
           domingo: 0,
           lunes: 0,
           martes: 0,
@@ -2565,23 +2673,96 @@ const consultarProductosPorDia = () => {
           jueves: 0,
           viernes: 0,
           sabado: 0,
-        };
-      }
+        }));
+    }
 
-      const cantidad = Number(item.cantidad || 0);
+    setProductosVendidosPorDia(resultado);
+  };
 
-      if (dia === 0) mapa[nombre].domingo += cantidad;
-      if (dia === 1) mapa[nombre].lunes += cantidad;
-      if (dia === 2) mapa[nombre].martes += cantidad;
-      if (dia === 3) mapa[nombre].miercoles += cantidad;
-      if (dia === 4) mapa[nombre].jueves += cantidad;
-      if (dia === 5) mapa[nombre].viernes += cantidad;
-      if (dia === 6) mapa[nombre].sabado += cantidad;
+  const descargarCsv = (nombreArchivo, encabezados, filas) => {
+    if (!filas.length) {
+      alert("No hay información para exportar.");
+      return;
+    }
+
+    const contenido = [encabezados, ...filas]
+      .map((fila) =>
+        fila
+          .map((valor) =>
+            `"${String(valor ?? "").replace(/"/g, '""')}"`
+          )
+          .join(",")
+      )
+      .join("\n");
+
+    const blob = new Blob(["\ufeff" + contenido], {
+      type: "text/csv;charset=utf-8;",
     });
-  });
 
-  setProductosVendidosPorDia(Object.values(mapa));
-};
+    const url = window.URL.createObjectURL(blob);
+    const enlace = document.createElement("a");
+    enlace.href = url;
+    enlace.download = nombreArchivo;
+    document.body.appendChild(enlace);
+    enlace.click();
+    document.body.removeChild(enlace);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const exportarProductosVendidos = () => {
+    descargarCsv(
+      `productos_vendidos_${new Date()
+        .toISOString()
+        .slice(0, 10)}.csv`,
+      [
+        "Nombre",
+        "Código",
+        "Categoría",
+        "Descripción",
+        "Cantidad",
+        "Total de ventas",
+      ],
+      productosVendidos.map((producto) => [
+        producto.nombre || "",
+        producto.codigo || "",
+        producto.categoria || "",
+        producto.descripcion || "",
+        Number(producto.cantidad || 0),
+        Number(producto.total || 0).toFixed(2),
+      ])
+    );
+  };
+
+  const exportarProductosVendidosPorDia = () => {
+    descargarCsv(
+      `productos_vendidos_por_dia_${new Date()
+        .toISOString()
+        .slice(0, 10)}.csv`,
+      [
+        "Producto",
+        "Categoría",
+        "Domingo",
+        "Lunes",
+        "Martes",
+        "Miércoles",
+        "Jueves",
+        "Viernes",
+        "Sábado",
+      ],
+      productosVendidosPorDia.map((producto) => [
+        producto.producto || "",
+        producto.categoria || "",
+        Number(producto.domingo || 0),
+        Number(producto.lunes || 0),
+        Number(producto.martes || 0),
+        Number(producto.miercoles || 0),
+        Number(producto.jueves || 0),
+        Number(producto.viernes || 0),
+        Number(producto.sabado || 0),
+      ])
+    );
+  };
+
     const crearProducto = async (e) => {
     e.preventDefault();
 
@@ -3767,8 +3948,20 @@ const consultarProductosPorDia = () => {
     cargarCuentasBancarias();
   }
 
-  if (vista === "ventas" || vista === "reportes") {
+  if (
+    vista === "ventas" ||
+    vista === "reportes" ||
+    vista === "reporte_productos" ||
+    vista === "reporte_productos_dia"
+  ) {
     cargarVentas();
+  }
+
+  if (
+    vista === "reporte_productos" ||
+    vista === "reporte_productos_dia"
+  ) {
+    cargarProductos();
   }
 
   // 🔵 abrir menú comidas
@@ -4747,7 +4940,18 @@ if (!usuario) {
           }
           style={styles.input}
         >
-          <option value="">Seleccionar</option>
+          <option value="">Todos</option>
+          {Array.from(
+            new Set(
+              ventasEnriquecidas.map(
+                (venta) => venta.operador_visual || "Sistema"
+              )
+            )
+          ).map((operador) => (
+            <option key={operador} value={operador}>
+              {operador}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -4763,7 +4967,8 @@ if (!usuario) {
           }
           style={styles.input}
         >
-          <option value="">Seleccionar</option>
+          <option value="">Todas</option>
+          <option value="PRINCIPAL">PRINCIPAL</option>
         </select>
       </div>
 
@@ -4779,7 +4984,9 @@ if (!usuario) {
           }
           style={styles.input}
         >
-          <option value="">Seleccionar</option>
+          <option value="">Todos</option>
+          <option value="SI">Sí</option>
+          <option value="NO">No</option>
         </select>
       </div>
     </div>
@@ -4823,7 +5030,10 @@ if (!usuario) {
         style={styles.searchInput}
       />
 
-      <button style={styles.exportButton}>
+      <button
+        style={styles.exportButton}
+        onClick={exportarProductosVendidos}
+      >
         EXPORTAR
       </button>
     </div>
@@ -5258,7 +5468,8 @@ if (!usuario) {
           }
           style={styles.input}
         >
-          <option value="">Seleccionar</option>
+          <option value="">Todas</option>
+          <option value="PRINCIPAL">PRINCIPAL</option>
         </select>
       </div>
 
@@ -5274,7 +5485,9 @@ if (!usuario) {
           }
           style={styles.input}
         >
-          <option value="">Seleccionar</option>
+          <option value="">Todos</option>
+          <option value="SI">Sí</option>
+          <option value="NO">No</option>
         </select>
       </div>
     </div>
@@ -5295,7 +5508,10 @@ if (!usuario) {
         Borrar filtros
       </button>
 
-      <button style={styles.exportButton}>
+      <button
+        style={styles.exportButton}
+        onClick={exportarProductosVendidosPorDia}
+      >
         EXPORTAR
       </button>
 
