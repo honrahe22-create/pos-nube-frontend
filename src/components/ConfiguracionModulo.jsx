@@ -20,6 +20,15 @@ export default function ConfiguracionModulo({
   const [cargando, setCargando] = useState(false);
   const [descargando, setDescargando] = useState(false);
   const [mensaje, setMensaje] = useState("");
+  const [cuentasBancarias, setCuentasBancarias] = useState([]);
+  const [cuentaForm, setCuentaForm] = useState({
+    banco: "",
+    tipo_cuenta: "Ahorros",
+    numero_cuenta: "",
+    titular: "",
+    identificacion: "",
+  });
+  const [guardandoCuenta, setGuardandoCuenta] = useState(false);
 
   const [impresora, setImpresora] = useState(() => {
     const guardada = localStorage.getItem("posnube_impresora");
@@ -43,6 +52,22 @@ export default function ConfiguracionModulo({
     const clave = `posnube_ultimo_respaldo_${institucionId}`;
     return localStorage.getItem(clave);
   }, [institucionId, descargando]);
+
+  const cargarCuentasBancarias = async () => {
+    if (!institucionId) return;
+    try {
+      const token = localStorage.getItem("token");
+      const respuesta = await fetch(
+        `${API_URL}/api/configuracion/cuentas-bancarias?institucion_id=${institucionId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await respuesta.json();
+      setCuentasBancarias(respuesta.ok && Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Error cargando cuentas bancarias:", error);
+      setCuentasBancarias([]);
+    }
+  };
 
   const cargarDatos = async () => {
     if (!institucionId) return;
@@ -89,6 +114,7 @@ export default function ConfiguracionModulo({
           ? dataAuditoria
           : []
       );
+      await cargarCuentasBancarias();
     } catch (error) {
       console.error("Error cargando configuración:", error);
       setMensaje(error.message);
@@ -174,6 +200,48 @@ export default function ConfiguracionModulo({
     );
   };
 
+  const guardarCuentaBancaria = async (e) => {
+    e.preventDefault();
+    if (!cuentaForm.banco.trim() || !cuentaForm.numero_cuenta.trim()) {
+      setMensaje("Banco y número de cuenta son obligatorios.");
+      return;
+    }
+    try {
+      setGuardandoCuenta(true);
+      const token = localStorage.getItem("token");
+      const respuesta = await fetch(`${API_URL}/api/configuracion/cuentas-bancarias`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ institucion_id: Number(institucionId), ...cuentaForm }),
+      });
+      const data = await respuesta.json();
+      if (!respuesta.ok) throw new Error(data.message || "No se pudo registrar la cuenta");
+      setCuentaForm({ banco: "", tipo_cuenta: "Ahorros", numero_cuenta: "", titular: "", identificacion: "" });
+      setMensaje("Cuenta bancaria registrada correctamente.");
+      await cargarCuentasBancarias();
+    } catch (error) {
+      setMensaje(error.message);
+    } finally {
+      setGuardandoCuenta(false);
+    }
+  };
+
+  const cambiarEstadoCuenta = async (cuenta) => {
+    try {
+      const token = localStorage.getItem("token");
+      const respuesta = await fetch(`${API_URL}/api/configuracion/cuentas-bancarias/${cuenta.id}/estado`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ institucion_id: Number(institucionId), activo: cuenta.activo === false }),
+      });
+      const data = await respuesta.json();
+      if (!respuesta.ok) throw new Error(data.message || "No se pudo actualizar la cuenta");
+      await cargarCuentasBancarias();
+    } catch (error) {
+      setMensaje(error.message);
+    }
+  };
+
   if (!esAdministrador) {
     return (
       <div style={ui.card}>
@@ -212,6 +280,7 @@ export default function ConfiguracionModulo({
           ["respaldos", "Copias de seguridad"],
           ["auditoria", "Auditoría"],
           ["impresoras", "Impresoras"],
+          ["bancos", "Cuentas bancarias"],
         ].map(([id, texto]) => (
           <button
             key={id}
@@ -456,6 +525,58 @@ export default function ConfiguracionModulo({
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {vistaInterna === "bancos" && (
+        <div style={ui.grid}>
+          <div style={ui.card}>
+            <h3 style={ui.sectionTitle}>Nueva cuenta bancaria</h3>
+            <p style={ui.paragraph}>
+              Estas cuentas aparecerán en las recargas por transferencia de esta institución.
+            </p>
+            <form onSubmit={guardarCuentaBancaria} style={ui.formGrid}>
+              <label style={ui.label}>Banco *
+                <input style={ui.input} value={cuentaForm.banco} onChange={(e) => setCuentaForm({ ...cuentaForm, banco: e.target.value })} placeholder="Banco Pichincha" required />
+              </label>
+              <label style={ui.label}>Tipo de cuenta
+                <select style={ui.input} value={cuentaForm.tipo_cuenta} onChange={(e) => setCuentaForm({ ...cuentaForm, tipo_cuenta: e.target.value })}>
+                  <option>Ahorros</option><option>Corriente</option><option>Otra</option>
+                </select>
+              </label>
+              <label style={ui.label}>Número de cuenta *
+                <input style={ui.input} value={cuentaForm.numero_cuenta} onChange={(e) => setCuentaForm({ ...cuentaForm, numero_cuenta: e.target.value })} required />
+              </label>
+              <label style={ui.label}>Titular
+                <input style={ui.input} value={cuentaForm.titular} onChange={(e) => setCuentaForm({ ...cuentaForm, titular: e.target.value })} />
+              </label>
+              <label style={ui.label}>RUC / Identificación
+                <input style={ui.input} value={cuentaForm.identificacion} onChange={(e) => setCuentaForm({ ...cuentaForm, identificacion: e.target.value })} />
+              </label>
+              <button type="submit" style={ui.primaryButton} disabled={guardandoCuenta}>
+                {guardandoCuenta ? "Guardando..." : "Guardar cuenta bancaria"}
+              </button>
+            </form>
+          </div>
+
+          <div style={ui.card}>
+            <h3 style={ui.sectionTitle}>Cuentas registradas</h3>
+            {!cuentasBancarias.length ? (
+              <p style={ui.paragraph}>Todavía no existen cuentas bancarias registradas.</p>
+            ) : (
+              <div style={ui.tableWrap}>
+                <table style={ui.table}>
+                  <thead><tr><th style={ui.th}>Banco</th><th style={ui.th}>Tipo</th><th style={ui.th}>Cuenta</th><th style={ui.th}>Titular</th><th style={ui.th}>Estado</th><th style={ui.th}>Acción</th></tr></thead>
+                  <tbody>{cuentasBancarias.map((cuenta) => (
+                    <tr key={cuenta.id}>
+                      <td style={ui.td}>{cuenta.banco}</td><td style={ui.td}>{cuenta.tipo_cuenta || "-"}</td><td style={ui.td}>{cuenta.numero_cuenta}</td><td style={ui.td}>{cuenta.titular || "-"}</td><td style={ui.td}>{cuenta.activo === false ? "Inactiva" : "Activa"}</td>
+                      <td style={ui.td}><button type="button" style={cuenta.activo === false ? ui.primaryButton : ui.dangerButton} onClick={() => cambiarEstadoCuenta(cuenta)}>{cuenta.activo === false ? "Activar" : "Desactivar"}</button></td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}

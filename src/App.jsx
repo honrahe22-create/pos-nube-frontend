@@ -156,6 +156,7 @@ const [ordenDetalleAlumno, setOrdenDetalleAlumno] = useState(null);
     metodo_pago: "EFECTIVO",
     numero_comprobante: "",
     banco: "",
+    cuenta_bancaria_id: "",
     observacion: "",
   });
 
@@ -168,6 +169,7 @@ const [recargasFiltros, setRecargasFiltros] = useState({
   alumno_id: "",
   texto: "",
 });
+const [cuentasBancarias, setCuentasBancarias] = useState([]);
 
   const [ventas, setVentas] = useState([]);
   const [ventaForm, setVentaForm] = useState({
@@ -861,6 +863,7 @@ const totalRecargasVista = useMemo(() => {
       metodo_pago: "EFECTIVO",
       numero_comprobante: "",
       banco: "",
+      cuenta_bancaria_id: "",
       observacion: "",
     });
   };
@@ -2388,6 +2391,36 @@ if (institucionIdLogin) {
     }
   };
 
+  const cargarCuentasBancarias = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      if (!token || !institucionId) {
+        setCuentasBancarias([]);
+        return;
+      }
+
+      const res = await fetch(
+        `${API_URL}/api/configuracion/cuentas-bancarias?institucion_id=${institucionId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await res.json();
+
+      setCuentasBancarias(
+        res.ok && Array.isArray(data) ? data : []
+      );
+    } catch (error) {
+      console.error("Error cargando cuentas bancarias:", error);
+      setCuentasBancarias([]);
+    }
+  };
+
   const cargarVentas = async () => {
     try {
       const token = localStorage.getItem("token");
@@ -3066,12 +3099,16 @@ const consultarProductosPorDia = () => {
         return;
       }
 
-      if (
-        recargaForm.metodo_pago === "TRANSFERENCIA" &&
-        !String(recargaForm.numero_comprobante || "").trim()
-      ) {
-        alert("Debes ingresar el No. de comprobante de la transferencia.");
-        return;
+      if (recargaForm.metodo_pago === "TRANSFERENCIA") {
+        if (!String(recargaForm.banco || "").trim()) {
+          alert("Debes seleccionar la cuenta bancaria receptora.");
+          return;
+        }
+
+        if (!String(recargaForm.numero_comprobante || "").trim()) {
+          alert("Debes ingresar el No. de comprobante de la transferencia.");
+          return;
+        }
       }
 
       const payload = {
@@ -3086,6 +3123,11 @@ const consultarProductosPorDia = () => {
         banco:
           recargaForm.metodo_pago === "TRANSFERENCIA"
             ? String(recargaForm.banco || "").trim()
+            : null,
+        cuenta_bancaria_id:
+          recargaForm.metodo_pago === "TRANSFERENCIA" &&
+          recargaForm.cuenta_bancaria_id
+            ? Number(recargaForm.cuenta_bancaria_id)
             : null,
         observacion: recargaForm.observacion,
       };
@@ -3629,6 +3671,7 @@ const consultarProductosPorDia = () => {
       cargarAlumnos();
       cargarProfesores();
       cargarRecargas();
+      cargarCuentasBancarias();
       cargarVentas();
     }
   }, [usuario, institucionSeleccionadaId]);
@@ -3654,6 +3697,7 @@ const consultarProductosPorDia = () => {
 
   if (vista === "recargas" || vista === "reportes") {
     cargarRecargas();
+    cargarCuentasBancarias();
   }
 
   if (vista === "ventas" || vista === "reportes") {
@@ -4169,7 +4213,7 @@ if (!usuario) {
     {
       id: "recargas",
       icono: "$",
-      texto: "Recargas en efectivo",
+      texto: "Recargas",
       activo: vista === "recargas",
       accion: () => setVista("recargas"),
     },
@@ -4439,6 +4483,7 @@ if (!usuario) {
           />
         </div>
 
+        {false && (
         <div style={styles.filterField}>
           <label style={styles.filterLabelTop}>Fecha final</label>
           <input
@@ -5846,6 +5891,8 @@ if (!usuario) {
     setHistorialVentasAlumno={setHistorialVentasAlumno}
     setHistorialRecargasAlumno={setHistorialRecargasAlumno}
     setHistorialConsumoAlumno={setHistorialConsumoAlumno}
+    cuentasBancarias={cuentasBancarias}
+    cargarRecargas={cargarRecargas}
     descargarPlantillaAlumnos={descargarPlantillaAlumnos}
     importarAlumnosArchivo={importarAlumnosArchivo}
     inputImportarAlumnosRef={inputImportarAlumnosRef}
@@ -7033,18 +7080,19 @@ if (!usuario) {
       <div>
         <h1 style={styles.dashboardTitle}>Recargas</h1>
         <p style={styles.dashboardSubtitle}>
-          Registrar y consultar recargas en efectivo o transferencia
+          Acredita saldo al alumno mediante efectivo o transferencia
         </p>
       </div>
 
       <button
         style={styles.refreshButton}
-        onClick={() => {
-          cargarRecargas();
-          cargarAlumnos();
+        onClick={async () => {
+          await cargarRecargas();
+          await cargarAlumnos();
+          await cargarCuentasBancarias();
         }}
       >
-        Refrescar
+        Actualizar
       </button>
     </div>
 
@@ -7053,9 +7101,9 @@ if (!usuario) {
     <div style={styles.box}>
       <div style={styles.pageHeaderSmall}>
         <div>
-          <h3 style={{ margin: 0 }}>Nueva recarga</h3>
+          <h3 style={{ margin: 0 }}>Realizar recarga</h3>
           <p style={{ margin: "6px 0 0", color: "#64748b" }}>
-            En transferencias, el No. de comprobante es obligatorio.
+            El valor se acredita inmediatamente. En transferencia selecciona la cuenta receptora y registra el comprobante.
           </p>
         </div>
       </div>
@@ -7063,7 +7111,7 @@ if (!usuario) {
       <form onSubmit={crearRecarga}>
         <div style={styles.filtersGridPaymon}>
           <div style={styles.filterField}>
-            <label style={styles.filterLabelTop}>Alumno</label>
+            <label style={styles.filterLabelTop}>Alumno *</label>
             <select
               value={recargaForm.alumno_id}
               onChange={(e) =>
@@ -7087,7 +7135,7 @@ if (!usuario) {
           </div>
 
           <div style={styles.filterField}>
-            <label style={styles.filterLabelTop}>Monto</label>
+            <label style={styles.filterLabelTop}>Valor a recargar *</label>
             <input
               type="number"
               min="0.01"
@@ -7106,21 +7154,16 @@ if (!usuario) {
           </div>
 
           <div style={styles.filterField}>
-            <label style={styles.filterLabelTop}>Forma de pago</label>
+            <label style={styles.filterLabelTop}>Método de recarga</label>
             <select
               value={recargaForm.metodo_pago}
               onChange={(e) =>
                 setRecargaForm({
                   ...recargaForm,
                   metodo_pago: e.target.value,
-                  numero_comprobante:
-                    e.target.value === "TRANSFERENCIA"
-                      ? recargaForm.numero_comprobante
-                      : "",
-                  banco:
-                    e.target.value === "TRANSFERENCIA"
-                      ? recargaForm.banco
-                      : "",
+                  numero_comprobante: "",
+                  banco: "",
+                  cuenta_bancaria_id: "",
                 })
               }
               style={styles.input}
@@ -7153,20 +7196,50 @@ if (!usuario) {
               </div>
 
               <div style={styles.filterField}>
-                <label style={styles.filterLabelTop}>Banco</label>
-                <input
-                  type="text"
-                  value={recargaForm.banco}
-                  onChange={(e) =>
+                <label style={styles.filterLabelTop}>
+                  Cuenta bancaria receptora *
+                </label>
+
+                <select
+                  value={recargaForm.cuenta_bancaria_id || ""}
+                  onChange={(e) => {
+                    const cuenta = cuentasBancarias.find(
+                      (item) =>
+                        String(item.id) === String(e.target.value)
+                    );
+
                     setRecargaForm({
                       ...recargaForm,
-                      banco: e.target.value,
-                    })
-                  }
+                      cuenta_bancaria_id: e.target.value,
+                      banco: cuenta
+                        ? `${cuenta.banco} - ${
+                            cuenta.tipo_cuenta || "Cuenta"
+                          } #${cuenta.numero_cuenta}`
+                        : "",
+                    });
+                  }}
                   style={styles.input}
-                  placeholder="Banco (opcional)"
-                  maxLength={150}
-                />
+                  required
+                >
+                  <option value="">Seleccionar cuenta</option>
+
+                  {cuentasBancarias
+                    .filter((cuenta) => cuenta.activo !== false)
+                    .map((cuenta) => (
+                      <option key={cuenta.id} value={cuenta.id}>
+                        {cuenta.banco} -{" "}
+                        {cuenta.tipo_cuenta || "Cuenta"} #
+                        {cuenta.numero_cuenta}
+                      </option>
+                    ))}
+                </select>
+
+                {!cuentasBancarias.length && (
+                  <small style={{ color: "#b45309" }}>
+                    Registra primero una cuenta en Configuración →
+                    Cuentas bancarias.
+                  </small>
+                )}
               </div>
             </>
           )}
@@ -7203,6 +7276,20 @@ if (!usuario) {
           </button>
         </div>
       </form>
+
+      <div
+        style={{
+          marginTop: 18,
+          padding: 14,
+          borderRadius: 9,
+          background: "#eff6ff",
+          color: "#1e3a8a",
+        }}
+      >
+        <strong>Detalle:</strong> en efectivo se acredita el valor
+        directamente. En transferencia, selecciona la cuenta bancaria
+        del colegio y registra el número de comprobante.
+      </div>
     </div>
 
     <div style={{ height: 20 }} />
@@ -7241,7 +7328,9 @@ if (!usuario) {
             style={styles.input}
           />
         </div>
+        )}
 
+        {false && (
         <div style={styles.filterField}>
           <label style={styles.filterLabelTop}>Forma de pago</label>
           <select
@@ -7259,9 +7348,11 @@ if (!usuario) {
             <option value="TRANSFERENCIA">Transferencia</option>
           </select>
         </div>
+        )}
 
       </div>
 
+      {false && (
       <div style={styles.filterButtons}>
         <button
           type="button"
@@ -7279,6 +7370,7 @@ if (!usuario) {
           Borrar filtros
         </button>
       </div>
+      )}
     </div>
 
     <div style={{ height: 20 }} />

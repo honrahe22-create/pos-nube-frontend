@@ -41,7 +41,9 @@ export default function AlumnosModulo({
   obtenerInstitucionActivaId,
   setHistorialVentasAlumno,
   setHistorialRecargasAlumno,
-  setHistorialConsumoAlumno
+  setHistorialConsumoAlumno,
+  cuentasBancarias = [],
+  cargarRecargas
 }) {
   const [busquedaHistorial, setBusquedaHistorial] = useState("");
   const [mostrarFiltroAlumnos, setMostrarFiltroAlumnos] = useState(false);
@@ -51,6 +53,16 @@ export default function AlumnosModulo({
   const [codigoAccesoGenerado, setCodigoAccesoGenerado] = useState(null);
   const [generandoCodigoAcceso, setGenerandoCodigoAcceso] = useState(false);
   const [mostrarFormularioAlumno, setMostrarFormularioAlumno] = useState(false);
+  const [mostrarModalRecarga, setMostrarModalRecarga] = useState(false);
+  const [guardandoRecarga, setGuardandoRecarga] = useState(false);
+  const [recargaAlumnoForm, setRecargaAlumnoForm] = useState({
+    monto: "",
+    metodo_pago: "EFECTIVO",
+    cuenta_bancaria_id: "",
+    banco: "",
+    numero_comprobante: "",
+    observacion: "",
+  });
 
   const normalizarEncabezado = (valor) =>
     String(valor || "")
@@ -363,8 +375,210 @@ export default function AlumnosModulo({
     URL.revokeObjectURL(url);
   };
 
+  const cerrarModalRecarga = () => {
+    setMostrarModalRecarga(false);
+    setRecargaAlumnoForm({
+      monto: "",
+      metodo_pago: "EFECTIVO",
+      cuenta_bancaria_id: "",
+      banco: "",
+      numero_comprobante: "",
+      observacion: "",
+    });
+  };
+
+  const realizarRecargaAlumno = async (evento) => {
+    evento.preventDefault();
+    if (!alumnoDetalle?.id) return;
+
+    const monto = Number(recargaAlumnoForm.monto || 0);
+    if (!Number.isFinite(monto) || monto <= 0) {
+      alert("Ingresa un valor válido para la recarga.");
+      return;
+    }
+
+    if (recargaAlumnoForm.metodo_pago === "TRANSFERENCIA") {
+      if (!recargaAlumnoForm.cuenta_bancaria_id || !recargaAlumnoForm.banco) {
+        alert("Selecciona la cuenta bancaria receptora.");
+        return;
+      }
+      if (!String(recargaAlumnoForm.numero_comprobante || "").trim()) {
+        alert("Ingresa el número de comprobante de la transferencia.");
+        return;
+      }
+    }
+
+    try {
+      setGuardandoRecarga(true);
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+      const respuesta = await fetch(`${API_URL}/api/recargas`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          institucion_id: Number(institucionId),
+          alumno_id: Number(alumnoDetalle.id),
+          monto,
+          metodo_pago: recargaAlumnoForm.metodo_pago,
+          cuenta_bancaria_id:
+            recargaAlumnoForm.metodo_pago === "TRANSFERENCIA"
+              ? Number(recargaAlumnoForm.cuenta_bancaria_id)
+              : null,
+          banco:
+            recargaAlumnoForm.metodo_pago === "TRANSFERENCIA"
+              ? recargaAlumnoForm.banco
+              : null,
+          numero_comprobante:
+            recargaAlumnoForm.metodo_pago === "TRANSFERENCIA"
+              ? String(recargaAlumnoForm.numero_comprobante).trim()
+              : null,
+          observacion: recargaAlumnoForm.observacion,
+        }),
+      });
+
+      const data = await respuesta.json();
+      if (!respuesta.ok) {
+        alert(data.message || data.error || "No se pudo realizar la recarga.");
+        return;
+      }
+
+      setAlumnoDetalle(data.alumno || {
+        ...alumnoDetalle,
+        saldo: Number(alumnoDetalle.saldo || 0) + monto,
+      });
+      await cargarAlumnos();
+      if (typeof cargarRecargas === "function") await cargarRecargas();
+
+      setHistorialRecargasAlumno((actual) => [
+        {
+          ...(data.recarga || {}),
+          monto,
+          metodo_pago: recargaAlumnoForm.metodo_pago,
+          created_at: data.recarga?.created_at || new Date().toISOString(),
+        },
+        ...actual,
+      ]);
+
+      cerrarModalRecarga();
+      alert("Recarga realizada correctamente. El saldo fue acreditado inmediatamente.");
+    } catch (error) {
+      console.error("Error realizando recarga:", error);
+      alert("No se pudo realizar la recarga.");
+    } finally {
+      setGuardandoRecarga(false);
+    }
+  };
+
   return (
   <>
+    {mostrarModalRecarga && alumnoDetalle && (
+      <div style={paymon.modalOverlay}>
+        <div style={paymon.rechargeModal}>
+          <div style={paymon.modalHeader}>
+            <div>
+              <h3 style={{ margin: 0 }}>Recarga de saldo</h3>
+              <small>{`${alumnoDetalle.nombres || ""} ${alumnoDetalle.apellidos || ""}`.trim()}</small>
+            </div>
+            <button type="button" style={paymon.modalClose} onClick={cerrarModalRecarga}>×</button>
+          </div>
+
+          <form onSubmit={realizarRecargaAlumno}>
+            <label style={paymon.modalLabel}>Valor a recargar *</label>
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={recargaAlumnoForm.monto}
+              onChange={(e) => setRecargaAlumnoForm({ ...recargaAlumnoForm, monto: e.target.value })}
+              style={paymon.modalInput}
+              placeholder="0.00"
+              autoFocus
+              required
+            />
+
+            <label style={paymon.transferToggleRow}>
+              <span>¿Es transferencia?</span>
+              <input
+                type="checkbox"
+                checked={recargaAlumnoForm.metodo_pago === "TRANSFERENCIA"}
+                onChange={(e) => setRecargaAlumnoForm({
+                  ...recargaAlumnoForm,
+                  metodo_pago: e.target.checked ? "TRANSFERENCIA" : "EFECTIVO",
+                  cuenta_bancaria_id: "",
+                  banco: "",
+                  numero_comprobante: "",
+                })}
+              />
+            </label>
+
+            {recargaAlumnoForm.metodo_pago === "TRANSFERENCIA" && (
+              <>
+                <label style={paymon.modalLabel}>Cuenta bancaria receptora *</label>
+                <select
+                  value={recargaAlumnoForm.cuenta_bancaria_id}
+                  onChange={(e) => {
+                    const cuenta = cuentasBancarias.find((c) => String(c.id) === String(e.target.value));
+                    setRecargaAlumnoForm({
+                      ...recargaAlumnoForm,
+                      cuenta_bancaria_id: e.target.value,
+                      banco: cuenta
+                        ? `${cuenta.banco} - ${cuenta.tipo_cuenta || "Cuenta"} #${cuenta.numero_cuenta}`
+                        : "",
+                    });
+                  }}
+                  style={paymon.modalInput}
+                  required
+                >
+                  <option value="">Seleccionar cuenta</option>
+                  {cuentasBancarias.filter((c) => c.activo !== false).map((cuenta) => (
+                    <option key={cuenta.id} value={cuenta.id}>
+                      {cuenta.banco} - {cuenta.tipo_cuenta || "Cuenta"} #{cuenta.numero_cuenta}
+                    </option>
+                  ))}
+                </select>
+
+                {!cuentasBancarias.length && (
+                  <div style={paymon.modalWarning}>
+                    No hay cuentas configuradas. Regístralas en Configuración → Cuentas bancarias.
+                  </div>
+                )}
+
+                <label style={paymon.modalLabel}>Número de comprobante *</label>
+                <input
+                  type="text"
+                  value={recargaAlumnoForm.numero_comprobante}
+                  onChange={(e) => setRecargaAlumnoForm({ ...recargaAlumnoForm, numero_comprobante: e.target.value })}
+                  style={paymon.modalInput}
+                  placeholder="Número de documento"
+                  required
+                />
+              </>
+            )}
+
+            <label style={paymon.modalLabel}>Observación</label>
+            <input
+              type="text"
+              value={recargaAlumnoForm.observacion}
+              onChange={(e) => setRecargaAlumnoForm({ ...recargaAlumnoForm, observacion: e.target.value })}
+              style={paymon.modalInput}
+              placeholder="Observación opcional"
+            />
+
+            <button type="submit" style={paymon.modalSubmit} disabled={guardandoRecarga}>
+              {guardandoRecarga ? "Procesando..." : "Realizar recarga"}
+            </button>
+
+            <p style={paymon.modalNote}>
+              La recarga se acreditará inmediatamente al saldo del alumno.
+            </p>
+          </form>
+        </div>
+      </div>
+    )}
+
     <div style={styles.pageHeader}>
       <div>
         <h1 style={styles.dashboardTitle}>Alumnos</h1>
@@ -640,12 +854,9 @@ export default function AlumnosModulo({
               <button
                 type="button"
                 style={paymon.rechargeButton}
-                onClick={() => {
-                  setVista("recargas");
-                  setRecargaForm((prev) => ({ ...prev, alumno_id: alumnoDetalle.id }));
-                }}
+                onClick={() => setMostrarModalRecarga(true)}
               >
-                Recargar efectivo
+                Recargar
               </button>
             </div>
           </div>
@@ -1167,4 +1378,15 @@ const paymon = {
   historyPanel: { margin: "0 5% 40px", padding: "28px 0" }, summaryRow: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 20, flexWrap: "wrap" }, summaryCard: { display: "grid", gridTemplateColumns: "1fr 1fr", borderRadius: 10, boxShadow: "0 5px 16px rgba(15,23,42,.12)", overflow: "hidden", minWidth: 420 }, summaryCell: { padding: "20px 30px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, borderRight: "1px solid #e5e7eb" }, paidValue: { fontSize: 36, color: "#062c4c" }, pendingValue: { fontSize: 36, color: "#2fc48d" },
   tableCard: { marginTop: 34, padding: 28, borderRadius: 12, boxShadow: "0 8px 22px rgba(15,23,42,.12)" }, tableToolbar: { display: "flex", justifyContent: "space-between", gap: 16, marginBottom: 22, flexWrap: "wrap" }, searchInput: { width: 270, maxWidth: "100%", padding: "14px 16px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 16 }, exportButton: { border: "1px solid #10b981", color: "#059669", background: "#fff", borderRadius: 8, padding: "12px 20px", cursor: "pointer", fontWeight: 700 },
   tableWrap: { overflowX: "auto" }, table: { width: "100%", borderCollapse: "collapse", minWidth: 880 }, th: { background: "#dceafe", color: "#10167d", padding: "16px 12px", textAlign: "left", whiteSpace: "nowrap" }, td: { padding: "14px 12px", borderBottom: "1px solid #e5e7eb", whiteSpace: "nowrap" }, emptyCell: { textAlign: "center", padding: 26, fontSize: 18 }, statusPill: { background: "#dcfce7", color: "#166534", padding: "6px 10px", borderRadius: 999, fontWeight: 700 }, viewButton: { border: 0, background: "#2428b8", color: "#fff", padding: "8px 12px", borderRadius: 6, cursor: "pointer" }, orderDetail: { marginTop: 22, padding: 20, border: "1px solid #e5e7eb", borderRadius: 10 }, detailHeader: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" },
+  modalOverlay: { position: "fixed", inset: 0, background: "rgba(15,23,42,.62)", display: "grid", placeItems: "center", padding: 18, zIndex: 9999 },
+  rechargeModal: { width: "min(620px, 96vw)", maxHeight: "92vh", overflowY: "auto", background: "#fff", borderRadius: 14, padding: 26, boxShadow: "0 24px 80px rgba(0,0,0,.28)" },
+  modalHeader: { display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", marginBottom: 18 },
+  modalClose: { border: 0, background: "transparent", fontSize: 30, color: "#64748b", cursor: "pointer", lineHeight: 1 },
+  modalLabel: { display: "block", color: "#334155", fontWeight: 700, margin: "12px 0 6px" },
+  modalInput: { width: "100%", boxSizing: "border-box", border: "1px solid #cbd5e1", borderRadius: 8, padding: "12px 13px", fontSize: 16, background: "#fff" },
+  transferToggleRow: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, margin: "18px 0 8px", color: "#475569", fontWeight: 700 },
+  modalWarning: { marginTop: 8, padding: 10, borderRadius: 8, background: "#fff7ed", color: "#9a3412", fontSize: 13 },
+  modalSubmit: { display: "block", margin: "20px auto 0", border: 0, background: "#2428b8", color: "#fff", borderRadius: 8, padding: "12px 24px", fontWeight: 800, cursor: "pointer" },
+  modalNote: { margin: "18px 0 0", textAlign: "center", color: "#475569", fontSize: 13, lineHeight: 1.45 },
+
 };
