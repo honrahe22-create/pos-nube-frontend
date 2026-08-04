@@ -4483,7 +4483,6 @@ if (!usuario) {
           />
         </div>
 
-        {false && (
         <div style={styles.filterField}>
           <label style={styles.filterLabelTop}>Fecha final</label>
           <input
@@ -7314,6 +7313,7 @@ if (!usuario) {
           />
         </div>
 
+        {false && (
         <div style={styles.filterField}>
           <label style={styles.filterLabelTop}>Fecha final</label>
           <input
