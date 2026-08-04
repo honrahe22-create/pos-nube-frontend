@@ -3173,6 +3173,51 @@ const consultarProductosPorDia = () => {
       return;
     }
 
+    // Cuando POS NUBE está abierto dentro de la aplicación Android del iMin,
+    // el ticket se envía directamente a la impresora térmica integrada.
+    // En computadoras y navegadores normales se conserva la impresión web.
+    try {
+      if (
+        window.AndroidPrinter &&
+        typeof window.AndroidPrinter.printTicket === "function"
+      ) {
+        const respuestaNativa = window.AndroidPrinter.printTicket(
+          JSON.stringify(ticket)
+        );
+
+        let resultadoNativo = null;
+
+        try {
+          resultadoNativo =
+            typeof respuestaNativa === "string"
+              ? JSON.parse(respuestaNativa)
+              : respuestaNativa;
+        } catch {
+          resultadoNativo = {
+            aceptado: respuestaNativa !== false,
+          };
+        }
+
+        if (resultadoNativo?.aceptado !== false) {
+          console.log(
+            "Ticket enviado a la impresora iMin:",
+            resultadoNativo
+          );
+          return;
+        }
+
+        console.warn(
+          "La impresión nativa no fue aceptada. Se utilizará el navegador.",
+          resultadoNativo
+        );
+      }
+    } catch (error) {
+      console.error(
+        "Error enviando el ticket a la aplicación iMin:",
+        error
+      );
+    }
+
     const items = Array.isArray(ticket.detalle) ? ticket.detalle : [];
     const institucionNombre =
       ticket.institucion_nombre ||
