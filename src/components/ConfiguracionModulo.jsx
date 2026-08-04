@@ -232,6 +232,10 @@ export default function ConfiguracionModulo({
       setCuentaForm({ banco: "" });
       setMensaje("Banco registrado correctamente.");
       await cargarCuentasBancarias();
+
+      window.dispatchEvent(
+        new CustomEvent("posnube:bancos-actualizados")
+      );
     } catch (error) {
       setMensaje(error.message);
     } finally {
@@ -248,8 +252,17 @@ export default function ConfiguracionModulo({
         body: JSON.stringify({ institucion_id: Number(institucionId), activo: cuenta.activo === false }),
       });
       const data = await respuesta.json();
-      if (!respuesta.ok) throw new Error(data.message || "No se pudo actualizar la cuenta");
+      if (!respuesta.ok) {
+        throw new Error(
+          data.message || "No se pudo actualizar el banco"
+        );
+      }
+
       await cargarCuentasBancarias();
+
+      window.dispatchEvent(
+        new CustomEvent("posnube:bancos-actualizados")
+      );
     } catch (error) {
       setMensaje(error.message);
     }

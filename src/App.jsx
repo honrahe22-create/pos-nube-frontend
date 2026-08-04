@@ -3665,6 +3665,24 @@ const consultarProductosPorDia = () => {
   }, [usuario]);
 
   useEffect(() => {
+    const actualizarBancos = () => {
+      cargarCuentasBancarias();
+    };
+
+    window.addEventListener(
+      "posnube:bancos-actualizados",
+      actualizarBancos
+    );
+
+    return () => {
+      window.removeEventListener(
+        "posnube:bancos-actualizados",
+        actualizarBancos
+      );
+    };
+  }, [usuario, institucionSeleccionadaId]);
+
+  useEffect(() => {
     if (usuario) {
       cargarResumen();
       cargarProductos();
@@ -3685,6 +3703,10 @@ const consultarProductosPorDia = () => {
 
   if (vista === "alumnos" || vista === "recargas" || vista === "ventas") {
     cargarAlumnos();
+
+    if (vista === "alumnos") {
+      cargarCuentasBancarias();
+    }
   }
 
   if (vista === "profesores") {
@@ -5891,6 +5913,7 @@ if (!usuario) {
     setHistorialRecargasAlumno={setHistorialRecargasAlumno}
     setHistorialConsumoAlumno={setHistorialConsumoAlumno}
     cuentasBancarias={cuentasBancarias}
+    cargarCuentasBancarias={cargarCuentasBancarias}
     cargarRecargas={cargarRecargas}
     descargarPlantillaAlumnos={descargarPlantillaAlumnos}
     importarAlumnosArchivo={importarAlumnosArchivo}
@@ -7220,7 +7243,7 @@ if (!usuario) {
                   style={styles.input}
                   required
                 >
-                  <option value="">Seleccionar cuenta</option>
+                  <option value="">Seleccionar banco</option>
 
                   {cuentasBancarias
                     .filter((cuenta) => cuenta.activo !== false)

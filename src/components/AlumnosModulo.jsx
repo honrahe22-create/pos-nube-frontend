@@ -43,6 +43,7 @@ export default function AlumnosModulo({
   setHistorialRecargasAlumno,
   setHistorialConsumoAlumno,
   cuentasBancarias = [],
+  cargarCuentasBancarias,
   cargarRecargas
 }) {
   const [busquedaHistorial, setBusquedaHistorial] = useState("");
@@ -530,7 +531,7 @@ export default function AlumnosModulo({
                   style={paymon.modalInput}
                   required
                 >
-                  <option value="">Seleccionar cuenta</option>
+                  <option value="">Seleccionar banco</option>
                   {cuentasBancarias.filter((c) => c.activo !== false).map((cuenta) => (
                     <option key={cuenta.id} value={cuenta.id}>
                       {cuenta.banco}
@@ -852,7 +853,13 @@ export default function AlumnosModulo({
               <button
                 type="button"
                 style={paymon.rechargeButton}
-                onClick={() => setMostrarModalRecarga(true)}
+                onClick={async () => {
+                  if (typeof cargarCuentasBancarias === "function") {
+                    await cargarCuentasBancarias();
+                  }
+
+                  setMostrarModalRecarga(true);
+                }}
               >
                 Recargar
               </button>
