@@ -516,7 +516,7 @@ export default function AlumnosModulo({
 
             {recargaAlumnoForm.metodo_pago === "TRANSFERENCIA" && (
               <>
-                <label style={paymon.modalLabel}>Cuenta bancaria receptora *</label>
+                <label style={paymon.modalLabel}>Banco donde realizó la transferencia *</label>
                 <select
                   value={recargaAlumnoForm.cuenta_bancaria_id}
                   onChange={(e) => {
@@ -524,9 +524,7 @@ export default function AlumnosModulo({
                     setRecargaAlumnoForm({
                       ...recargaAlumnoForm,
                       cuenta_bancaria_id: e.target.value,
-                      banco: cuenta
-                        ? `${cuenta.banco} - ${cuenta.tipo_cuenta || "Cuenta"} #${cuenta.numero_cuenta}`
-                        : "",
+                      banco: cuenta ? cuenta.banco : "",
                     });
                   }}
                   style={paymon.modalInput}
@@ -535,14 +533,14 @@ export default function AlumnosModulo({
                   <option value="">Seleccionar cuenta</option>
                   {cuentasBancarias.filter((c) => c.activo !== false).map((cuenta) => (
                     <option key={cuenta.id} value={cuenta.id}>
-                      {cuenta.banco} - {cuenta.tipo_cuenta || "Cuenta"} #{cuenta.numero_cuenta}
+                      {cuenta.banco}
                     </option>
                   ))}
                 </select>
 
                 {!cuentasBancarias.length && (
                   <div style={paymon.modalWarning}>
-                    No hay cuentas configuradas. Regístralas en Configuración → Cuentas bancarias.
+                    No hay bancos configurados. Regístralos en Configuración → Bancos.
                   </div>
                 )}
 

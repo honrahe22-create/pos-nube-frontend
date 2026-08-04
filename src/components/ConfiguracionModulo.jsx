@@ -23,10 +23,6 @@ export default function ConfiguracionModulo({
   const [cuentasBancarias, setCuentasBancarias] = useState([]);
   const [cuentaForm, setCuentaForm] = useState({
     banco: "",
-    tipo_cuenta: "Ahorros",
-    numero_cuenta: "",
-    titular: "",
-    identificacion: "",
   });
   const [guardandoCuenta, setGuardandoCuenta] = useState(false);
 
@@ -202,22 +198,39 @@ export default function ConfiguracionModulo({
 
   const guardarCuentaBancaria = async (e) => {
     e.preventDefault();
-    if (!cuentaForm.banco.trim() || !cuentaForm.numero_cuenta.trim()) {
-      setMensaje("Banco y número de cuenta son obligatorios.");
+
+    if (!cuentaForm.banco.trim()) {
+      setMensaje("Debes ingresar el nombre del banco.");
       return;
     }
+
     try {
       setGuardandoCuenta(true);
       const token = localStorage.getItem("token");
-      const respuesta = await fetch(`${API_URL}/api/configuracion/cuentas-bancarias`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ institucion_id: Number(institucionId), ...cuentaForm }),
-      });
+
+      const respuesta = await fetch(
+        `${API_URL}/api/configuracion/cuentas-bancarias`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            institucion_id: Number(institucionId),
+            banco: cuentaForm.banco.trim(),
+          }),
+        }
+      );
+
       const data = await respuesta.json();
-      if (!respuesta.ok) throw new Error(data.message || "No se pudo registrar la cuenta");
-      setCuentaForm({ banco: "", tipo_cuenta: "Ahorros", numero_cuenta: "", titular: "", identificacion: "" });
-      setMensaje("Cuenta bancaria registrada correctamente.");
+
+      if (!respuesta.ok) {
+        throw new Error(data.message || "No se pudo registrar el banco");
+      }
+
+      setCuentaForm({ banco: "" });
+      setMensaje("Banco registrado correctamente.");
       await cargarCuentasBancarias();
     } catch (error) {
       setMensaje(error.message);
@@ -280,7 +293,7 @@ export default function ConfiguracionModulo({
           ["respaldos", "Copias de seguridad"],
           ["auditoria", "Auditoría"],
           ["impresoras", "Impresoras"],
-          ["bancos", "Cuentas bancarias"],
+          ["bancos", "Bancos"],
         ].map(([id, texto]) => (
           <button
             key={id}
@@ -532,48 +545,89 @@ export default function ConfiguracionModulo({
       {vistaInterna === "bancos" && (
         <div style={ui.grid}>
           <div style={ui.card}>
-            <h3 style={ui.sectionTitle}>Nueva cuenta bancaria</h3>
+            <h3 style={ui.sectionTitle}>Registrar banco</h3>
+
             <p style={ui.paragraph}>
-              Estas cuentas aparecerán en las recargas por transferencia de esta institución.
+              Registra únicamente el nombre del banco. Los números de cuenta se
+              compartirán con los padres por un canal privado.
             </p>
-            <form onSubmit={guardarCuentaBancaria} style={ui.formGrid}>
-              <label style={ui.label}>Banco *
-                <input style={ui.input} value={cuentaForm.banco} onChange={(e) => setCuentaForm({ ...cuentaForm, banco: e.target.value })} placeholder="Banco Pichincha" required />
+
+            <form onSubmit={guardarCuentaBancaria}>
+              <label style={ui.label}>
+                Nombre del banco *
+                <input
+                  style={ui.input}
+                  value={cuentaForm.banco}
+                  onChange={(e) =>
+                    setCuentaForm({
+                      banco: e.target.value,
+                    })
+                  }
+                  placeholder="Ej. Banco Pichincha"
+                  maxLength={150}
+                  required
+                />
               </label>
-              <label style={ui.label}>Tipo de cuenta
-                <select style={ui.input} value={cuentaForm.tipo_cuenta} onChange={(e) => setCuentaForm({ ...cuentaForm, tipo_cuenta: e.target.value })}>
-                  <option>Ahorros</option><option>Corriente</option><option>Otra</option>
-                </select>
-              </label>
-              <label style={ui.label}>Número de cuenta *
-                <input style={ui.input} value={cuentaForm.numero_cuenta} onChange={(e) => setCuentaForm({ ...cuentaForm, numero_cuenta: e.target.value })} required />
-              </label>
-              <label style={ui.label}>Titular
-                <input style={ui.input} value={cuentaForm.titular} onChange={(e) => setCuentaForm({ ...cuentaForm, titular: e.target.value })} />
-              </label>
-              <label style={ui.label}>RUC / Identificación
-                <input style={ui.input} value={cuentaForm.identificacion} onChange={(e) => setCuentaForm({ ...cuentaForm, identificacion: e.target.value })} />
-              </label>
-              <button type="submit" style={ui.primaryButton} disabled={guardandoCuenta}>
-                {guardandoCuenta ? "Guardando..." : "Guardar cuenta bancaria"}
-              </button>
+
+              <div style={{ marginTop: 16 }}>
+                <button
+                  type="submit"
+                  style={ui.primaryButton}
+                  disabled={guardandoCuenta}
+                >
+                  {guardandoCuenta ? "Guardando..." : "Guardar banco"}
+                </button>
+              </div>
             </form>
           </div>
 
           <div style={ui.card}>
-            <h3 style={ui.sectionTitle}>Cuentas registradas</h3>
+            <h3 style={ui.sectionTitle}>Bancos registrados</h3>
+
+            <p style={ui.paragraph}>
+              Estos nombres aparecerán al registrar una recarga por transferencia.
+            </p>
+
             {!cuentasBancarias.length ? (
-              <p style={ui.paragraph}>Todavía no existen cuentas bancarias registradas.</p>
+              <p style={ui.paragraph}>
+                Todavía no existen bancos registrados.
+              </p>
             ) : (
               <div style={ui.tableWrap}>
                 <table style={ui.table}>
-                  <thead><tr><th style={ui.th}>Banco</th><th style={ui.th}>Tipo</th><th style={ui.th}>Cuenta</th><th style={ui.th}>Titular</th><th style={ui.th}>Estado</th><th style={ui.th}>Acción</th></tr></thead>
-                  <tbody>{cuentasBancarias.map((cuenta) => (
-                    <tr key={cuenta.id}>
-                      <td style={ui.td}>{cuenta.banco}</td><td style={ui.td}>{cuenta.tipo_cuenta || "-"}</td><td style={ui.td}>{cuenta.numero_cuenta}</td><td style={ui.td}>{cuenta.titular || "-"}</td><td style={ui.td}>{cuenta.activo === false ? "Inactiva" : "Activa"}</td>
-                      <td style={ui.td}><button type="button" style={cuenta.activo === false ? ui.primaryButton : ui.dangerButton} onClick={() => cambiarEstadoCuenta(cuenta)}>{cuenta.activo === false ? "Activar" : "Desactivar"}</button></td>
+                  <thead>
+                    <tr>
+                      <th style={ui.th}>Banco</th>
+                      <th style={ui.th}>Estado</th>
+                      <th style={ui.th}>Acción</th>
                     </tr>
-                  ))}</tbody>
+                  </thead>
+
+                  <tbody>
+                    {cuentasBancarias.map((cuenta) => (
+                      <tr key={cuenta.id}>
+                        <td style={ui.td}>{cuenta.banco}</td>
+                        <td style={ui.td}>
+                          {cuenta.activo === false ? "Inactivo" : "Activo"}
+                        </td>
+                        <td style={ui.td}>
+                          <button
+                            type="button"
+                            style={
+                              cuenta.activo === false
+                                ? ui.primaryButton
+                                : ui.dangerButton
+                            }
+                            onClick={() => cambiarEstadoCuenta(cuenta)}
+                          >
+                            {cuenta.activo === false
+                              ? "Activar"
+                              : "Desactivar"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
                 </table>
               </div>
             )}

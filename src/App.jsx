@@ -3101,7 +3101,7 @@ const consultarProductosPorDia = () => {
 
       if (recargaForm.metodo_pago === "TRANSFERENCIA") {
         if (!String(recargaForm.banco || "").trim()) {
-          alert("Debes seleccionar la cuenta bancaria receptora.");
+          alert("Debes seleccionar el banco donde se realizó la transferencia.");
           return;
         }
 
@@ -7196,7 +7196,7 @@ if (!usuario) {
 
               <div style={styles.filterField}>
                 <label style={styles.filterLabelTop}>
-                  Cuenta bancaria receptora *
+                  Banco donde realizó la transferencia *
                 </label>
 
                 <select
@@ -7211,10 +7211,10 @@ if (!usuario) {
                       ...recargaForm,
                       cuenta_bancaria_id: e.target.value,
                       banco: cuenta
-                        ? `${cuenta.banco} - ${
-                            cuenta.tipo_cuenta || "Cuenta"
-                          } #${cuenta.numero_cuenta}`
+                        ? cuenta.banco
                         : "",
+                      // Solo se guarda el nombre del banco
+                      // El número de cuenta se comparte de forma privada
                     });
                   }}
                   style={styles.input}
@@ -7226,17 +7226,17 @@ if (!usuario) {
                     .filter((cuenta) => cuenta.activo !== false)
                     .map((cuenta) => (
                       <option key={cuenta.id} value={cuenta.id}>
-                        {cuenta.banco} -{" "}
-                        {cuenta.tipo_cuenta || "Cuenta"} #
-                        {cuenta.numero_cuenta}
+                        {cuenta.banco}
+                        {/* Solo nombre del banco */}
+                        {null}
                       </option>
                     ))}
                 </select>
 
                 {!cuentasBancarias.length && (
                   <small style={{ color: "#b45309" }}>
-                    Registra primero una cuenta en Configuración →
-                    Cuentas bancarias.
+                    Registra primero un banco en Configuración →
+                    Bancos.
                   </small>
                 )}
               </div>
@@ -7286,7 +7286,7 @@ if (!usuario) {
         }}
       >
         <strong>Detalle:</strong> en efectivo se acredita el valor
-        directamente. En transferencia, selecciona la cuenta bancaria
+        directamente. En transferencia, selecciona el banco donde se hizo el pago
         del colegio y registra el número de comprobante.
       </div>
     </div>
