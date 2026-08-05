@@ -2289,6 +2289,10 @@ if (institucionIdLogin) {
     } catch (error) {
       console.error("Error cargando créditos de profesores:", error);
       setCreditosProfesores([]);
+      alert(
+        error.message ||
+          "No se pudo cargar el historial de créditos del profesor."
+      );
     } finally {
       setCargandoCreditosProfesores(false);
     }
@@ -7016,7 +7020,10 @@ if (!usuario) {
             <button
               type="button"
               style={{ ...styles.outlineButton, background: "#ffffff", color: "#2435bd" }}
-              onClick={() => setVistaProfesorDetalle("creditos")}
+              onClick={async () => {
+                setVistaProfesorDetalle("creditos");
+                await cargarCreditosProfesores(profesorDetalle.id);
+              }}
             >
               Historial de créditos
             </button>
