@@ -238,6 +238,20 @@ const [profesorDetalle, setProfesorDetalle] = useState(null);
 const [vistaProfesorDetalle, setVistaProfesorDetalle] = useState("ordenes");
 const [mostrarFormularioProfesor, setMostrarFormularioProfesor] = useState(false);
 
+const [creditosProfesores, setCreditosProfesores] = useState([]);
+const [cargandoCreditosProfesores, setCargandoCreditosProfesores] = useState(false);
+const [creditoProfesorForm, setCreditoProfesorForm] = useState({
+  tipo: "RECARGA",
+  monto: "",
+  comercio: "POS NUBE",
+  observacion: "",
+});
+const [creditosProfesoresFiltros, setCreditosProfesoresFiltros] = useState({
+  fecha_inicio: "",
+  fecha_fin: "",
+  texto: "",
+});
+
    const [ventasFiltros, setVentasFiltros] = useState({
   tipo_fecha: "created_at",
   fecha_inicio: "",
@@ -816,6 +830,43 @@ const totalRecargasVista = useMemo(() => {
       totalGeneral,
     };
   }, [ventasEnriquecidas, recargasEnriquecidas, cierreCajaFiltros]);
+
+  const creditosProfesoresFiltrados = useMemo(() => {
+    const texto = String(
+      creditosProfesoresFiltros.texto || ""
+    )
+      .trim()
+      .toLowerCase();
+
+    return creditosProfesores.filter((movimiento) => {
+      if (!texto) return true;
+
+      const profesor = `${movimiento.nombres || ""} ${
+        movimiento.apellidos || ""
+      }`.toLowerCase();
+
+      const comercio = String(
+        movimiento.comercio || ""
+      ).toLowerCase();
+
+      const usuarioMovimiento = String(
+        movimiento.usuario_nombre ||
+          movimiento.usuario_correo ||
+          ""
+      ).toLowerCase();
+
+      const tipo = String(
+        movimiento.tipo || ""
+      ).toLowerCase();
+
+      return (
+        profesor.includes(texto) ||
+        comercio.includes(texto) ||
+        usuarioMovimiento.includes(texto) ||
+        tipo.includes(texto)
+      );
+    });
+  }, [creditosProfesores, creditosProfesoresFiltros.texto]);
 
   const obtenerEstadoStock = (producto) => {
     const stock = Number(producto.stock || 0);
@@ -2181,6 +2232,253 @@ if (institucionIdLogin) {
       es_profesor: true,
     });
     setEditandoProfesorId(null);
+  };
+
+  const cargarCreditosProfesores = async (profesorId = "") => {
+    try {
+      setCargandoCreditosProfesores(true);
+
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      if (!token || !institucionId) {
+        setCreditosProfesores([]);
+        return;
+      }
+
+      const params = new URLSearchParams({
+        institucion_id: String(institucionId),
+      });
+
+      if (profesorId) {
+        params.set("profesor_id", String(profesorId));
+      }
+
+      if (creditosProfesoresFiltros.fecha_inicio) {
+        params.set(
+          "fecha_inicio",
+          creditosProfesoresFiltros.fecha_inicio
+        );
+      }
+
+      if (creditosProfesoresFiltros.fecha_fin) {
+        params.set(
+          "fecha_fin",
+          creditosProfesoresFiltros.fecha_fin
+        );
+      }
+
+      const res = await fetch(
+        `${API_URL}/api/profesores/creditos/historial?${params.toString()}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.message || "No se pudo cargar el historial"
+        );
+      }
+
+      setCreditosProfesores(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Error cargando créditos de profesores:", error);
+      setCreditosProfesores([]);
+    } finally {
+      setCargandoCreditosProfesores(false);
+    }
+  };
+
+  const registrarCreditoProfesor = async (e) => {
+    e.preventDefault();
+
+    if (!profesorDetalle?.id) {
+      alert("Selecciona un profesor.");
+      return;
+    }
+
+    const monto = Number(creditoProfesorForm.monto);
+
+    if (!Number.isFinite(monto) || monto <= 0) {
+      alert("Ingresa un monto válido mayor que cero.");
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      const res = await fetch(
+        `${API_URL}/api/profesores/${profesorDetalle.id}/creditos`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            institucion_id: institucionId,
+            tipo: creditoProfesorForm.tipo,
+            monto,
+            comercio:
+              creditoProfesorForm.comercio || "POS NUBE",
+            observacion: creditoProfesorForm.observacion,
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.message || data.error || "No se pudo registrar"
+        );
+      }
+
+      setProfesorDetalle(data.profesor);
+      setProfesores((prev) =>
+        prev.map((profesor) =>
+          Number(profesor.id) === Number(data.profesor.id)
+            ? data.profesor
+            : profesor
+        )
+      );
+
+      setCreditoProfesorForm({
+        tipo: "RECARGA",
+        monto: "",
+        comercio: "POS NUBE",
+        observacion: "",
+      });
+
+      await cargarCreditosProfesores(profesorDetalle.id);
+      alert("Movimiento de crédito registrado correctamente.");
+    } catch (error) {
+      console.error("Error registrando crédito:", error);
+      alert(error.message || "No se pudo registrar el movimiento.");
+    }
+  };
+
+  const anularCreditoProfesor = async (movimiento) => {
+    const confirmado = window.confirm(
+      "¿Deseas anular este movimiento de crédito?"
+    );
+
+    if (!confirmado) return;
+
+    try {
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      const res = await fetch(
+        `${API_URL}/api/profesores/creditos/${movimiento.id}/anular`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            institucion_id: institucionId,
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.message || data.error || "No se pudo anular"
+        );
+      }
+
+      await cargarProfesores();
+      await cargarCreditosProfesores(profesorDetalle?.id || "");
+      setProfesorDetalle((prev) =>
+        prev
+          ? {
+              ...prev,
+              saldo: data.saldo,
+            }
+          : prev
+      );
+
+      alert("Movimiento anulado correctamente.");
+    } catch (error) {
+      console.error("Error anulando crédito:", error);
+      alert(error.message || "No se pudo anular el movimiento.");
+    }
+  };
+
+  const exportarCreditosProfesores = () => {
+    const lista = creditosProfesoresFiltrados;
+
+    if (!lista.length) {
+      alert("No hay movimientos de crédito para exportar.");
+      return;
+    }
+
+    const encabezados = [
+      "Profesor",
+      "Cédula",
+      "Comercio",
+      "Usuario que hizo el pago",
+      "Tipo",
+      "Monto",
+      "Saldo anterior",
+      "Saldo nuevo",
+      "Fecha",
+      "Estado",
+      "Observación",
+    ];
+
+    const filas = lista.map((movimiento) => [
+      `${movimiento.nombres || ""} ${
+        movimiento.apellidos || ""
+      }`.trim(),
+      movimiento.cedula || "",
+      movimiento.comercio || "POS NUBE",
+      movimiento.usuario_nombre ||
+        movimiento.usuario_correo ||
+        "Sistema",
+      movimiento.tipo || "",
+      Number(movimiento.monto || 0).toFixed(2),
+      Number(movimiento.saldo_anterior || 0).toFixed(2),
+      Number(movimiento.saldo_nuevo || 0).toFixed(2),
+      formatearFechaHora(movimiento.created_at),
+      movimiento.estado || "",
+      movimiento.observacion || "",
+    ]);
+
+    const contenido = [encabezados, ...filas]
+      .map((fila) =>
+        fila
+          .map((valor) =>
+            `"${String(valor ?? "").replace(/"/g, '""')}"`
+          )
+          .join(",")
+      )
+      .join("\\n");
+
+    const blob = new Blob(["\\ufeff" + contenido], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `creditos_profesores_${new Date()
+      .toISOString()
+      .slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
   };
 
   const cargarProfesores = async () => {
@@ -3996,6 +4294,7 @@ if (institucionIdLogin) {
     setAlumnos([]);
     setProfesores([]);
     setProfesorDetalle(null);
+    setCreditosProfesores([]);
     setRecargas([]);
     setVentas([]);
     setCorreo("");
@@ -6228,7 +6527,10 @@ if (!usuario) {
                   ? styles.ventasTabActive
                   : styles.ventasTab
               }
-              onClick={() => setVistaProfesoresInterna("creditos")}
+              onClick={async () => {
+                setVistaProfesoresInterna("creditos");
+                await cargarCreditosProfesores();
+              }}
             >
               Créditos Profesores
             </button>
@@ -6838,7 +7140,18 @@ if (!usuario) {
                 <button
                   key={clave}
                   type="button"
-                  onClick={() => setVistaProfesorDetalle(clave)}
+                  onClick={async () => {
+                    setVistaProfesorDetalle(clave);
+
+                    if (
+                      clave === "creditos" &&
+                      profesorDetalle?.id
+                    ) {
+                      await cargarCreditosProfesores(
+                        profesorDetalle.id
+                      );
+                    }
+                  }}
                   style={{
                     border: "2px solid #ff8548",
                     background: vistaProfesorDetalle === clave ? "#ff8548" : "#ffffff",
@@ -6896,8 +7209,231 @@ if (!usuario) {
               )}
 
               {vistaProfesorDetalle === "creditos" && (
-                <div style={{ textAlign: "center", color: "#64748b", padding: 40 }}>
-                  No hay movimientos de crédito registrados para este profesor.
+                <div>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 16,
+                      flexWrap: "wrap",
+                      marginBottom: 20,
+                    }}
+                  >
+                    <div>
+                      <h3 style={{ margin: 0 }}>
+                        Historial de créditos,{" "}
+                        {`${profesorDetalle.nombres || ""} ${
+                          profesorDetalle.apellidos || ""
+                        }`.trim()}
+                      </h3>
+
+                      <p style={{ margin: "6px 0 0", color: "#64748b" }}>
+                        Crédito actual:{" "}
+                        <strong>
+                          {formatearMoneda(
+                            profesorDetalle.saldo ||
+                              profesorDetalle.credito ||
+                              0
+                          )}
+                        </strong>
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      style={styles.secondaryButton}
+                      onClick={() =>
+                        cargarCreditosProfesores(profesorDetalle.id)
+                      }
+                    >
+                      Actualizar
+                    </button>
+                  </div>
+
+                  <form
+                    onSubmit={registrarCreditoProfesor}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(auto-fit, minmax(180px, 1fr))",
+                      gap: 12,
+                      marginBottom: 22,
+                      padding: 16,
+                      border: "1px solid #e5e7eb",
+                      borderRadius: 12,
+                      background: "#f8fafc",
+                    }}
+                  >
+                    <select
+                      value={creditoProfesorForm.tipo}
+                      onChange={(e) =>
+                        setCreditoProfesorForm({
+                          ...creditoProfesorForm,
+                          tipo: e.target.value,
+                        })
+                      }
+                      style={styles.input}
+                    >
+                      <option value="RECARGA">
+                        Recargar crédito
+                      </option>
+                      <option value="CONSUMO">
+                        Registrar consumo
+                      </option>
+                      <option value="AJUSTE_POSITIVO">
+                        Ajuste positivo
+                      </option>
+                      <option value="AJUSTE_NEGATIVO">
+                        Ajuste negativo
+                      </option>
+                    </select>
+
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      placeholder="Monto"
+                      value={creditoProfesorForm.monto}
+                      onChange={(e) =>
+                        setCreditoProfesorForm({
+                          ...creditoProfesorForm,
+                          monto: e.target.value,
+                        })
+                      }
+                      style={styles.input}
+                      required
+                    />
+
+                    <input
+                      type="text"
+                      placeholder="Comercio"
+                      value={creditoProfesorForm.comercio}
+                      onChange={(e) =>
+                        setCreditoProfesorForm({
+                          ...creditoProfesorForm,
+                          comercio: e.target.value,
+                        })
+                      }
+                      style={styles.input}
+                    />
+
+                    <input
+                      type="text"
+                      placeholder="Observación"
+                      value={creditoProfesorForm.observacion}
+                      onChange={(e) =>
+                        setCreditoProfesorForm({
+                          ...creditoProfesorForm,
+                          observacion: e.target.value,
+                        })
+                      }
+                      style={styles.input}
+                    />
+
+                    <button
+                      type="submit"
+                      style={styles.button}
+                    >
+                      Guardar movimiento
+                    </button>
+                  </form>
+
+                  <div style={styles.tableWrap}>
+                    <table style={styles.table}>
+                      <thead>
+                        <tr>
+                          <th style={styles.th}>Comercio</th>
+                          <th style={styles.th}>
+                            Usuario que hizo el pago
+                          </th>
+                          <th style={styles.th}>Tipo</th>
+                          <th style={styles.th}>Monto</th>
+                          <th style={styles.th}>Saldo nuevo</th>
+                          <th style={styles.th}>Fecha</th>
+                          <th style={styles.th}>Estado</th>
+                          <th style={styles.th}>Acciones</th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {cargandoCreditosProfesores ? (
+                          <tr>
+                            <td style={styles.td} colSpan={8}>
+                              Cargando historial...
+                            </td>
+                          </tr>
+                        ) : creditosProfesoresFiltrados.filter(
+                            (movimiento) =>
+                              Number(movimiento.profesor_id) ===
+                              Number(profesorDetalle.id)
+                          ).length === 0 ? (
+                          <tr>
+                            <td style={styles.td} colSpan={8}>
+                              No hay datos disponibles
+                            </td>
+                          </tr>
+                        ) : (
+                          creditosProfesoresFiltrados
+                            .filter(
+                              (movimiento) =>
+                                Number(movimiento.profesor_id) ===
+                                Number(profesorDetalle.id)
+                            )
+                            .map((movimiento) => (
+                              <tr key={movimiento.id}>
+                                <td style={styles.td}>
+                                  {movimiento.comercio || "POS NUBE"}
+                                </td>
+                                <td style={styles.td}>
+                                  {movimiento.usuario_nombre ||
+                                    movimiento.usuario_correo ||
+                                    "Sistema"}
+                                </td>
+                                <td style={styles.td}>
+                                  {movimiento.tipo || "-"}
+                                </td>
+                                <td style={styles.td}>
+                                  {formatearMoneda(
+                                    movimiento.monto || 0
+                                  )}
+                                </td>
+                                <td style={styles.td}>
+                                  {formatearMoneda(
+                                    movimiento.saldo_nuevo || 0
+                                  )}
+                                </td>
+                                <td style={styles.td}>
+                                  {formatearFechaHora(
+                                    movimiento.created_at
+                                  )}
+                                </td>
+                                <td style={styles.td}>
+                                  {movimiento.estado || "ACTIVO"}
+                                </td>
+                                <td style={styles.td}>
+                                  {movimiento.estado !== "ANULADO" ? (
+                                    <button
+                                      type="button"
+                                      style={styles.smallDangerButton}
+                                      onClick={() =>
+                                        anularCreditoProfesor(
+                                          movimiento
+                                        )
+                                      }
+                                    >
+                                      Anular
+                                    </button>
+                                  ) : (
+                                    "-"
+                                  )}
+                                </td>
+                              </tr>
+                            ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>
@@ -6909,13 +7445,17 @@ if (!usuario) {
     {vistaProfesoresInterna === "creditos" && (
       <div style={styles.box}>
         <div style={styles.pageHeaderSmall}>
-          <h3 style={{ margin: 0 }}>Créditos Profesores</h3>
+          <h3 style={{ margin: 0 }}>
+            Historial de créditos de profesores
+          </h3>
 
           <div style={styles.headerActions}>
             <button
               type="button"
               style={styles.outlineButton}
-              onClick={() => setVistaProfesoresInterna("profesores")}
+              onClick={() =>
+                setVistaProfesoresInterna("profesores")
+              }
             >
               Volver a Profesores
             </button>
@@ -6923,7 +7463,7 @@ if (!usuario) {
             <button
               type="button"
               style={styles.secondaryButton}
-              onClick={() => alert("Exportar créditos aún no implementado.")}
+              onClick={exportarCreditosProfesores}
             >
               Exportar
             </button>
@@ -6933,35 +7473,77 @@ if (!usuario) {
         <div style={styles.filtersGrid}>
           <div style={styles.filterField}>
             <label style={styles.label}>Fecha inicial</label>
-            <input type="date" style={styles.input} />
+            <input
+              type="date"
+              value={creditosProfesoresFiltros.fecha_inicio}
+              onChange={(e) =>
+                setCreditosProfesoresFiltros({
+                  ...creditosProfesoresFiltros,
+                  fecha_inicio: e.target.value,
+                })
+              }
+              style={styles.input}
+            />
           </div>
 
           <div style={styles.filterField}>
             <label style={styles.label}>Fecha final</label>
-            <input type="date" style={styles.input} />
+            <input
+              type="date"
+              value={creditosProfesoresFiltros.fecha_fin}
+              onChange={(e) =>
+                setCreditosProfesoresFiltros({
+                  ...creditosProfesoresFiltros,
+                  fecha_fin: e.target.value,
+                })
+              }
+              style={styles.input}
+            />
           </div>
 
           <div style={styles.filterFieldWide}>
             <label style={styles.label}>Buscar</label>
             <input
               type="text"
-              placeholder="Buscar profesor"
+              placeholder="Profesor, comercio, usuario o tipo"
+              value={creditosProfesoresFiltros.texto}
+              onChange={(e) =>
+                setCreditosProfesoresFiltros({
+                  ...creditosProfesoresFiltros,
+                  texto: e.target.value,
+                })
+              }
               style={styles.input}
             />
           </div>
         </div>
 
         <div style={styles.filterButtons}>
-          <button type="button" style={styles.button}>
+          <button
+            type="button"
+            style={styles.button}
+            onClick={() => cargarCreditosProfesores()}
+          >
             Filtrar
           </button>
-        </div>
 
-        <div style={{ marginTop: 20 }}>
-          <div style={styles.infoBox}>
-            Este módulo mostrará luego los pagos, consumos y movimientos de crédito
-            de profesores.
-          </div>
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={() => {
+              setCreditosProfesoresFiltros({
+                fecha_inicio: "",
+                fecha_fin: "",
+                texto: "",
+              });
+              window.setTimeout(
+                () => cargarCreditosProfesores(),
+                0
+              );
+            }}
+          >
+            Borrar filtros
+          </button>
         </div>
 
         <div style={{ marginTop: 20 }}>
@@ -6970,37 +7552,88 @@ if (!usuario) {
               <thead>
                 <tr>
                   <th style={styles.th}>Profesor</th>
-                  <th style={styles.th}>Cédula</th>
-                  <th style={styles.th}>Crédito actual</th>
+                  <th style={styles.th}>Comercio</th>
+                  <th style={styles.th}>
+                    Usuario que hizo el pago
+                  </th>
+                  <th style={styles.th}>Tipo</th>
+                  <th style={styles.th}>Monto</th>
+                  <th style={styles.th}>Saldo nuevo</th>
+                  <th style={styles.th}>Fecha</th>
                   <th style={styles.th}>Estado</th>
+                  <th style={styles.th}>Acciones</th>
                 </tr>
               </thead>
+
               <tbody>
-                {profesores.length === 0 ? (
+                {cargandoCreditosProfesores ? (
                   <tr>
-                    <td style={styles.td} colSpan={4}>
-                      No hay profesores registrados.
+                    <td style={styles.td} colSpan={9}>
+                      Cargando historial...
+                    </td>
+                  </tr>
+                ) : creditosProfesoresFiltrados.length === 0 ? (
+                  <tr>
+                    <td style={styles.td} colSpan={9}>
+                      No hay datos disponibles
                     </td>
                   </tr>
                 ) : (
-                  profesores.map((p) => (
-                    <tr key={p.id}>
-                      <td style={styles.td}>
-                        {`${p.nombres || ""} ${p.apellidos || ""}`}
-                      </td>
-                      <td style={styles.td}>{p.cedula || "-"}</td>
-                      <td style={styles.td}>
-                        {formatearMoneda(p.credito || p.saldo || 0)}
-                      </td>
-                      <td style={styles.td}>
-                        {p.activo !== false ? (
-                          <span style={styles.badgeActive}>Activo</span>
-                        ) : (
-                          <span style={styles.badgeInactive}>Inactivo</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
+                  creditosProfesoresFiltrados.map(
+                    (movimiento) => (
+                      <tr key={movimiento.id}>
+                        <td style={styles.td}>
+                          {`${movimiento.nombres || ""} ${
+                            movimiento.apellidos || ""
+                          }`.trim()}
+                        </td>
+                        <td style={styles.td}>
+                          {movimiento.comercio || "POS NUBE"}
+                        </td>
+                        <td style={styles.td}>
+                          {movimiento.usuario_nombre ||
+                            movimiento.usuario_correo ||
+                            "Sistema"}
+                        </td>
+                        <td style={styles.td}>
+                          {movimiento.tipo || "-"}
+                        </td>
+                        <td style={styles.td}>
+                          {formatearMoneda(
+                            movimiento.monto || 0
+                          )}
+                        </td>
+                        <td style={styles.td}>
+                          {formatearMoneda(
+                            movimiento.saldo_nuevo || 0
+                          )}
+                        </td>
+                        <td style={styles.td}>
+                          {formatearFechaHora(
+                            movimiento.created_at
+                          )}
+                        </td>
+                        <td style={styles.td}>
+                          {movimiento.estado || "ACTIVO"}
+                        </td>
+                        <td style={styles.td}>
+                          {movimiento.estado !== "ANULADO" ? (
+                            <button
+                              type="button"
+                              style={styles.smallDangerButton}
+                              onClick={() =>
+                                anularCreditoProfesor(movimiento)
+                              }
+                            >
+                              Anular
+                            </button>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  )
                 )}
               </tbody>
             </table>
