@@ -64,6 +64,18 @@ export default function AlumnosModulo({
     numero_comprobante: "",
     observacion: "",
   });
+  const [creditoAlumno, setCreditoAlumno] = useState(null);
+  const [movimientosCreditoAlumno, setMovimientosCreditoAlumno] = useState([]);
+  const [cargandoCreditoAlumno, setCargandoCreditoAlumno] = useState(false);
+  const [guardandoCreditoAlumno, setGuardandoCreditoAlumno] = useState(false);
+  const [creditoConfiguracionForm, setCreditoConfiguracionForm] = useState({
+    credito_habilitado: false,
+    limite_credito: "",
+  });
+  const [abonoCreditoForm, setAbonoCreditoForm] = useState({
+    monto: "",
+    observacion: "",
+  });
 
   const normalizarEncabezado = (valor) =>
     String(valor || "")
@@ -473,6 +485,231 @@ export default function AlumnosModulo({
     }
   };
 
+
+  const cargarCreditoAlumno = async () => {
+    if (!alumnoDetalle?.id) return;
+
+    try {
+      setCargandoCreditoAlumno(true);
+
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      const respuesta = await fetch(
+        `${API_URL}/api/alumnos/${alumnoDetalle.id}/creditos?institucion_id=${institucionId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await respuesta.json();
+
+      if (!respuesta.ok) {
+        throw new Error(
+          data.message || data.error || "No se pudo cargar el crédito"
+        );
+      }
+
+      const datosAlumno = data.alumno || {};
+
+      setCreditoAlumno(datosAlumno);
+      setMovimientosCreditoAlumno(
+        Array.isArray(data.movimientos) ? data.movimientos : []
+      );
+      setCreditoConfiguracionForm({
+        credito_habilitado:
+          datosAlumno.credito_habilitado === true,
+        limite_credito: String(
+          Number(datosAlumno.limite_credito || 0)
+        ),
+      });
+
+      setAlumnoDetalle((actual) =>
+        actual
+          ? {
+              ...actual,
+              ...datosAlumno,
+            }
+          : actual
+      );
+    } catch (error) {
+      console.error("Error cargando crédito del alumno:", error);
+      alert(error.message || "No se pudo cargar el crédito.");
+    } finally {
+      setCargandoCreditoAlumno(false);
+    }
+  };
+
+  const guardarLimiteCreditoAlumno = async (evento) => {
+    evento.preventDefault();
+
+    if (!alumnoDetalle?.id) return;
+
+    const limite = Number(
+      creditoConfiguracionForm.limite_credito
+    );
+
+    if (!Number.isFinite(limite) || limite < 0) {
+      alert("Ingresa un límite de crédito válido.");
+      return;
+    }
+
+    try {
+      setGuardandoCreditoAlumno(true);
+
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      const respuesta = await fetch(
+        `${API_URL}/api/alumnos/${alumnoDetalle.id}/limite-credito`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            institucion_id: Number(institucionId),
+            credito_habilitado:
+              creditoConfiguracionForm.credito_habilitado,
+            limite_credito: limite,
+          }),
+        }
+      );
+
+      const data = await respuesta.json();
+
+      if (!respuesta.ok) {
+        throw new Error(
+          data.message || data.error || "No se pudo guardar"
+        );
+      }
+
+      setCreditoAlumno(data.alumno);
+      setAlumnoDetalle((actual) => ({
+        ...actual,
+        ...data.alumno,
+      }));
+
+      await cargarAlumnos();
+      alert("Límite de crédito actualizado correctamente.");
+    } catch (error) {
+      console.error("Error guardando límite:", error);
+      alert(error.message || "No se pudo guardar el límite.");
+    } finally {
+      setGuardandoCreditoAlumno(false);
+    }
+  };
+
+  const registrarAbonoCreditoAlumno = async (evento) => {
+    evento.preventDefault();
+
+    if (!alumnoDetalle?.id) return;
+
+    const monto = Number(abonoCreditoForm.monto);
+
+    if (!Number.isFinite(monto) || monto <= 0) {
+      alert("Ingresa un monto de abono válido.");
+      return;
+    }
+
+    try {
+      setGuardandoCreditoAlumno(true);
+
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      const respuesta = await fetch(
+        `${API_URL}/api/alumnos/${alumnoDetalle.id}/creditos/abono`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            institucion_id: Number(institucionId),
+            monto,
+            observacion: abonoCreditoForm.observacion,
+          }),
+        }
+      );
+
+      const data = await respuesta.json();
+
+      if (!respuesta.ok) {
+        throw new Error(
+          data.message || data.error || "No se pudo registrar"
+        );
+      }
+
+      setAbonoCreditoForm({
+        monto: "",
+        observacion: "",
+      });
+
+      setAlumnoDetalle((actual) => ({
+        ...actual,
+        ...data.alumno,
+      }));
+
+      await cargarAlumnos();
+      await cargarCreditoAlumno();
+
+      alert("Abono registrado correctamente.");
+    } catch (error) {
+      console.error("Error registrando abono:", error);
+      alert(error.message || "No se pudo registrar el abono.");
+    } finally {
+      setGuardandoCreditoAlumno(false);
+    }
+  };
+
+  const anularAbonoCreditoAlumno = async (movimiento) => {
+    const confirmado = window.confirm(
+      "¿Deseas anular este abono?"
+    );
+
+    if (!confirmado) return;
+
+    try {
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      const respuesta = await fetch(
+        `${API_URL}/api/alumnos/creditos/${movimiento.id}/anular`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            institucion_id: Number(institucionId),
+          }),
+        }
+      );
+
+      const data = await respuesta.json();
+
+      if (!respuesta.ok) {
+        throw new Error(
+          data.message || data.error || "No se pudo anular"
+        );
+      }
+
+      await cargarAlumnos();
+      await cargarCreditoAlumno();
+
+      alert("Abono anulado correctamente.");
+    } catch (error) {
+      console.error("Error anulando abono:", error);
+      alert(error.message || "No se pudo anular el abono.");
+    }
+  };
+
   return (
   <>
     {mostrarModalRecarga && alumnoDetalle && (
@@ -842,7 +1079,16 @@ export default function AlumnosModulo({
               <DataRow label="Paralelo" value={alumnoDetalle.paralelo || "-"} />
               <DataRow label="Código" value={alumnoDetalle.codigo || obtenerCedulaAlumno(alumnoDetalle) || "-"} />
               <DataRow label="Profesor" value={alumnoDetalle.es_profesor ? "Sí" : "No"} />
-              <DataRow label="Crédito" value={alumnoDetalle.credito ? "Sí" : "No"} />
+              <DataRow
+                label="Crédito"
+                value={
+                  alumnoDetalle.credito_habilitado
+                    ? `Sí · límite ${formatearMoneda(
+                        alumnoDetalle.limite_credito || 0
+                      )}`
+                    : "No habilitado"
+                }
+              />
             </div>
 
             <div style={paymon.balanceCard}>
@@ -879,6 +1125,20 @@ export default function AlumnosModulo({
             <button type="button" style={vistaAlumnoDetalle === "recargas" ? paymon.tabActive : paymon.tab} onClick={() => setVistaAlumnoDetalle("recargas")}>Recargas</button>
             <button type="button" style={vistaAlumnoDetalle === "dispositivo" ? paymon.tabActive : paymon.tab} onClick={() => setVistaAlumnoDetalle("dispositivo")}>Dispositivos</button>
             <button type="button" style={vistaAlumnoDetalle === "consumo" ? paymon.tabActive : paymon.tab} onClick={() => setVistaAlumnoDetalle("consumo")}>Consumo</button>
+            <button
+              type="button"
+              style={
+                vistaAlumnoDetalle === "creditos"
+                  ? paymon.tabActive
+                  : paymon.tab
+              }
+              onClick={async () => {
+                setVistaAlumnoDetalle("creditos");
+                await cargarCreditoAlumno();
+              }}
+            >
+              Créditos
+            </button>
           </div>
 
           {(vistaAlumnoDetalle === "ordenes" || vistaAlumnoDetalle === "datos") && (
@@ -980,6 +1240,286 @@ export default function AlumnosModulo({
 
           {vistaAlumnoDetalle === "recargas" && <HistorialSimple titulo="Historial de recargas" columnas={["Fecha", "Monto", "Método"]} filas={historialRecargasAlumno.map((r) => [r.created_at ? new Date(r.created_at).toLocaleString() : "-", formatearMoneda(r.monto), r.metodo_pago || "-"])} />}
           {vistaAlumnoDetalle === "consumo" && <HistorialSimple titulo="Consumo detallado" columnas={["Fecha", "Orden", "Producto", "Cantidad", "Precio", "Total"]} filas={historialConsumoAlumno.map((c) => [c.created_at ? new Date(c.created_at).toLocaleString() : "-", `#${c.venta_id}`, c.producto_nombre || "-", c.cantidad || 0, formatearMoneda(c.precio_unitario), formatearMoneda(c.total)])} />}
+          {vistaAlumnoDetalle === "creditos" && (
+            <div style={paymon.historyPanel}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "repeat(auto-fit, minmax(210px, 1fr))",
+                  gap: 14,
+                  marginBottom: 20,
+                }}
+              >
+                <div style={paymon.summaryCard}>
+                  <div style={paymon.summaryCell}>
+                    <span>Límite de crédito</span>
+                    <strong style={paymon.paidValue}>
+                      {formatearMoneda(
+                        creditoAlumno?.limite_credito ||
+                          alumnoDetalle.limite_credito ||
+                          0
+                      )}
+                    </strong>
+                  </div>
+                </div>
+
+                <div style={paymon.summaryCard}>
+                  <div style={paymon.summaryCell}>
+                    <span>Crédito utilizado</span>
+                    <strong style={paymon.pendingValue}>
+                      {formatearMoneda(
+                        creditoAlumno?.credito_utilizado ||
+                          alumnoDetalle.credito_utilizado ||
+                          0
+                      )}
+                    </strong>
+                  </div>
+                </div>
+
+                <div style={paymon.summaryCard}>
+                  <div style={paymon.summaryCell}>
+                    <span>Crédito disponible</span>
+                    <strong style={paymon.paidValue}>
+                      {formatearMoneda(
+                        creditoAlumno?.credito_disponible ??
+                          Math.max(
+                            0,
+                            Number(
+                              alumnoDetalle.limite_credito || 0
+                            ) -
+                              Number(
+                                alumnoDetalle.credito_utilizado ||
+                                  0
+                              )
+                          )
+                      )}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              <form
+                onSubmit={guardarLimiteCreditoAlumno}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "repeat(auto-fit, minmax(190px, 1fr))",
+                  gap: 12,
+                  padding: 16,
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 12,
+                  background: "#f8fafc",
+                  marginBottom: 18,
+                }}
+              >
+                <label style={paymon.transferToggleRow}>
+                  <span>Habilitar crédito</span>
+                  <input
+                    type="checkbox"
+                    checked={
+                      creditoConfiguracionForm.credito_habilitado
+                    }
+                    onChange={(e) =>
+                      setCreditoConfiguracionForm({
+                        ...creditoConfiguracionForm,
+                        credito_habilitado: e.target.checked,
+                      })
+                    }
+                  />
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Límite de crédito"
+                  value={
+                    creditoConfiguracionForm.limite_credito
+                  }
+                  onChange={(e) =>
+                    setCreditoConfiguracionForm({
+                      ...creditoConfiguracionForm,
+                      limite_credito: e.target.value,
+                    })
+                  }
+                  style={paymon.modalInput}
+                  required
+                />
+
+                <button
+                  type="submit"
+                  style={paymon.orangeButton}
+                  disabled={guardandoCreditoAlumno}
+                >
+                  {guardandoCreditoAlumno
+                    ? "Guardando..."
+                    : "Guardar límite"}
+                </button>
+              </form>
+
+              <form
+                onSubmit={registrarAbonoCreditoAlumno}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "repeat(auto-fit, minmax(190px, 1fr))",
+                  gap: 12,
+                  padding: 16,
+                  border: "1px solid #fed7aa",
+                  borderRadius: 12,
+                  background: "#fff7ed",
+                  marginBottom: 18,
+                }}
+              >
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  placeholder="Monto del abono"
+                  value={abonoCreditoForm.monto}
+                  onChange={(e) =>
+                    setAbonoCreditoForm({
+                      ...abonoCreditoForm,
+                      monto: e.target.value,
+                    })
+                  }
+                  style={paymon.modalInput}
+                  required
+                />
+
+                <input
+                  type="text"
+                  placeholder="Observación del abono"
+                  value={abonoCreditoForm.observacion}
+                  onChange={(e) =>
+                    setAbonoCreditoForm({
+                      ...abonoCreditoForm,
+                      observacion: e.target.value,
+                    })
+                  }
+                  style={paymon.modalInput}
+                />
+
+                <button
+                  type="submit"
+                  style={paymon.rechargeButton}
+                  disabled={guardandoCreditoAlumno}
+                >
+                  Registrar abono
+                </button>
+              </form>
+
+              <div style={paymon.tableCard}>
+                <div style={paymon.tableToolbar}>
+                  <h3 style={{ margin: 0 }}>
+                    Historial de créditos
+                  </h3>
+
+                  <button
+                    type="button"
+                    style={paymon.exportButton}
+                    onClick={cargarCreditoAlumno}
+                  >
+                    Actualizar
+                  </button>
+                </div>
+
+                <div style={paymon.tableWrap}>
+                  <table style={paymon.table}>
+                    <thead>
+                      <tr>
+                        <th style={paymon.th}>Comercio</th>
+                        <th style={paymon.th}>
+                          Usuario que hizo el pago
+                        </th>
+                        <th style={paymon.th}>Tipo</th>
+                        <th style={paymon.th}>Monto</th>
+                        <th style={paymon.th}>Deuda nueva</th>
+                        <th style={paymon.th}>Fecha</th>
+                        <th style={paymon.th}>Estado</th>
+                        <th style={paymon.th}>Acciones</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {cargandoCreditoAlumno ? (
+                        <tr>
+                          <td colSpan="8" style={paymon.emptyCell}>
+                            Cargando historial...
+                          </td>
+                        </tr>
+                      ) : movimientosCreditoAlumno.length === 0 ? (
+                        <tr>
+                          <td colSpan="8" style={paymon.emptyCell}>
+                            No hay datos disponibles
+                          </td>
+                        </tr>
+                      ) : (
+                        movimientosCreditoAlumno.map(
+                          (movimiento) => (
+                            <tr key={movimiento.id}>
+                              <td style={paymon.td}>
+                                {movimiento.comercio ||
+                                  "POS NUBE"}
+                              </td>
+                              <td style={paymon.td}>
+                                {movimiento.usuario_nombre ||
+                                  movimiento.usuario_correo ||
+                                  "Sistema"}
+                              </td>
+                              <td style={paymon.td}>
+                                {movimiento.tipo || "-"}
+                              </td>
+                              <td style={paymon.td}>
+                                {formatearMoneda(
+                                  movimiento.monto || 0
+                                )}
+                              </td>
+                              <td style={paymon.td}>
+                                {formatearMoneda(
+                                  movimiento.credito_nuevo || 0
+                                )}
+                              </td>
+                              <td style={paymon.td}>
+                                {movimiento.created_at
+                                  ? new Date(
+                                      movimiento.created_at
+                                    ).toLocaleString()
+                                  : "-"}
+                              </td>
+                              <td style={paymon.td}>
+                                {movimiento.estado || "ACTIVO"}
+                              </td>
+                              <td style={paymon.td}>
+                                {movimiento.tipo === "ABONO" &&
+                                movimiento.estado !== "ANULADO" ? (
+                                  <button
+                                    type="button"
+                                    style={paymon.viewButton}
+                                    onClick={() =>
+                                      anularAbonoCreditoAlumno(
+                                        movimiento
+                                      )
+                                    }
+                                  >
+                                    Anular
+                                  </button>
+                                ) : (
+                                  "-"
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        )
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
           {vistaAlumnoDetalle === "dispositivo" && <div style={paymon.historyPanel}><h3>Dispositivos</h3><p>No hay dispositivos vinculados todavía.</p><button type="button" style={paymon.orangeButton}>Enlazar dispositivo</button></div>}
         </div>
       );

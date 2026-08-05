@@ -639,6 +639,8 @@ const totalRecargasVista = useMemo(() => {
       const metodoVisual =
         venta.metodo_pago === "SALDO"
           ? "RECARGA"
+          : venta.metodo_pago === "CREDITO"
+          ? "CRÉDITO"
           : venta.metodo_pago || "EFECTIVO";
 
       return {
@@ -4068,8 +4070,11 @@ if (institucionIdLogin) {
 
     const pagaConSaldo =
       ventaForm.metodo_pago === "RECARGA";
+    const pagaConCredito =
+      ventaForm.metodo_pago === "CREDITO";
+    const requiereAlumno = pagaConSaldo || pagaConCredito;
 
-    if (pagaConSaldo && !ventaForm.alumno_id) {
+    if (requiereAlumno && !ventaForm.alumno_id) {
       alert("Debes seleccionar un alumno.");
       return;
     }
@@ -4090,13 +4095,42 @@ if (institucionIdLogin) {
       }
     }
 
+    if (pagaConCredito && alumnoVentaSeleccionado) {
+      const habilitado =
+        alumnoVentaSeleccionado.credito_habilitado === true;
+      const limite = Number(
+        alumnoVentaSeleccionado.limite_credito || 0
+      );
+      const utilizado = Number(
+        alumnoVentaSeleccionado.credito_utilizado || 0
+      );
+      const disponible = Math.max(0, limite - utilizado);
+
+      if (!habilitado) {
+        alert("El crédito no está habilitado para este alumno.");
+        return;
+      }
+
+      if (totalVentaCalculado > disponible) {
+        alert(
+          `Crédito insuficiente.
+Disponible: ${formatearMoneda(
+            disponible
+          )}`
+        );
+        return;
+      }
+    }
+
     const payload = {
       institucion_id: Number(institucionId),
-      alumno_id: pagaConSaldo
+      alumno_id: requiereAlumno
         ? Number(ventaForm.alumno_id)
         : null,
       metodo_pago: pagaConSaldo
         ? "SALDO"
+        : pagaConCredito
+        ? "CREDITO"
         : ventaForm.metodo_pago,
       items: itemsLimpios,
       observacion: ventaForm.observacion?.trim() || "",
@@ -4156,6 +4190,11 @@ if (institucionIdLogin) {
                     Number(totalVentaCalculado || 0)
                 )
               : Number(prev.saldo || 0),
+          credito_utilizado:
+            pagaConCredito
+              ? Number(prev.credito_utilizado || 0) +
+                Number(totalVentaCalculado || 0)
+              : Number(prev.credito_utilizado || 0),
         };
       });
 
@@ -8673,6 +8712,8 @@ if (!usuario) {
                     metodo_pago:
                       prev.metodo_pago === "RECARGA"
                         ? "RECARGA"
+                        : prev.metodo_pago === "CREDITO"
+                        ? "CREDITO"
                         : prev.metodo_pago,
                   }));
                   setModoNuevaOrden("consumidor_final");
@@ -8837,7 +8878,8 @@ if (!usuario) {
                   ...prev,
                   alumno_id: "",
                   metodo_pago:
-                    prev.metodo_pago === "RECARGA"
+                    prev.metodo_pago === "RECARGA" ||
+                    prev.metodo_pago === "CREDITO"
                       ? "EFECTIVO"
                       : prev.metodo_pago,
                 }));
@@ -9266,6 +9308,15 @@ if (!usuario) {
                 >
                   Saldo del alumno
                 </option>
+                <option
+                  value="CREDITO"
+                  disabled={
+                    !alumnoVentaSeleccionado ||
+                    alumnoVentaSeleccionado.credito_habilitado !== true
+                  }
+                >
+                  Crédito del alumno
+                </option>
               </select>
 
               <div style={{ height: 12 }} />
@@ -9299,6 +9350,35 @@ if (!usuario) {
                     Saldo disponible:{" "}
                     {formatearMoneda(
                       alumnoVentaSeleccionado.saldo || 0
+                    )}
+                  </div>
+                )}
+
+              {ventaForm.metodo_pago === "CREDITO" &&
+                alumnoVentaSeleccionado && (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      borderRadius: 8,
+                      background: "#fff7ed",
+                      color: "#9a3412",
+                      padding: 10,
+                      fontWeight: 800,
+                    }}
+                  >
+                    Crédito disponible:{" "}
+                    {formatearMoneda(
+                      Math.max(
+                        0,
+                        Number(
+                          alumnoVentaSeleccionado.limite_credito ||
+                            0
+                        ) -
+                          Number(
+                            alumnoVentaSeleccionado.credito_utilizado ||
+                              0
+                          )
+                      )
                     )}
                   </div>
                 )}
