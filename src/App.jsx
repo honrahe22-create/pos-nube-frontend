@@ -174,6 +174,7 @@ const [cuentasBancarias, setCuentasBancarias] = useState([]);
   const [ventas, setVentas] = useState([]);
   const [ventaForm, setVentaForm] = useState({
     alumno_id: "",
+    profesor_id: "",
     metodo_pago: "EFECTIVO",
     observacion: "",
   });
@@ -627,6 +628,14 @@ const totalRecargasVista = useMemo(() => {
     return alumnosActivos.find((a) => String(a.id) === String(ventaForm.alumno_id)) || null;
   }, [alumnosActivos, ventaForm.alumno_id]);
 
+  const profesorVentaSeleccionado = useMemo(() => {
+    return profesores.find(
+      (p) =>
+        p.activo !== false &&
+        String(p.id) === String(ventaForm.profesor_id)
+    ) || null;
+  }, [profesores, ventaForm.profesor_id]);
+
   const ventasEnriquecidas = useMemo(() => {
     return ventas.map((venta) => {
       const alumno = alumnos.find((a) => String(a.id) === String(venta.alumno_id));
@@ -640,7 +649,9 @@ const totalRecargasVista = useMemo(() => {
         venta.metodo_pago === "SALDO"
           ? "RECARGA"
           : venta.metodo_pago === "CREDITO"
-          ? "CRÉDITO"
+          ? "CRÉDITO ALUMNO"
+          : venta.metodo_pago === "CREDITO_PROFESOR"
+          ? "CRÉDITO PROFESOR"
           : venta.metodo_pago || "EFECTIVO";
 
       return {
@@ -4072,6 +4083,8 @@ if (institucionIdLogin) {
       ventaForm.metodo_pago === "RECARGA";
     const pagaConCredito =
       ventaForm.metodo_pago === "CREDITO";
+    const pagaConCreditoProfesor =
+      ventaForm.metodo_pago === "CREDITO_PROFESOR";
     const requiereAlumno = pagaConSaldo || pagaConCredito;
 
     if (requiereAlumno && !ventaForm.alumno_id) {
@@ -4089,6 +4102,27 @@ if (institucionIdLogin) {
         alert(
           `Saldo insuficiente.\nDisponible: ${formatearMoneda(
             saldo
+          )}`
+        );
+        return;
+      }
+    }
+
+    if (pagaConCreditoProfesor) {
+      if (!ventaForm.profesor_id || !profesorVentaSeleccionado) {
+        alert("Debes seleccionar un profesor.");
+        return;
+      }
+
+      const disponible = Number(
+        profesorVentaSeleccionado.saldo || 0
+      );
+
+      if (totalVentaCalculado > disponible) {
+        alert(
+          `Crédito insuficiente.
+Disponible: ${formatearMoneda(
+            disponible
           )}`
         );
         return;
@@ -4127,10 +4161,15 @@ Disponible: ${formatearMoneda(
       alumno_id: requiereAlumno
         ? Number(ventaForm.alumno_id)
         : null,
+      profesor_id: pagaConCreditoProfesor
+        ? Number(ventaForm.profesor_id)
+        : null,
       metodo_pago: pagaConSaldo
         ? "SALDO"
         : pagaConCredito
         ? "CREDITO"
+        : pagaConCreditoProfesor
+        ? "CREDITO_PROFESOR"
         : ventaForm.metodo_pago,
       items: itemsLimpios,
       observacion: ventaForm.observacion?.trim() || "",
@@ -6966,7 +7005,35 @@ if (!usuario) {
       </div>
     )}
 
-    {vistaProfesoresInterna === "profesores" && profesorDetalle && (
+    {vistaProfesoresInterna === "profesores" && profesorDetalle && (() => {
+      const ordenesProfesor = ventasEnriquecidas.filter(
+        (venta) =>
+          Number(venta.profesor_id) === Number(profesorDetalle.id)
+      );
+      const totalPagadasProfesor = ordenesProfesor
+        .filter(
+          (venta) =>
+            String(venta.estado || "PAGADA").toUpperCase() !==
+            "PENDIENTE"
+        )
+        .reduce(
+          (acumulado, venta) =>
+            acumulado + Number(venta.total || 0),
+          0
+        );
+      const totalPendientesProfesor = ordenesProfesor
+        .filter(
+          (venta) =>
+            String(venta.estado || "").toUpperCase() ===
+            "PENDIENTE"
+        )
+        .reduce(
+          (acumulado, venta) =>
+            acumulado + Number(venta.total || 0),
+          0
+        );
+
+      return (
       <div
         style={{
           background: "#ffffff",
@@ -7100,11 +7167,22 @@ if (!usuario) {
               }}
               onClick={() => {
                 setVista("ventas");
-                setVistaVentasInterna("nueva");
-                setTipoUsuarioNuevaOrden("PROFESORES");
+                setVistaVentasInterna("registrar");
+                setModoNuevaOrden("consumidor_final");
+                setTipoUsuarioNuevaOrden("PROFESOR");
+                setVentaItems([]);
+                setVentaForm({
+                  alumno_id: "",
+                  profesor_id: String(profesorDetalle.id),
+                  metodo_pago: "CREDITO_PROFESOR",
+                  observacion: "",
+                });
                 setBusquedaUsuarioNuevaOrden(
                   `${profesorDetalle.nombres || ""} ${profesorDetalle.apellidos || ""}`.trim()
                 );
+                setBusquedaProductoNuevaOrden("");
+                setCodigoBarraNuevaOrden("");
+                setCategoriaNuevaOrden("TODOS");
               }}
             >
               Crear orden +
@@ -7190,7 +7268,8 @@ if (!usuario) {
                     setVistaProfesorDetalle(clave);
 
                     if (
-                      clave === "creditos" &&
+                      (clave === "creditos" ||
+                        clave === "recargas") &&
                       profesorDetalle?.id
                     ) {
                       await cargarCreditosProfesores(
@@ -7224,27 +7303,181 @@ if (!usuario) {
             >
               {vistaProfesorDetalle === "ordenes" && (
                 <>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 16,
+                      flexWrap: "wrap",
+                    }}
+                  >
                     <div style={{ display: "flex", gap: 14 }}>
-                      <div style={{ padding: "16px 24px", border: "1px solid #e5e7eb", borderRadius: 12 }}>
+                      <div
+                        style={{
+                          padding: "16px 24px",
+                          border: "1px solid #e5e7eb",
+                          borderRadius: 12,
+                        }}
+                      >
                         <div>Total pagadas</div>
-                        <strong style={{ fontSize: 28 }}>{formatearMoneda(0)}</strong>
+                        <strong style={{ fontSize: 28 }}>
+                          {formatearMoneda(totalPagadasProfesor)}
+                        </strong>
                       </div>
-                      <div style={{ padding: "16px 24px", border: "1px solid #e5e7eb", borderRadius: 12 }}>
+                      <div
+                        style={{
+                          padding: "16px 24px",
+                          border: "1px solid #e5e7eb",
+                          borderRadius: 12,
+                        }}
+                      >
                         <div>Total pendientes</div>
-                        <strong style={{ fontSize: 28, color: "#10b981" }}>{formatearMoneda(0)}</strong>
+                        <strong
+                          style={{ fontSize: 28, color: "#10b981" }}
+                        >
+                          {formatearMoneda(totalPendientesProfesor)}
+                        </strong>
                       </div>
                     </div>
                   </div>
-                  <div style={{ marginTop: 28, textAlign: "center", color: "#64748b", padding: 28 }}>
-                    No hay órdenes disponibles para este profesor.
+
+                  <div style={{ ...styles.tableWrap, marginTop: 24 }}>
+                    <table style={styles.table}>
+                      <thead>
+                        <tr>
+                          <th style={styles.th}>Orden</th>
+                          <th style={styles.th}>Nombre</th>
+                          <th style={styles.th}>Apellido</th>
+                          <th style={styles.th}>Detalles</th>
+                          <th style={styles.th}>Fecha</th>
+                          <th style={styles.th}>Total</th>
+                          <th style={styles.th}>Forma de pago</th>
+                          <th style={styles.th}>Estado</th>
+                          <th style={styles.th}>Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ordenesProfesor.length === 0 ? (
+                          <tr>
+                            <td style={styles.td} colSpan={9}>
+                              No hay datos disponibles
+                            </td>
+                          </tr>
+                        ) : (
+                          ordenesProfesor.map((venta) => (
+                            <tr key={venta.id}>
+                              <td style={styles.td}>#{venta.id}</td>
+                              <td style={styles.td}>
+                                {profesorDetalle.nombres || "-"}
+                              </td>
+                              <td style={styles.td}>
+                                {profesorDetalle.apellidos || "-"}
+                              </td>
+                              <td style={styles.td}>
+                                {Array.isArray(venta.items)
+                                  ? `${venta.items.length} producto(s)`
+                                  : "Ver orden"}
+                              </td>
+                              <td style={styles.td}>
+                                {venta.created_at
+                                  ? new Date(
+                                      venta.created_at
+                                    ).toLocaleString()
+                                  : "-"}
+                              </td>
+                              <td style={styles.td}>
+                                {formatearMoneda(venta.total || 0)}
+                              </td>
+                              <td style={styles.td}>
+                                {venta.metodo_visual ||
+                                  venta.metodo_pago ||
+                                  "-"}
+                              </td>
+                              <td style={styles.td}>
+                                {venta.estado || "PAGADA"}
+                              </td>
+                              <td style={styles.td}>
+                                <button
+                                  type="button"
+                                  style={styles.smallDarkButton}
+                                  onClick={() =>
+                                    reimprimirVenta(venta)
+                                  }
+                                >
+                                  Reimprimir
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </>
               )}
 
               {vistaProfesorDetalle === "recargas" && (
-                <div style={{ textAlign: "center", color: "#64748b", padding: 40 }}>
-                  No hay recargas registradas para este profesor.
+                <div style={styles.tableWrap}>
+                  <table style={styles.table}>
+                    <thead>
+                      <tr>
+                        <th style={styles.th}>Fecha</th>
+                        <th style={styles.th}>Monto</th>
+                        <th style={styles.th}>Forma</th>
+                        <th style={styles.th}>Usuario</th>
+                        <th style={styles.th}>Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {creditosProfesoresFiltrados.filter(
+                        (movimiento) =>
+                          Number(movimiento.profesor_id) ===
+                            Number(profesorDetalle.id) &&
+                          movimiento.tipo === "RECARGA"
+                      ).length === 0 ? (
+                        <tr>
+                          <td style={styles.td} colSpan={5}>
+                            No hay recargas registradas.
+                          </td>
+                        </tr>
+                      ) : (
+                        creditosProfesoresFiltrados
+                          .filter(
+                            (movimiento) =>
+                              Number(movimiento.profesor_id) ===
+                                Number(profesorDetalle.id) &&
+                              movimiento.tipo === "RECARGA"
+                          )
+                          .map((movimiento) => (
+                            <tr key={movimiento.id}>
+                              <td style={styles.td}>
+                                {movimiento.created_at
+                                  ? new Date(
+                                      movimiento.created_at
+                                    ).toLocaleString()
+                                  : "-"}
+                              </td>
+                              <td style={styles.td}>
+                                {formatearMoneda(
+                                  movimiento.monto || 0
+                                )}
+                              </td>
+                              <td style={styles.td}>
+                                Recarga de crédito
+                              </td>
+                              <td style={styles.td}>
+                                {movimiento.usuario_nombre ||
+                                  movimiento.usuario_correo ||
+                                  "Sistema"}
+                              </td>
+                              <td style={styles.td}>
+                                {movimiento.estado || "ACTIVO"}
+                              </td>
+                            </tr>
+                          ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               )}
 
@@ -7486,7 +7719,8 @@ if (!usuario) {
           </div>
         </div>
       </div>
-    )}
+      );
+    })()}
 
     {vistaProfesoresInterna === "creditos" && (
       <div style={styles.box}>
@@ -8602,6 +8836,10 @@ if (!usuario) {
           <div style={{ fontSize: 14, fontWeight: 800 }}>
             {alumnoVentaSeleccionado
               ? obtenerNombreAlumno(alumnoVentaSeleccionado)
+              : profesorVentaSeleccionado
+              ? `${profesorVentaSeleccionado.nombres || ""} ${
+                  profesorVentaSeleccionado.apellidos || ""
+                }`.trim()
               : "Consumidor final"}
           </div>
         </div>
@@ -8634,7 +8872,11 @@ if (!usuario) {
         >
           <div style={{ fontSize: 12, fontWeight: 700 }}>Saldo</div>
           <div style={{ fontSize: 24, fontWeight: 900 }}>
-            {formatearMoneda(alumnoVentaSeleccionado?.saldo || 0)}
+            {formatearMoneda(
+              alumnoVentaSeleccionado?.saldo ||
+                profesorVentaSeleccionado?.saldo ||
+                0
+            )}
           </div>
         </div>
       </div>
@@ -8690,7 +8932,9 @@ if (!usuario) {
             gap: 10,
           }}
         >
-          {alumnosActivos
+          {(tipoUsuarioNuevaOrden === "TODOS" ||
+            tipoUsuarioNuevaOrden === "ESTUDIANTE") &&
+            alumnosActivos
             .filter((a) => {
               const texto = busquedaUsuarioNuevaOrden.trim().toLowerCase();
               const nombre = obtenerNombreAlumno(a).toLowerCase();
@@ -8737,6 +8981,66 @@ if (!usuario) {
                 </div>
               </button>
             ))}
+
+          {(tipoUsuarioNuevaOrden === "TODOS" ||
+            tipoUsuarioNuevaOrden === "PROFESOR") &&
+            profesores
+              .filter((p) => {
+                if (p.activo === false) return false;
+                const texto =
+                  busquedaUsuarioNuevaOrden.trim().toLowerCase();
+                const nombre = `${p.nombres || ""} ${
+                  p.apellidos || ""
+                }`.toLowerCase();
+                const codigo = String(
+                  p.codigo || p.cedula || ""
+                ).toLowerCase();
+
+                return (
+                  !texto ||
+                  nombre.includes(texto) ||
+                  codigo.includes(texto)
+                );
+              })
+              .slice(0, 12)
+              .map((p) => (
+                <button
+                  type="button"
+                  key={`profesor-${p.id}`}
+                  onClick={() => {
+                    setVentaForm((prev) => ({
+                      ...prev,
+                      alumno_id: "",
+                      profesor_id: String(p.id),
+                      metodo_pago: "CREDITO_PROFESOR",
+                    }));
+                    setModoNuevaOrden("consumidor_final");
+                    setBusquedaUsuarioNuevaOrden("");
+                  }}
+                  style={{
+                    border: "1px solid #cbd5e1",
+                    background: "#ffffff",
+                    borderRadius: 10,
+                    padding: 12,
+                    textAlign: "left",
+                    cursor: "pointer",
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: "#111827" }}>
+                    {`${p.nombres || ""} ${p.apellidos || ""}`.trim()}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      color: "#64748b",
+                      marginTop: 4,
+                    }}
+                  >
+                    Profesor · {p.cedula || p.codigo || "Sin código"} ·
+                    Crédito {formatearMoneda(p.saldo || 0)}
+                  </div>
+                </button>
+              ))}
         </div>
       </div>
     )}
@@ -9317,6 +9621,12 @@ if (!usuario) {
                 >
                   Crédito del alumno
                 </option>
+                <option
+                  value="CREDITO_PROFESOR"
+                  disabled={!profesorVentaSeleccionado}
+                >
+                  Crédito del profesor
+                </option>
               </select>
 
               <div style={{ height: 12 }} />
@@ -9382,6 +9692,26 @@ if (!usuario) {
                     )}
                   </div>
                 )}
+
+              {ventaForm.metodo_pago === "CREDITO_PROFESOR" &&
+                profesorVentaSeleccionado && (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      borderRadius: 8,
+                      background: "#eef2ff",
+                      color: "#2435bd",
+                      padding: 10,
+                      fontWeight: 800,
+                    }}
+                  >
+                    Crédito disponible del profesor:{" "}
+                    {formatearMoneda(
+                      profesorVentaSeleccionado.saldo || 0
+                    )}
+                  </div>
+                )}
+
 
               <div
                 style={{
