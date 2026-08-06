@@ -301,6 +301,25 @@ const [egresosFiltros, setEgresosFiltros] = useState({
 
 const [egresosDiarios, setEgresosDiarios] = useState([]);
 const [mostrarCrearEgreso, setMostrarCrearEgreso] = useState(false);
+const [editandoEgresoId, setEditandoEgresoId] = useState(null);
+const [cierresCaja, setCierresCaja] = useState([]);
+const [mostrarCrearCierre, setMostrarCrearCierre] = useState(false);
+const [cierreDetalle, setCierreDetalle] = useState(null);
+const [cargandoCierres, setCargandoCierres] = useState(false);
+const [resumenCierreServidor, setResumenCierreServidor] = useState(null);
+const [cierreForm, setCierreForm] = useState({
+  fecha: new Date().toISOString().slice(0, 10),
+  negocio: "POS NUBE",
+  tarjeta_manual: "0",
+  transferencia_manual: "0",
+  observacion: "",
+  denominaciones: {
+    billete_1: 0, billete_2: 0, billete_5: 0, billete_10: 0,
+    billete_20: 0, billete_50: 0, billete_100: 0,
+    moneda_001: 0, moneda_005: 0, moneda_010: 0,
+    moneda_025: 0, moneda_050: 0, moneda_1: 0,
+  },
+});
 
 const [egresoForm, setEgresoForm] = useState({
   negocio: "",
@@ -4366,6 +4385,221 @@ Disponible: ${formatearMoneda(
 
 }, [vista]);
 
+  const cargarEgresos = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+      if (!token || !institucionId) return;
+
+      const params = new URLSearchParams({
+        institucion_id: String(institucionId),
+      });
+      if (egresosFiltros.fecha_inicio) params.set("fecha_inicio", egresosFiltros.fecha_inicio);
+      if (egresosFiltros.fecha_fin) params.set("fecha_fin", egresosFiltros.fecha_fin);
+
+      const respuesta = await fetch(`${API_URL}/api/egresos?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await respuesta.json();
+      if (!respuesta.ok) throw new Error(data.message || data.error || "No se pudieron cargar los egresos");
+      setEgresosDiarios(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Error cargando egresos:", error);
+      alert(error.message || "No se pudieron cargar los egresos.");
+    }
+  };
+
+  const guardarEgreso = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+      const total = Number(egresoForm.total || 0);
+      if (!institucionId || !token) throw new Error("Sesión inválida");
+      if (!egresoForm.fecha || !egresoForm.nombre_egreso || total <= 0) {
+        alert("Fecha, nombre del egreso y total mayor a cero son obligatorios.");
+        return;
+      }
+
+      const url = editandoEgresoId
+        ? `${API_URL}/api/egresos/${editandoEgresoId}`
+        : `${API_URL}/api/egresos`;
+      const respuesta = await fetch(url, {
+        method: editandoEgresoId ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          ...egresoForm,
+          institucion_id: Number(institucionId),
+          total,
+        }),
+      });
+      const data = await respuesta.json();
+      if (!respuesta.ok) throw new Error(data.message || data.error || "No se pudo guardar el egreso");
+
+      setEgresoForm({
+        negocio: "", usuario: "", fecha: "", nombre_egreso: "", total: "",
+        descripcion: "", estado: "ACTIVO", numero_factura: "", tipo_egreso: "Efectivo",
+      });
+      setEditandoEgresoId(null);
+      setMostrarCrearEgreso(false);
+      await cargarEgresos();
+      alert(editandoEgresoId ? "Egreso actualizado correctamente." : "Egreso guardado correctamente.");
+    } catch (error) {
+      console.error("Error guardando egreso:", error);
+      alert(error.message || "No se pudo guardar el egreso.");
+    }
+  };
+
+  const eliminarEgreso = async (egreso) => {
+    if (!window.confirm("¿Deseas eliminar este egreso?")) return;
+    try {
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+      const respuesta = await fetch(`${API_URL}/api/egresos/${egreso.id}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ institucion_id: Number(institucionId) }),
+      });
+      const data = await respuesta.json();
+      if (!respuesta.ok) throw new Error(data.message || data.error || "No se pudo eliminar");
+      await cargarEgresos();
+    } catch (error) {
+      alert(error.message || "No se pudo eliminar el egreso.");
+    }
+  };
+
+  const cargarResumenCierre = async (fecha = cierreForm.fecha) => {
+    if (!fecha) return;
+    try {
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+      const respuesta = await fetch(
+        `${API_URL}/api/cierres/resumen?institucion_id=${institucionId}&fecha=${fecha}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await respuesta.json();
+      if (!respuesta.ok) throw new Error(data.message || data.error || "No se pudo calcular el cierre");
+      setResumenCierreServidor(data);
+    } catch (error) {
+      console.error("Error cargando resumen de cierre:", error);
+      alert(error.message || "No se pudo calcular el cierre.");
+    }
+  };
+
+  const cargarCierres = async () => {
+    try {
+      setCargandoCierres(true);
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+      const params = new URLSearchParams({ institucion_id: String(institucionId) });
+      if (cierreCajaFiltros.fecha_inicio) params.set("fecha_inicio", cierreCajaFiltros.fecha_inicio);
+      if (cierreCajaFiltros.fecha_fin) params.set("fecha_fin", cierreCajaFiltros.fecha_fin);
+      const respuesta = await fetch(`${API_URL}/api/cierres?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await respuesta.json();
+      if (!respuesta.ok) throw new Error(data.message || data.error || "No se pudieron cargar los cierres");
+      setCierresCaja(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Error cargando cierres:", error);
+      alert(error.message || "No se pudieron cargar los cierres.");
+    } finally {
+      setCargandoCierres(false);
+    }
+  };
+
+  const totalEfectivoContado = useMemo(() => {
+    const d = cierreForm.denominaciones || {};
+    return (
+      Number(d.billete_1 || 0) * 1 + Number(d.billete_2 || 0) * 2 +
+      Number(d.billete_5 || 0) * 5 + Number(d.billete_10 || 0) * 10 +
+      Number(d.billete_20 || 0) * 20 + Number(d.billete_50 || 0) * 50 +
+      Number(d.billete_100 || 0) * 100 + Number(d.moneda_001 || 0) * 0.01 +
+      Number(d.moneda_005 || 0) * 0.05 + Number(d.moneda_010 || 0) * 0.10 +
+      Number(d.moneda_025 || 0) * 0.25 + Number(d.moneda_050 || 0) * 0.50 +
+      Number(d.moneda_1 || 0) * 1
+    );
+  }, [cierreForm.denominaciones]);
+
+  const guardarCierre = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+      if (!cierreForm.fecha) return alert("Selecciona la fecha del cierre.");
+      const respuesta = await fetch(`${API_URL}/api/cierres`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          institucion_id: Number(institucionId),
+          fecha: cierreForm.fecha,
+          negocio: cierreForm.negocio || "POS NUBE",
+          efectivo_contado: totalEfectivoContado,
+          tarjeta_manual: Number(cierreForm.tarjeta_manual || 0),
+          transferencia_manual: Number(cierreForm.transferencia_manual || 0),
+          observacion: cierreForm.observacion || "",
+          denominaciones: cierreForm.denominaciones,
+        }),
+      });
+      const data = await respuesta.json();
+      if (!respuesta.ok) throw new Error(data.message || data.error || "No se pudo guardar el cierre");
+      setMostrarCrearCierre(false);
+      setCierreDetalle(data.cierre || null);
+      await cargarCierres();
+      alert("Cierre de caja guardado correctamente.");
+    } catch (error) {
+      console.error("Error guardando cierre:", error);
+      alert(error.message || "No se pudo guardar el cierre.");
+    }
+  };
+
+  const verCierre = async (cierre) => {
+    try {
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+      const respuesta = await fetch(
+        `${API_URL}/api/cierres/${cierre.id}?institucion_id=${institucionId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await respuesta.json();
+      if (!respuesta.ok) throw new Error(data.message || data.error || "No se pudo abrir el cierre");
+      setCierreDetalle(data);
+    } catch (error) {
+      alert(error.message || "No se pudo abrir el cierre.");
+    }
+  };
+
+  const eliminarCierre = async (cierre) => {
+    if (!window.confirm("¿Deseas eliminar este cierre? Las ventas, recargas y egresos no serán eliminados.")) return;
+    try {
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+      const respuesta = await fetch(`${API_URL}/api/cierres/${cierre.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ institucion_id: Number(institucionId) }),
+      });
+      const data = await respuesta.json();
+      if (!respuesta.ok) throw new Error(data.message || data.error || "No se pudo eliminar el cierre");
+      await cargarCierres();
+    } catch (error) {
+      alert(error.message || "No se pudo eliminar el cierre.");
+    }
+  };
+
+  useEffect(() => {
+    if (!usuario || !institucionActivaId) return;
+    if (vista === "egresos_diarios") cargarEgresos();
+    if (vista === "reporte_cierre") cargarCierres();
+  }, [vista, institucionActivaId]);
+
   const cerrarSesion = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("usuario");
@@ -5092,181 +5326,105 @@ if (!usuario) {
     <div style={styles.pageHeader}>
       <div>
         <h1 style={styles.dashboardTitle}>Cierre de caja diario</h1>
-        <p style={styles.dashboardSubtitle}>Resumen por fecha</p>
+        <p style={styles.dashboardSubtitle}>Conteo, diferencias e historial por fecha</p>
       </div>
-
-      <button
-        style={styles.refreshButton}
-        onClick={() => {
-          cargarVentas();
-          cargarRecargas();
-          cargarAlumnos();
-        }}
-      >
-        Refrescar
-      </button>
+      <div style={{ display: "flex", gap: 10 }}>
+        <button style={styles.refreshButton} onClick={() => { cargarCierres(); cargarVentas(); cargarRecargas(); cargarEgresos(); }}>
+          Refrescar
+        </button>
+        <button style={styles.button} onClick={async () => { setMostrarCrearCierre(true); await cargarResumenCierre(cierreForm.fecha); }}>
+          Crear cierre de caja
+        </button>
+      </div>
     </div>
 
     <div style={styles.box}>
       <div style={styles.filtersGridPaymon}>
-        <div style={styles.filterField}>
-          <label style={styles.filterLabelTop}>Fecha inicial</label>
-          <input
-            type="date"
-            value={cierreCajaFiltros.fecha_inicio}
-            onChange={(e) =>
-              setCierreCajaFiltros({
-                ...cierreCajaFiltros,
-                fecha_inicio: e.target.value,
-              })
-            }
-            style={styles.input}
-          />
-        </div>
-
-        <div style={styles.filterField}>
-          <label style={styles.filterLabelTop}>Fecha final</label>
-          <input
-            type="date"
-            value={cierreCajaFiltros.fecha_fin}
-            onChange={(e) =>
-              setCierreCajaFiltros({
-                ...cierreCajaFiltros,
-                fecha_fin: e.target.value,
-              })
-            }
-            style={styles.input}
-          />
-        </div>
+        <div style={styles.filterField}><label style={styles.filterLabelTop}>Fecha inicial</label><input type="date" value={cierreCajaFiltros.fecha_inicio} onChange={(e)=>setCierreCajaFiltros({...cierreCajaFiltros,fecha_inicio:e.target.value})} style={styles.input}/></div>
+        <div style={styles.filterField}><label style={styles.filterLabelTop}>Fecha final</label><input type="date" value={cierreCajaFiltros.fecha_fin} onChange={(e)=>setCierreCajaFiltros({...cierreCajaFiltros,fecha_fin:e.target.value})} style={styles.input}/></div>
       </div>
-
       <div style={styles.filterButtons}>
-        <button
-          type="button"
-          style={styles.button}
-          onClick={() => setCierreCajaFiltros({ ...cierreCajaFiltros })}
-        >
-          Consultar
-        </button>
-
-        <button
-          type="button"
-          style={styles.outlineButton}
-          onClick={limpiarFiltrosCierreCaja}
-        >
-          Borrar filtros
-        </button>
+        <button type="button" style={styles.button} onClick={cargarCierres}>Consultar</button>
+        <button type="button" style={styles.outlineButton} onClick={() => { limpiarFiltrosCierreCaja(); setTimeout(cargarCierres, 0); }}>Borrar filtros</button>
       </div>
     </div>
 
     <div style={{ height: 20 }} />
-
-    <div style={styles.grid}>
-      <div style={styles.box}>
-        <h3>Ventas en efectivo</h3>
-        <p>{formatearMoneda(cierreCajaResumen.ventasEfectivo)}</p>
-      </div>
-
-      <div style={styles.box}>
-        <h3>Ventas transferencia</h3>
-        <p>{formatearMoneda(cierreCajaResumen.ventasTransferencia)}</p>
-      </div>
-
-      <div style={styles.box}>
-        <h3>Ventas por saldo</h3>
-        <p>{formatearMoneda(cierreCajaResumen.ventasSaldo)}</p>
-      </div>
-
-      <div style={styles.box}>
-        <h3>Recargas efectivo</h3>
-        <p>{formatearMoneda(cierreCajaResumen.recargasEfectivo)}</p>
-      </div>
-
-      <div style={styles.box}>
-        <h3>Recargas transferencia</h3>
-        <p>{formatearMoneda(cierreCajaResumen.recargasTransferencia)}</p>
-      </div>
-
-      <div style={styles.box}>
-        <h3>Total general</h3>
-        <p>{formatearMoneda(cierreCajaResumen.totalGeneral)}</p>
-      </div>
-    </div>
-
-    <div style={{ height: 20 }} />
-
     <div style={styles.box}>
-      <h3>Cierre de caja</h3>
-
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+        <h3 style={{ margin:0 }}>Historial de cierres</h3>
+        <span>{cierresCaja.length} registro(s)</span>
+      </div>
       <div style={styles.tableWrap}>
         <table style={styles.table}>
-          <thead>
-            <tr>
-              <th style={styles.th}>Concepto</th>
-              <th style={styles.th}>Total</th>
-            </tr>
-          </thead>
-
+          <thead><tr>
+            <th style={styles.th}>Usuario</th><th style={styles.th}>Fecha</th><th style={styles.th}>Efectivo contado</th>
+            <th style={styles.th}>Recargas efectivo</th><th style={styles.th}>Transferencia manual</th>
+            <th style={styles.th}>Ventas efectivo</th><th style={styles.th}>Ventas transferencia</th>
+            <th style={styles.th}>Egresos</th><th style={styles.th}>Diferencia</th><th style={styles.th}>Observación</th><th style={styles.th}>Acciones</th>
+          </tr></thead>
           <tbody>
-            <tr>
-              <td style={styles.td}>Ventas en efectivo</td>
-              <td style={styles.td}>
-                {formatearMoneda(cierreCajaResumen.ventasEfectivo)}
-              </td>
-            </tr>
-
-            <tr>
-              <td style={styles.td}>Ventas por transferencia</td>
-              <td style={styles.td}>
-                {formatearMoneda(cierreCajaResumen.ventasTransferencia)}
-              </td>
-            </tr>
-
-            <tr>
-              <td style={styles.td}>Ventas por saldo</td>
-              <td style={styles.td}>
-                {formatearMoneda(cierreCajaResumen.ventasSaldo)}
-              </td>
-            </tr>
-
-            <tr>
-              <td style={styles.td}>Recargas en efectivo</td>
-              <td style={styles.td}>
-                {formatearMoneda(cierreCajaResumen.recargasEfectivo)}
-              </td>
-            </tr>
-
-            <tr>
-              <td style={styles.td}>Recargas por transferencia</td>
-              <td style={styles.td}>
-                {formatearMoneda(cierreCajaResumen.recargasTransferencia)}
-              </td>
-            </tr>
-
-            <tr>
-              <td style={styles.td}><strong>Total ventas</strong></td>
-              <td style={styles.td}>
-                <strong>{formatearMoneda(cierreCajaResumen.totalVentas)}</strong>
-              </td>
-            </tr>
-
-            <tr>
-              <td style={styles.td}><strong>Total recargas</strong></td>
-              <td style={styles.td}>
-                <strong>{formatearMoneda(cierreCajaResumen.totalRecargas)}</strong>
-              </td>
-            </tr>
-
-            <tr>
-              <td style={styles.td}><strong>Total general</strong></td>
-              <td style={styles.td}>
-                <strong>{formatearMoneda(cierreCajaResumen.totalGeneral)}</strong>
-              </td>
-            </tr>
+            {cargandoCierres ? <tr><td colSpan={11} style={styles.td}>Cargando cierres...</td></tr> : cierresCaja.length===0 ? <tr><td colSpan={11} style={styles.td}>No hay cierres registrados.</td></tr> : cierresCaja.map((c)=><tr key={c.id}>
+              <td style={styles.td}>{c.usuario_nombre || c.usuario_correo || "Sistema"}</td>
+              <td style={styles.td}>{formatearSoloFecha(c.fecha)}</td>
+              <td style={styles.td}>{formatearMoneda(c.efectivo_contado)}</td>
+              <td style={styles.td}>{formatearMoneda(c.recargas_efectivo)}</td>
+              <td style={styles.td}>{formatearMoneda(c.transferencia_manual)}</td>
+              <td style={styles.td}>{formatearMoneda(c.ventas_efectivo)}</td>
+              <td style={styles.td}>{formatearMoneda(c.ventas_transferencia)}</td>
+              <td style={styles.td}>{formatearMoneda(c.egresos_total)}</td>
+              <td style={{...styles.td,fontWeight:900,color:Number(c.diferencia_general||0)<0?"#dc2626":"#b45309"}}>{formatearMoneda(c.diferencia_general)}</td>
+              <td style={styles.td}>{c.observacion_automatica || c.observacion || "-"}</td>
+              <td style={styles.td}><div style={{display:"flex",gap:8}}>
+                <button style={styles.editIconButton} onClick={()=>verCierre(c)}>Ver</button>
+                <button style={styles.deleteIconButton} onClick={()=>eliminarCierre(c)}>Eliminar</button>
+              </div></td>
+            </tr>)}
           </tbody>
         </table>
       </div>
     </div>
+
+    {mostrarCrearCierre && (
+      <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,.65)", zIndex:9999, overflowY:"auto", padding:24 }}>
+        <div style={{ maxWidth:1100, margin:"0 auto", background:"white", borderRadius:16, padding:24 }}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><h2>Nuevo cierre de caja</h2><button style={styles.outlineButton} onClick={()=>setMostrarCrearCierre(false)}>Cerrar</button></div>
+          <div style={styles.filtersGrid}>
+            <div style={styles.filterField}><label style={styles.label}>Fecha de cierre</label><input type="date" style={styles.input} value={cierreForm.fecha} onChange={async(e)=>{const fecha=e.target.value;setCierreForm({...cierreForm,fecha});await cargarResumenCierre(fecha);}}/></div>
+            <div style={styles.filterField}><label style={styles.label}>Usuario</label><input style={styles.input} value={usuario?.nombre || usuario?.correo || "Usuario"} readOnly/></div>
+            <div style={styles.filterFieldWide}><label style={styles.label}>Negocio</label><input style={styles.input} value={cierreForm.negocio} onChange={(e)=>setCierreForm({...cierreForm,negocio:e.target.value})}/></div>
+          </div>
+          <h3 style={{marginTop:24}}>Total de dinero: {formatearMoneda(totalEfectivoContado)}</h3>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:24}}>
+            <div><h2 style={{textAlign:"center"}}>Billetes</h2>{[["billete_1",1],["billete_2",2],["billete_5",5],["billete_10",10],["billete_20",20],["billete_50",50],["billete_100",100]].map(([k,v])=><div key={k} style={{marginBottom:10}}><label>BILLETE DE {Number(v).toFixed(2)}</label><input type="number" min="0" style={styles.input} value={cierreForm.denominaciones[k]} onChange={(e)=>setCierreForm({...cierreForm,denominaciones:{...cierreForm.denominaciones,[k]:Number(e.target.value||0)}})}/></div>)}</div>
+            <div><h2 style={{textAlign:"center"}}>Monedas</h2>{[["moneda_001",.01],["moneda_005",.05],["moneda_010",.10],["moneda_025",.25],["moneda_050",.50],["moneda_1",1]].map(([k,v])=><div key={k} style={{marginBottom:10}}><label>MONEDA DE {Number(v).toFixed(2)}</label><input type="number" min="0" style={styles.input} value={cierreForm.denominaciones[k]} onChange={(e)=>setCierreForm({...cierreForm,denominaciones:{...cierreForm.denominaciones,[k]:Number(e.target.value||0)}})}/></div>)}</div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:20,marginTop:24}}>
+            <div><h2>Tarjeta crédito/débito</h2><label>Tarjetas (suma de pagos)</label><input type="number" step="0.01" style={styles.input} value={cierreForm.tarjeta_manual} onChange={(e)=>setCierreForm({...cierreForm,tarjeta_manual:e.target.value})}/></div>
+            <div><h2>Transferencia</h2><label>Transferencias (suma de comprobantes)</label><input type="number" step="0.01" style={styles.input} value={cierreForm.transferencia_manual} onChange={(e)=>setCierreForm({...cierreForm,transferencia_manual:e.target.value})}/></div>
+          </div>
+          {resumenCierreServidor && <div style={{...styles.box,marginTop:24}}><h3>Resumen esperado del sistema</h3><p>Ventas efectivo: {formatearMoneda(resumenCierreServidor.ventas_efectivo)}</p><p>Ventas transferencia: {formatearMoneda(resumenCierreServidor.ventas_transferencia)}</p><p>Ventas tarjeta: {formatearMoneda(resumenCierreServidor.ventas_tarjeta)}</p><p>Recargas efectivo: {formatearMoneda(resumenCierreServidor.recargas_efectivo)}</p><p>Recargas transferencia: {formatearMoneda(resumenCierreServidor.recargas_transferencia)}</p><p>Egresos activos: {formatearMoneda(resumenCierreServidor.egresos_total)}</p></div>}
+          <div style={{marginTop:20}}><label>Observación</label><input style={styles.input} value={cierreForm.observacion} onChange={(e)=>setCierreForm({...cierreForm,observacion:e.target.value})}/></div>
+          <button style={{...styles.button,marginTop:20}} onClick={guardarCierre}>Guardar cierre</button>
+        </div>
+      </div>
+    )}
+
+    {cierreDetalle && (
+      <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,.65)", zIndex:10000, overflowY:"auto", padding:24 }}>
+        <div style={{maxWidth:1000,margin:"0 auto",background:"white",borderRadius:16,padding:28}}>
+          <div style={{display:"flex",justifyContent:"space-between"}}><h2>Detalle de cierre de caja</h2><button style={styles.outlineButton} onClick={()=>setCierreDetalle(null)}>✕</button></div>
+          <div style={{display:"grid",gridTemplateColumns:"minmax(220px,1fr) 2fr",gap:8}}>
+            {[['Fecha de cierre',formatearFechaHora(cierreDetalle.fecha_cierre || cierreDetalle.created_at)],['Unidad educativa',institucionActiva?.nombre],['Negocio',cierreDetalle.negocio],['Usuario',cierreDetalle.usuario_nombre||cierreDetalle.usuario_correo],['Total recarga efectivo',formatearMoneda(cierreDetalle.recargas_efectivo)],['Egreso',formatearMoneda(cierreDetalle.egresos_total)],['Total recarga transferencia',formatearMoneda(cierreDetalle.recargas_transferencia)],['Total ventas por efectivo',formatearMoneda(cierreDetalle.ventas_efectivo)],['Total ventas por transferencia',formatearMoneda(cierreDetalle.ventas_transferencia)],['Total ventas por tarjeta',formatearMoneda(cierreDetalle.ventas_tarjeta)],['Efectivo entregado',formatearMoneda(cierreDetalle.efectivo_contado)],['Tarjeta manual',formatearMoneda(cierreDetalle.tarjeta_manual)],['Transferencia manual',formatearMoneda(cierreDetalle.transferencia_manual)],['Diferencia efectivo',formatearMoneda(cierreDetalle.diferencia_efectivo)],['Diferencia tarjeta',formatearMoneda(cierreDetalle.diferencia_tarjeta)],['Diferencia transferencia',formatearMoneda(cierreDetalle.diferencia_transferencia)],['Diferencia general',formatearMoneda(cierreDetalle.diferencia_general)],['Observación',cierreDetalle.observacion_automatica||cierreDetalle.observacion||'-']].map(([a,b])=><><div style={{color:'#64748b'}}>{a}:</div><strong>{b||'-'}</strong></>)}
+          </div>
+          <h3 style={{marginTop:24}}>Conteo de billetes y monedas</h3>
+          <div style={styles.tableWrap}><table style={styles.table}><thead><tr><th style={styles.th}>Denominación</th><th style={styles.th}>Tipo</th><th style={styles.th}>Cantidad</th><th style={styles.th}>Total</th></tr></thead><tbody>{(cierreDetalle.denominaciones||[]).map((d,i)=><tr key={i}><td style={styles.td}>{Number(d.denominacion).toFixed(2)}</td><td style={styles.td}>{d.tipo}</td><td style={styles.td}>{d.cantidad}</td><td style={styles.td}>{formatearMoneda(d.total)}</td></tr>)}</tbody></table></div>
+          <h3 style={{marginTop:24}}>Egresos incluidos en este cierre</h3>
+          <div style={styles.tableWrap}><table style={styles.table}><thead><tr><th style={styles.th}>Fecha</th><th style={styles.th}>Nombre</th><th style={styles.th}>Tipo</th><th style={styles.th}>Factura</th><th style={styles.th}>Valor</th><th style={styles.th}>Usuario</th></tr></thead><tbody>{(cierreDetalle.egresos||[]).length===0?<tr><td colSpan={6} style={styles.td}>No hubo egresos activos en este cierre.</td></tr>:(cierreDetalle.egresos||[]).map((e)=><tr key={e.id}><td style={styles.td}>{formatearSoloFecha(e.fecha)}</td><td style={styles.td}>{e.nombre_egreso}</td><td style={styles.td}>{e.tipo_egreso}</td><td style={styles.td}>{e.numero_factura||'-'}</td><td style={styles.td}>{formatearMoneda(e.total)}</td><td style={styles.td}>{e.usuario||e.usuario_nombre||'-'}</td></tr>)}</tbody></table></div>
+          <button style={{...styles.button,marginTop:20}} onClick={()=>window.print()}>Imprimir</button>
+        </div>
+      </div>
+    )}
   </>
 )}
 
@@ -5606,29 +5764,7 @@ if (!usuario) {
         <div style={styles.filterButtons}>
           <button
             style={styles.button}
-            onClick={() => {
-              const nuevo = {
-                ...egresoForm,
-                id: Date.now(),
-                total: Number(egresoForm.total || 0),
-              };
-
-              setEgresosDiarios([nuevo, ...egresosDiarios]);
-
-              setEgresoForm({
-                negocio: "",
-                usuario: "",
-                fecha: "",
-                nombre_egreso: "",
-                total: "",
-                descripcion: "",
-                estado: "ACTIVO",
-                numero_factura: "",
-                tipo_egreso: "Efectivo",
-              });
-
-              setMostrarCrearEgreso(false);
-            }}
+onClick={guardarEgreso}
           >
             Guardar egreso
           </button>
@@ -5685,7 +5821,7 @@ if (!usuario) {
     </div>
 
     <div style={styles.filterButtons}>
-      <button style={styles.button}>Consultar</button>
+      <button style={styles.button} onClick={cargarEgresos}>Consultar</button>
 
       <button
         style={styles.outlineButton}
@@ -5769,10 +5905,8 @@ if (!usuario) {
                           numero_factura: egreso.numero_factura || "",
                           tipo_egreso: egreso.tipo_egreso || "Efectivo",
                         });
+                        setEditandoEgresoId(egreso.id);
                         setMostrarCrearEgreso(true);
-                        setEgresosDiarios(
-                          egresosDiarios.filter((item) => item.id !== egreso.id)
-                        );
                       }}
                     >
                       ✎
@@ -5780,11 +5914,7 @@ if (!usuario) {
 
                     <button
                       style={styles.deleteIconButton}
-                      onClick={() =>
-                        setEgresosDiarios(
-                          egresosDiarios.filter((item) => item.id !== egreso.id)
-                        )
-                      }
+onClick={() => eliminarEgreso(egreso)}
                     >
                       🗑
                     </button>
