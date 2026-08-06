@@ -305,6 +305,7 @@ const [editandoEgresoId, setEditandoEgresoId] = useState(null);
 const [cierresCaja, setCierresCaja] = useState([]);
 const [mostrarCrearCierre, setMostrarCrearCierre] = useState(false);
 const [cierreDetalle, setCierreDetalle] = useState(null);
+const [guardandoCierre, setGuardandoCierre] = useState(false);
 const [cargandoCierres, setCargandoCierres] = useState(false);
 const [resumenCierreServidor, setResumenCierreServidor] = useState(null);
 const [cierreForm, setCierreForm] = useState({
@@ -314,10 +315,10 @@ const [cierreForm, setCierreForm] = useState({
   transferencia_manual: "0",
   observacion: "",
   denominaciones: {
-    billete_1: 0, billete_2: 0, billete_5: 0, billete_10: 0,
-    billete_20: 0, billete_50: 0, billete_100: 0,
-    moneda_001: 0, moneda_005: 0, moneda_010: 0,
-    moneda_025: 0, moneda_050: 0, moneda_1: 0,
+    billete_1: "", billete_2: "", billete_5: "", billete_10: "",
+    billete_20: "", billete_50: "", billete_100: "",
+    moneda_001: "", moneda_005: "", moneda_010: "",
+    moneda_025: "", moneda_050: "", moneda_1: "",
   },
 });
 
@@ -4528,6 +4529,7 @@ Disponible: ${formatearMoneda(
 
   const guardarCierre = async () => {
     try {
+      setGuardandoCierre(true);
       const token = localStorage.getItem("token");
       const institucionId = obtenerInstitucionActivaId();
       if (!cierreForm.fecha) return alert("Selecciona la fecha del cierre.");
@@ -4549,7 +4551,13 @@ Disponible: ${formatearMoneda(
         }),
       });
       const data = await respuesta.json();
-      if (!respuesta.ok) throw new Error(data.message || data.error || "No se pudo guardar el cierre");
+      if (!respuesta.ok) {
+        throw new Error(
+          data.error ||
+            data.message ||
+            "No se pudo guardar el cierre"
+        );
+      }
       setMostrarCrearCierre(false);
       setCierreDetalle(data.cierre || null);
       await cargarCierres();
@@ -4557,6 +4565,8 @@ Disponible: ${formatearMoneda(
     } catch (error) {
       console.error("Error guardando cierre:", error);
       alert(error.message || "No se pudo guardar el cierre.");
+    } finally {
+      setGuardandoCierre(false);
     }
   };
 
@@ -5396,8 +5406,101 @@ if (!usuario) {
           </div>
           <h3 style={{marginTop:24}}>Total de dinero: {formatearMoneda(totalEfectivoContado)}</h3>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:24}}>
-            <div><h2 style={{textAlign:"center"}}>Billetes</h2>{[["billete_1",1],["billete_2",2],["billete_5",5],["billete_10",10],["billete_20",20],["billete_50",50],["billete_100",100]].map(([k,v])=><div key={k} style={{marginBottom:10}}><label>BILLETE DE {Number(v).toFixed(2)}</label><input type="number" min="0" style={styles.input} value={cierreForm.denominaciones[k]} onChange={(e)=>setCierreForm({...cierreForm,denominaciones:{...cierreForm.denominaciones,[k]:Number(e.target.value||0)}})}/></div>)}</div>
-            <div><h2 style={{textAlign:"center"}}>Monedas</h2>{[["moneda_001",.01],["moneda_005",.05],["moneda_010",.10],["moneda_025",.25],["moneda_050",.50],["moneda_1",1]].map(([k,v])=><div key={k} style={{marginBottom:10}}><label>MONEDA DE {Number(v).toFixed(2)}</label><input type="number" min="0" style={styles.input} value={cierreForm.denominaciones[k]} onChange={(e)=>setCierreForm({...cierreForm,denominaciones:{...cierreForm.denominaciones,[k]:Number(e.target.value||0)}})}/></div>)}</div>
+            <div>
+              <h2 style={{ textAlign: "center" }}>Billetes</h2>
+              {[
+                ["billete_1", 1],
+                ["billete_2", 2],
+                ["billete_5", 5],
+                ["billete_10", 10],
+                ["billete_20", 20],
+                ["billete_50", 50],
+                ["billete_100", 100],
+              ].map(([clave, valor]) => (
+                <div key={clave} style={{ marginBottom: 10 }}>
+                  <label>
+                    BILLETE DE {Number(valor).toFixed(2)}
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="0"
+                    autoComplete="off"
+                    style={styles.input}
+                    value={
+                      cierreForm.denominaciones[clave] ?? ""
+                    }
+                    onFocus={(evento) =>
+                      evento.currentTarget.select()
+                    }
+                    onClick={(evento) =>
+                      evento.currentTarget.select()
+                    }
+                    onChange={(evento) => {
+                      const cantidad = evento.target.value
+                        .replace(/[^0-9]/g, "")
+                        .replace(/^0+(?=\d)/, "");
+
+                      setCierreForm((actual) => ({
+                        ...actual,
+                        denominaciones: {
+                          ...actual.denominaciones,
+                          [clave]: cantidad,
+                        },
+                      }));
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+            <div>
+              <h2 style={{ textAlign: "center" }}>Monedas</h2>
+              {[
+                ["moneda_001", 0.01],
+                ["moneda_005", 0.05],
+                ["moneda_010", 0.1],
+                ["moneda_025", 0.25],
+                ["moneda_050", 0.5],
+                ["moneda_1", 1],
+              ].map(([clave, valor]) => (
+                <div key={clave} style={{ marginBottom: 10 }}>
+                  <label>
+                    MONEDA DE {Number(valor).toFixed(2)}
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="0"
+                    autoComplete="off"
+                    style={styles.input}
+                    value={
+                      cierreForm.denominaciones[clave] ?? ""
+                    }
+                    onFocus={(evento) =>
+                      evento.currentTarget.select()
+                    }
+                    onClick={(evento) =>
+                      evento.currentTarget.select()
+                    }
+                    onChange={(evento) => {
+                      const cantidad = evento.target.value
+                        .replace(/[^0-9]/g, "")
+                        .replace(/^0+(?=\d)/, "");
+
+                      setCierreForm((actual) => ({
+                        ...actual,
+                        denominaciones: {
+                          ...actual.denominaciones,
+                          [clave]: cantidad,
+                        },
+                      }));
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:20,marginTop:24}}>
             <div><h2>Tarjeta crédito/débito</h2><label>Tarjetas (suma de pagos)</label><input type="number" step="0.01" style={styles.input} value={cierreForm.tarjeta_manual} onChange={(e)=>setCierreForm({...cierreForm,tarjeta_manual:e.target.value})}/></div>
@@ -5405,7 +5508,16 @@ if (!usuario) {
           </div>
           {resumenCierreServidor && <div style={{...styles.box,marginTop:24}}><h3>Resumen esperado del sistema</h3><p>Ventas efectivo: {formatearMoneda(resumenCierreServidor.ventas_efectivo)}</p><p>Ventas transferencia: {formatearMoneda(resumenCierreServidor.ventas_transferencia)}</p><p>Ventas tarjeta: {formatearMoneda(resumenCierreServidor.ventas_tarjeta)}</p><p>Recargas efectivo: {formatearMoneda(resumenCierreServidor.recargas_efectivo)}</p><p>Recargas transferencia: {formatearMoneda(resumenCierreServidor.recargas_transferencia)}</p><p>Egresos activos: {formatearMoneda(resumenCierreServidor.egresos_total)}</p></div>}
           <div style={{marginTop:20}}><label>Observación</label><input style={styles.input} value={cierreForm.observacion} onChange={(e)=>setCierreForm({...cierreForm,observacion:e.target.value})}/></div>
-          <button style={{...styles.button,marginTop:20}} onClick={guardarCierre}>Guardar cierre</button>
+          <button
+            type="button"
+            style={{ ...styles.button, marginTop: 20 }}
+            onClick={guardarCierre}
+            disabled={guardandoCierre}
+          >
+            {guardandoCierre
+              ? "Guardando cierre..."
+              : "Guardar cierre"}
+          </button>
         </div>
       </div>
     )}
