@@ -3689,47 +3689,134 @@ if (institucionIdLogin) {
       return;
     }
 
-    // Cuando POS NUBE está abierto dentro de la aplicación Android del iMin,
-    // el ticket se envía directamente a la impresora térmica integrada.
-    // En computadoras y navegadores normales se conserva la impresión web.
+    // ============================================================
+    // IMPRESIÓN NATIVA iMIN
+    // ============================================================
+    // La APK POSNUBEPrinter expone el puente JavaScript:
+    // window.POSNUBEPrinter.imprimirTicket(json)
+    //
+    // Si POS NUBE está abierto dentro del iMin, se imprime directamente
+    // en la impresora térmica integrada. En PC/navegador normal se conserva
+    // la impresión web que ya existía.
     try {
+      const detalleNativo = Array.isArray(ticket.detalle)
+        ? ticket.detalle
+        : Array.isArray(ticket.productos)
+        ? ticket.productos
+        : Array.isArray(ticket.items)
+        ? ticket.items
+        : [];
+
+      const ticketNativo = {
+        institucion:
+          ticket.institucion_nombre ||
+          ticket.institucion ||
+          institucionActiva?.nombre ||
+          "POS NUBE",
+        orden:
+          ticket.id ||
+          ticket.venta_id ||
+          ticket.orden ||
+          "",
+        fecha:
+          ticket.created_at ||
+          ticket.fecha ||
+          new Date().toISOString(),
+        cliente:
+          ticket.alumno_nombre ||
+          ticket.profesor_nombre ||
+          ticket.cliente ||
+          "Consumidor final",
+        cajero:
+          ticket.cajero ||
+          ticket.usuario_nombre ||
+          ticket.usuario_correo ||
+          usuario?.correo ||
+          usuario?.nombre ||
+          "Administrador",
+        metodo_pago:
+          ticket.metodo_pago ||
+          ticket.forma_pago ||
+          "EFECTIVO",
+        total: Number(ticket.total || 0),
+        subtotal: Number(
+          ticket.subtotal !== undefined && ticket.subtotal !== null
+            ? ticket.subtotal
+            : ticket.total || 0
+        ),
+        observacion: ticket.observacion || "",
+        saldo_anterior:
+          ticket.saldo_anterior !== undefined
+            ? ticket.saldo_anterior
+            : null,
+        saldo_restante:
+          ticket.saldo_restante !== undefined
+            ? ticket.saldo_restante
+            : null,
+        productos: detalleNativo.map((item) => {
+          const cantidad = Number(item.cantidad || 0);
+          const precio = Number(
+            item.precio_unitario !== undefined
+              ? item.precio_unitario
+              : item.precio || 0
+          );
+
+          return {
+            nombre:
+              item.nombre ||
+              item.producto_nombre ||
+              item.descripcion ||
+              "Producto",
+            cantidad,
+            precio,
+            precio_unitario: precio,
+            subtotal: Number(
+              item.total !== undefined
+                ? item.total
+                : item.subtotal !== undefined
+                ? item.subtotal
+                : cantidad * precio
+            ),
+          };
+        }),
+      };
+
+      if (
+        window.POSNUBEPrinter &&
+        typeof window.POSNUBEPrinter.imprimirTicket === "function"
+      ) {
+        window.POSNUBEPrinter.imprimirTicket(
+          JSON.stringify(ticketNativo)
+        );
+
+        console.log(
+          "Ticket enviado automáticamente a POSNUBEPrinter:",
+          ticketNativo
+        );
+
+        return;
+      }
+
+      // Compatibilidad con una versión anterior del puente Android,
+      // por si algún equipo todavía la tuviera instalada.
       if (
         window.AndroidPrinter &&
         typeof window.AndroidPrinter.printTicket === "function"
       ) {
-        const respuestaNativa = window.AndroidPrinter.printTicket(
-          JSON.stringify(ticket)
+        window.AndroidPrinter.printTicket(
+          JSON.stringify(ticketNativo)
         );
 
-        let resultadoNativo = null;
-
-        try {
-          resultadoNativo =
-            typeof respuestaNativa === "string"
-              ? JSON.parse(respuestaNativa)
-              : respuestaNativa;
-        } catch {
-          resultadoNativo = {
-            aceptado: respuestaNativa !== false,
-          };
-        }
-
-        if (resultadoNativo?.aceptado !== false) {
-          console.log(
-            "Ticket enviado a la impresora iMin:",
-            resultadoNativo
-          );
-          return;
-        }
-
-        console.warn(
-          "La impresión nativa no fue aceptada. Se utilizará el navegador.",
-          resultadoNativo
+        console.log(
+          "Ticket enviado mediante puente Android anterior:",
+          ticketNativo
         );
+
+        return;
       }
     } catch (error) {
       console.error(
-        "Error enviando el ticket a la aplicación iMin:",
+        "Error enviando ticket a la impresora iMin. Se usará impresión web:",
         error
       );
     }
@@ -4215,11 +4302,40 @@ Disponible: ${formatearMoneda(
       return;
     }
 
-    // Imprimir únicamente después de que el backend confirmó la venta.
-    // En el iMin Falcon 1, el navegador enviará el ticket a la impresora integrada.
-    // En otros equipos se usará el servicio de impresión disponible en el navegador.
-    if (data.ticket) {
-      imprimirTicketVenta(data.ticket);
+    // ============================================================
+    // IMPRESIÓN AUTOMÁTICA DESPUÉS DE CONFIRMAR LA VENTA
+    // ============================================================
+    // Nunca se intenta imprimir antes de que el backend confirme la venta.
+    // Si el POST ya devuelve ticket, se usa directamente.
+    // Si no lo devuelve, se consulta por el ID recién creado.
+    let ticketVenta = data.ticket || null;
+
+    if (!ticketVenta) {
+      const ventaIdCreada =
+        data.venta?.id ||
+        data.id ||
+        data.venta_id ||
+        data.ventaId ||
+        null;
+
+      if (ventaIdCreada) {
+        try {
+          ticketVenta = await obtenerTicketVenta(ventaIdCreada);
+        } catch (errorTicket) {
+          console.error(
+            "Venta guardada, pero no se pudo obtener el ticket para imprimir:",
+            errorTicket
+          );
+        }
+      }
+    }
+
+    if (ticketVenta) {
+      imprimirTicketVenta(ticketVenta);
+    } else {
+      console.warn(
+        "La venta fue guardada correctamente, pero el backend no devolvió datos de ticket."
+      );
     }
 
     // Actualizar datos
