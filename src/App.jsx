@@ -4330,13 +4330,92 @@ Disponible: ${formatearMoneda(
       }
     }
 
-    if (ticketVenta) {
-      imprimirTicketVenta(ticketVenta);
-    } else {
-      console.warn(
-        "La venta fue guardada correctamente, pero el backend no devolvió datos de ticket."
+    // Si el backend no devuelve un ticket completo, construimos uno aquí
+    // usando exactamente los datos de la orden que YA fue confirmada.
+    // Así la impresión del iMin no depende del formato de respuesta del backend.
+    if (!ticketVenta) {
+      const nombreAlumno = alumnoVentaSeleccionado
+        ? `${alumnoVentaSeleccionado.nombres || ""} ${
+            alumnoVentaSeleccionado.apellidos || ""
+          }`.trim()
+        : "";
+
+      const nombreProfesor = profesorVentaSeleccionado
+        ? `${profesorVentaSeleccionado.nombres || ""} ${
+            profesorVentaSeleccionado.apellidos || ""
+          }`.trim()
+        : "";
+
+      const detalleLocal = itemsLimpios.map((item) => {
+        const producto = productosActivos.find(
+          (p) => Number(p.id) === Number(item.producto_id)
+        );
+
+        const cantidad = Number(item.cantidad || 0);
+        const precio = Number(producto?.precio || 0);
+
+        return {
+          producto_id: item.producto_id,
+          nombre: producto?.nombre || `Producto #${item.producto_id}`,
+          producto_nombre: producto?.nombre || `Producto #${item.producto_id}`,
+          cantidad,
+          precio,
+          precio_unitario: precio,
+          subtotal: cantidad * precio,
+          total: cantidad * precio,
+        };
+      });
+
+      const saldoAnteriorAlumno = Number(
+        alumnoVentaSeleccionado?.saldo || 0
+      );
+
+      ticketVenta = {
+        id:
+          data.venta?.id ||
+          data.id ||
+          data.venta_id ||
+          data.ventaId ||
+          "",
+        institucion_nombre:
+          institucionActiva?.nombre || "POS NUBE",
+        fecha: new Date().toISOString(),
+        alumno_nombre:
+          nombreAlumno ||
+          nombreProfesor ||
+          "Consumidor final",
+        cliente:
+          nombreAlumno ||
+          nombreProfesor ||
+          "Consumidor final",
+        metodo_pago: payload.metodo_pago,
+        total: Number(totalVentaCalculado || 0),
+        subtotal: Number(totalVentaCalculado || 0),
+        observacion: payload.observacion || "",
+        detalle: detalleLocal,
+        productos: detalleLocal,
+        saldo_anterior:
+          pagaConSaldo && alumnoVentaSeleccionado
+            ? saldoAnteriorAlumno
+            : undefined,
+        saldo_restante:
+          pagaConSaldo && alumnoVentaSeleccionado
+            ? Math.max(
+                0,
+                saldoAnteriorAlumno -
+                  Number(totalVentaCalculado || 0)
+              )
+            : undefined,
+      };
+
+      console.log(
+        "Ticket construido localmente para impresión:",
+        ticketVenta
       );
     }
+
+    // La impresión se intenta siempre después de que el backend confirmó la venta.
+    imprimirTicketVenta(ticketVenta);
 
     // Actualizar datos
     await Promise.all([
