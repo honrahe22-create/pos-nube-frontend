@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import AlumnosModulo from "./components/AlumnosModulo";
 import ConsultaAlumnoPublica from "./components/ConsultaAlumnoPublica";
 import ConfiguracionModulo from "./components/ConfiguracionModulo";
+import PadresModulo from "./components/PadresModulo";
 
 const API_URL = "https://pos-nube-backend.onrender.com";
 
@@ -5265,6 +5266,13 @@ if (!usuario) {
       accion: () => setVista("alumnos"),
     },
     {
+      id: "padres",
+      icono: "♙",
+      texto: "Padres",
+      activo: vista === "padres",
+      accion: () => setVista("padres"),
+    },
+    {
       id: "profesores",
       icono: "◉",
       texto: "Profesores",
@@ -6997,6 +7005,18 @@ onClick={() => eliminarEgreso(egreso)}
     descargarPlantillaAlumnos={descargarPlantillaAlumnos}
     importarAlumnosArchivo={importarAlumnosArchivo}
     inputImportarAlumnosRef={inputImportarAlumnosRef}
+  />
+)}
+
+
+{vista === "padres" && (
+  <PadresModulo
+    API_URL={API_URL}
+    token={localStorage.getItem("token")}
+    institucionId={institucionActivaId}
+    institucionNombre={institucionActiva?.nombre || "Institución"}
+    alumnos={alumnos}
+    cargarAlumnos={cargarAlumnos}
   />
 )}
 
