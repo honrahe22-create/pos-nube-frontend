@@ -4,6 +4,9 @@ import AlumnosModulo from "./components/AlumnosModulo";
 import ConsultaAlumnoPublica from "./components/ConsultaAlumnoPublica";
 import ConfiguracionModulo from "./components/ConfiguracionModulo";
 import PadresModulo from "./components/PadresModulo";
+import ProductosMasVendidosModulo from "./components/ProductosMasVendidosModulo";
+import KardexModulo from "./components/KardexModulo";
+import ProductosFormaPagoModulo from "./components/ProductosFormaPagoModulo";
 
 const API_URL = "https://pos-nube-backend.onrender.com";
 
@@ -1377,6 +1380,52 @@ const importarStockArchivo = (event) => {
   event.target.value = "";
 };
   
+
+const registrarMovimientoKardex = async ({
+  productoId,
+  tipo,
+  cantidad,
+  motivo,
+  stockAnterior,
+  stockNuevo,
+  ubicacion = "PRINCIPAL",
+  referencia = null,
+  monto = 0,
+}) => {
+  try {
+    const token = localStorage.getItem("token");
+    const institucionId = obtenerInstitucionActivaId();
+    if (!token || !institucionId || !productoId) return;
+
+    const res = await fetch(`${API_URL}/api/kardex/movimientos`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        institucion_id: Number(institucionId),
+        producto_id: Number(productoId),
+        tipo,
+        cantidad: Math.abs(Number(cantidad || 0)),
+        motivo,
+        ubicacion,
+        stock_anterior: stockAnterior,
+        stock_nuevo: stockNuevo,
+        referencia,
+        monto: Number(monto || 0),
+      }),
+    });
+
+    if (!res.ok) {
+      const detalle = await res.text();
+      console.warn("No se pudo registrar movimiento Kardex:", detalle);
+    }
+  } catch (error) {
+    console.warn("Error registrando movimiento Kardex:", error);
+  }
+};
+
 const guardarStockProducto = async (producto) => {
   const nuevoValor = stockEditado[producto.id];
 
@@ -1421,6 +1470,18 @@ const guardarStockProducto = async (producto) => {
     }
 
     const productoActualizado = await res.json();
+
+    const stockAnterior = Number(producto.stock || 0);
+    const diferenciaStock = stockNumero - stockAnterior;
+    await registrarMovimientoKardex({
+      productoId: producto.id,
+      tipo: "AJUSTE",
+      cantidad: Math.abs(diferenciaStock),
+      motivo: "Ajuste de stock",
+      stockAnterior,
+      stockNuevo: stockNumero,
+      ubicacion: "PRINCIPAL",
+    });
 
     setProductos((prev) =>
       prev.map((p) =>
@@ -3381,6 +3442,30 @@ if (institucionIdLogin) {
 
       const nombreMovimiento = producto.nombre || "Producto";
 
+      await registrarMovimientoKardex({
+        productoId: producto.id,
+        tipo:
+          inventarioForm.tipo === "ENTRADA"
+            ? "INGRESO"
+            : inventarioForm.tipo === "SALIDA"
+            ? "EGRESO"
+            : "AJUSTE",
+        cantidad:
+          inventarioForm.tipo === "AJUSTE"
+            ? Math.abs(nuevoStock - stockActual)
+            : cantidad,
+        motivo:
+          inventarioForm.motivo?.trim() ||
+          (inventarioForm.tipo === "ENTRADA"
+            ? "Ingreso manual"
+            : inventarioForm.tipo === "SALIDA"
+            ? "Salida manual"
+            : "Ajuste de stock"),
+        stockAnterior: stockActual,
+        stockNuevo: nuevoStock,
+        ubicacion: "PRINCIPAL",
+      });
+
       setInventarioForm({
         producto_id: "",
         tipo: "ENTRADA",
@@ -5334,6 +5419,27 @@ if (!usuario) {
       accion: () => setVista("reporte_productos_dia"),
     },
     {
+      id: "productos_mas_vendidos",
+      icono: "★",
+      texto: "Productos más vendidos",
+      activo: vista === "productos_mas_vendidos",
+      accion: () => setVista("productos_mas_vendidos"),
+    },
+    {
+      id: "kardex_productos",
+      icono: "↕",
+      texto: "Kardex de productos",
+      activo: vista === "kardex_productos",
+      accion: () => setVista("kardex_productos"),
+    },
+    {
+      id: "productos_forma_pago",
+      icono: "▦",
+      texto: "Productos por forma de pago",
+      activo: vista === "productos_forma_pago",
+      accion: () => setVista("productos_forma_pago"),
+    },
+    {
       id: "configuracion",
       icono: "⚙",
       texto: "Configuración",
@@ -7017,6 +7123,34 @@ onClick={() => eliminarEgreso(egreso)}
     institucionNombre={institucionActiva?.nombre || "Institución"}
     alumnos={alumnos}
     cargarAlumnos={cargarAlumnos}
+  />
+)}
+
+{vista === "productos_mas_vendidos" && (
+  <ProductosMasVendidosModulo
+    API_URL={API_URL}
+    token={localStorage.getItem("token")}
+    institucionId={institucionActivaId}
+    institucionNombre={institucionActiva?.nombre || "Institución"}
+  />
+)}
+
+{vista === "kardex_productos" && (
+  <KardexModulo
+    API_URL={API_URL}
+    token={localStorage.getItem("token")}
+    institucionId={institucionActivaId}
+    institucionNombre={institucionActiva?.nombre || "Institución"}
+    productos={productos}
+  />
+)}
+
+{vista === "productos_forma_pago" && (
+  <ProductosFormaPagoModulo
+    API_URL={API_URL}
+    token={localStorage.getItem("token")}
+    institucionId={institucionActivaId}
+    institucionNombre={institucionActiva?.nombre || "Institución"}
   />
 )}
 
