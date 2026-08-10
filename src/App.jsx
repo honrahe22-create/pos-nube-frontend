@@ -5872,16 +5872,16 @@ if (!usuario) {
     </div>
 
     {mostrarCrearCierre && (
-      <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,.65)", zIndex:9999, overflowY:"auto", padding:24 }}>
-        <div style={{ maxWidth:1100, margin:"0 auto", background:"white", borderRadius:16, padding:24 }}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><h2>Nuevo cierre de caja</h2><button style={styles.outlineButton} onClick={()=>setMostrarCrearCierre(false)}>Cerrar</button></div>
-          <div style={styles.filtersGrid}>
+      <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,.65)", zIndex:9999, overflowY:"auto", overflowX:"hidden", padding:"clamp(8px, 2vw, 24px)", boxSizing:"border-box" }}>
+        <div style={{ width:"100%", maxWidth:1100, minWidth:0, margin:"0 auto", background:"white", borderRadius:16, padding:"clamp(14px, 2.5vw, 24px)", boxSizing:"border-box", overflowX:"hidden" }}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}><h2 style={{margin:"0",fontSize:"clamp(22px,4vw,32px)"}}>Nuevo cierre de caja</h2><button style={{...styles.outlineButton,flexShrink:0}} onClick={()=>setMostrarCrearCierre(false)}>Cerrar</button></div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,220px),1fr))",gap:16,marginTop:18,width:"100%",minWidth:0}}>
             <div style={styles.filterField}><label style={styles.label}>Fecha de cierre</label><input type="date" style={styles.input} value={cierreForm.fecha} onChange={async(e)=>{const fecha=e.target.value;setCierreForm({...cierreForm,fecha});await cargarResumenCierre(fecha);}}/></div>
             <div style={styles.filterField}><label style={styles.label}>Usuario</label><input style={styles.input} value={usuario?.nombre || usuario?.correo || "Usuario"} readOnly/></div>
             <div style={styles.filterFieldWide}><label style={styles.label}>Negocio</label><input style={styles.input} value={cierreForm.negocio} onChange={(e)=>setCierreForm({...cierreForm,negocio:e.target.value})}/></div>
           </div>
           <h3 style={{marginTop:24}}>Total de dinero: {formatearMoneda(totalEfectivoContado)}</h3>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:24}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,280px),1fr))",gap:"clamp(14px,2vw,24px)",width:"100%",minWidth:0}}>
             <div>
               <h2 style={{ textAlign: "center" }}>Billetes</h2>
               {[
@@ -5978,7 +5978,7 @@ if (!usuario) {
               ))}
             </div>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:20,marginTop:24}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,240px),1fr))",gap:"clamp(14px,2vw,20px)",marginTop:24,width:"100%",minWidth:0}}>
             <div><h2>Tarjeta crédito/débito</h2><label>Tarjetas (suma de pagos)</label><input type="number" step="0.01" style={styles.input} value={cierreForm.tarjeta_manual} onChange={(e)=>setCierreForm({...cierreForm,tarjeta_manual:e.target.value})}/></div>
             <div><h2>Transferencia</h2><label>Transferencias (suma de comprobantes)</label><input type="number" step="0.01" style={styles.input} value={cierreForm.transferencia_manual} onChange={(e)=>setCierreForm({...cierreForm,transferencia_manual:e.target.value})}/></div>
           </div>
@@ -5999,10 +5999,10 @@ if (!usuario) {
     )}
 
     {cierreDetalle && (
-      <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,.65)", zIndex:10000, overflowY:"auto", padding:24 }}>
-        <div style={{maxWidth:1000,margin:"0 auto",background:"white",borderRadius:16,padding:28}}>
-          <div style={{display:"flex",justifyContent:"space-between"}}><h2>Detalle de cierre de caja</h2><button style={styles.outlineButton} onClick={()=>setCierreDetalle(null)}>✕</button></div>
-          <div style={{display:"grid",gridTemplateColumns:"minmax(220px,1fr) 2fr",gap:8}}>
+      <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,.65)", zIndex:10000, overflowY:"auto", overflowX:"hidden", padding:"clamp(8px, 2vw, 24px)", boxSizing:"border-box" }}>
+        <div style={{width:"100%",maxWidth:1000,minWidth:0,margin:"0 auto",background:"white",borderRadius:16,padding:"clamp(14px,2.5vw,28px)",boxSizing:"border-box",overflowX:"hidden"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}><h2 style={{margin:"0",fontSize:"clamp(22px,4vw,32px)"}}>Detalle de cierre de caja</h2><button style={{...styles.outlineButton,flexShrink:0}} onClick={()=>setCierreDetalle(null)}>✕</button></div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,220px),1fr))",gap:8,marginTop:18,minWidth:0}}>
             {[['Fecha de cierre',formatearFechaHora(cierreDetalle.fecha_cierre || cierreDetalle.created_at)],['Unidad educativa',institucionActiva?.nombre],['Negocio',cierreDetalle.negocio],['Usuario',cierreDetalle.usuario_nombre||cierreDetalle.usuario_correo],['Total recarga efectivo',formatearMoneda(cierreDetalle.recargas_efectivo)],['Egreso',formatearMoneda(cierreDetalle.egresos_total)],['Total recarga transferencia',formatearMoneda(cierreDetalle.recargas_transferencia)],['Total ventas por efectivo',formatearMoneda(cierreDetalle.ventas_efectivo)],['Total ventas por transferencia',formatearMoneda(cierreDetalle.ventas_transferencia)],['Total ventas por tarjeta',formatearMoneda(cierreDetalle.ventas_tarjeta)],['Efectivo entregado',formatearMoneda(cierreDetalle.efectivo_contado)],['Tarjeta manual',formatearMoneda(cierreDetalle.tarjeta_manual)],['Transferencia manual',formatearMoneda(cierreDetalle.transferencia_manual)],['Diferencia efectivo',formatearMoneda(cierreDetalle.diferencia_efectivo)],['Diferencia tarjeta',formatearMoneda(cierreDetalle.diferencia_tarjeta)],['Diferencia transferencia',formatearMoneda(cierreDetalle.diferencia_transferencia)],['Diferencia general',formatearMoneda(cierreDetalle.diferencia_general)],['Observación',cierreDetalle.observacion_automatica||cierreDetalle.observacion||'-']].map(([a,b])=><><div style={{color:'#64748b'}}>{a}:</div><strong>{b||'-'}</strong></>)}
           </div>
           <h3 style={{marginTop:24}}>Conteo de billetes y monedas</h3>
