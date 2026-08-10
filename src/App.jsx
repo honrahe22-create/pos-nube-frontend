@@ -194,6 +194,10 @@ const [productoDetalle, setProductoDetalle] = useState(null);
 const [productosSeleccionados, setProductosSeleccionados] = useState({});
 const [stockDetalle, setStockDetalle] = useState(null);
 const [stockTransferencia, setStockTransferencia] = useState(null);
+const [bajaStock, setBajaStock] = useState(null);
+const [existenciasInventario, setExistenciasInventario] = useState([]);
+const [puntosInventario, setPuntosInventario] = useState(["PRINCIPAL"]);
+const [puntoInventarioSeleccionado, setPuntoInventarioSeleccionado] = useState("PRINCIPAL");
 
 const [stockEditado, setStockEditado] = useState({});
 const inputImportarStockRef = useRef(null);
@@ -1426,6 +1430,88 @@ const registrarMovimientoKardex = async ({
   }
 };
 
+const cargarExistenciasInventario = async () => {
+  try {
+    const token = localStorage.getItem("token");
+    const institucionId = obtenerInstitucionActivaId();
+
+    if (!token || !institucionId) {
+      setExistenciasInventario([]);
+      setPuntosInventario(["PRINCIPAL"]);
+      return;
+    }
+
+    const [resExistencias, resPuntos] = await Promise.all([
+      fetch(`${API_URL}/api/inventario/existencias?institucion_id=${institucionId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      fetch(`${API_URL}/api/inventario/puntos?institucion_id=${institucionId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    ]);
+
+    const dataExistencias = await resExistencias.json();
+    const dataPuntos = await resPuntos.json();
+
+    if (resExistencias.ok) {
+      setExistenciasInventario(
+        Array.isArray(dataExistencias) ? dataExistencias : []
+      );
+    }
+
+    if (resPuntos.ok && Array.isArray(dataPuntos) && dataPuntos.length) {
+      const puntos = dataPuntos.map((p) => String(p || "").trim()).filter(Boolean);
+      if (!puntos.includes("PRINCIPAL")) puntos.unshift("PRINCIPAL");
+      setPuntosInventario([...new Set(puntos)]);
+      setPuntoInventarioSeleccionado((actual) =>
+        puntos.includes(actual) ? actual : "PRINCIPAL"
+      );
+      setLocalNuevaOrden((actual) =>
+        puntos.includes(actual) ? actual : "PRINCIPAL"
+      );
+    }
+  } catch (error) {
+    console.error("Error cargando existencias por punto:", error);
+  }
+};
+
+const existenciasDeProducto = (productoId) =>
+  existenciasInventario.filter(
+    (item) => Number(item.producto_id) === Number(productoId)
+  );
+
+const stockProductoEnPunto = (productoId, ubicacion) => {
+  const punto = String(ubicacion || "PRINCIPAL").trim().toUpperCase();
+  const fila = existenciasInventario.find(
+    (item) =>
+      Number(item.producto_id) === Number(productoId) &&
+      String(item.ubicacion || "PRINCIPAL").trim().toUpperCase() === punto
+  );
+
+  if (fila) return Number(fila.stock || 0);
+
+  if (punto === "PRINCIPAL") {
+    const producto = productos.find(
+      (p) => Number(p.id) === Number(productoId)
+    );
+    return Number(producto?.stock || 0);
+  }
+
+  return 0;
+};
+
+const resumenStockPorPuntos = (producto) => {
+  const filas = existenciasDeProducto(producto.id);
+  if (!filas.length) return `PRINCIPAL: ${Number(producto.stock || 0)}`;
+
+  const detalle = filas
+    .filter((fila) => Number(fila.stock || 0) !== 0 || fila.ubicacion === "PRINCIPAL")
+    .map((fila) => `${fila.ubicacion}: ${Number(fila.stock || 0)}`)
+    .join(" | ");
+
+  return `${detalle || "PRINCIPAL: 0"} | TOTAL: ${Number(producto.stock || 0)}`;
+};
+
 const guardarStockProducto = async (producto) => {
   const nuevoValor = stockEditado[producto.id];
 
@@ -1436,70 +1522,54 @@ const guardarStockProducto = async (producto) => {
 
   const stockNumero = Number(nuevoValor);
 
-  if (Number.isNaN(stockNumero) || stockNumero < 0) {
-    alert("El stock debe ser un número válido mayor o igual a 0.");
+  if (!Number.isInteger(stockNumero) || stockNumero < 0) {
+    alert("El stock debe ser un número entero mayor o igual a 0.");
     return;
   }
+
+  const observacion = window.prompt(
+    `Observación del ajuste para ${producto.nombre} en ${puntoInventarioSeleccionado}:`,
+    "Conteo físico / ajuste manual"
+  );
+
+  if (observacion === null) return;
 
   try {
     const token = localStorage.getItem("token");
     const institucionId = obtenerInstitucionActivaId();
 
-    const res = await fetch(`${API_URL}/api/productos/${producto.id}`, {
-      method: "PUT",
+    const res = await fetch(`${API_URL}/api/inventario/ajuste`, {
+      method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        institucion_id: institucionId,
-        nombre: producto.nombre,
-        codigo: producto.codigo || "",
-        descripcion: producto.descripcion || "",
-        precio: Number(producto.precio || 0),
-        stock: stockNumero,
-        stock_minimo: Number(producto.stock_minimo || 0),
-        categoria: producto.categoria || "",
-        activo: producto.activo !== false,
+        institucion_id: Number(institucionId),
+        producto_id: Number(producto.id),
+        ubicacion: puntoInventarioSeleccionado,
+        stock_nuevo: stockNumero,
+        observacion: String(observacion || "").trim() || "Ajuste manual",
       }),
     });
 
+    const data = await res.json();
     if (!res.ok) {
-      const texto = await res.text();
-      throw new Error(texto || "No se pudo actualizar el stock.");
+      throw new Error(data.message || data.error || "No se pudo ajustar el stock.");
     }
-
-    const productoActualizado = await res.json();
-
-    const stockAnterior = Number(producto.stock || 0);
-    const diferenciaStock = stockNumero - stockAnterior;
-    await registrarMovimientoKardex({
-      productoId: producto.id,
-      tipo: "AJUSTE",
-      cantidad: Math.abs(diferenciaStock),
-      motivo: "Ajuste de stock",
-      stockAnterior,
-      stockNuevo: stockNumero,
-      ubicacion: "PRINCIPAL",
-    });
-
-    setProductos((prev) =>
-      prev.map((p) =>
-        Number(p.id) === Number(producto.id)
-          ? productoActualizado
-          : p
-      )
-    );
 
     setStockEditado((prev) => ({
       ...prev,
       [producto.id]: String(stockNumero),
     }));
 
-    alert(`Stock actualizado correctamente para ${producto.nombre}.`);
+    await Promise.all([cargarProductos(), cargarExistenciasInventario()]);
+    alert(
+      `${producto.nombre}: stock de ${puntoInventarioSeleccionado} actualizado a ${stockNumero}.`
+    );
   } catch (error) {
-    console.error("Error actualizando stock:", error);
-    alert("No se pudo actualizar el stock en el servidor.");
+    console.error("Error ajustando stock:", error);
+    alert(error.message || "No se pudo actualizar el stock.");
   }
 };
 
@@ -1583,57 +1653,150 @@ const limpiarFiltrosVentas = () => {
 
 const verMovimientosStockNuevo = (producto) => {
   setStockTransferencia(null);
+  setBajaStock(null);
   setStockDetalle(producto);
 };
 
-const eliminarStockProductoNuevo = async (producto) => {
-  const confirmado = window.confirm(
-    `¿Deseas desactivar o eliminar ${producto.nombre}?`
-  );
+const eliminarStockProductoNuevo = (producto) => {
+  setStockDetalle(null);
+  setStockTransferencia(null);
+  setBajaStock({
+    ...producto,
+    ubicacion: puntoInventarioSeleccionado,
+    cantidad: "1",
+    observacion: "",
+  });
+};
 
-  if (!confirmado) return;
+const confirmarBajaStock = async () => {
+  if (!bajaStock) return;
+
+  const cantidad = Number(bajaStock.cantidad || 0);
+  const observacion = String(bajaStock.observacion || "").trim();
+
+  if (!Number.isInteger(cantidad) || cantidad <= 0) {
+    alert("Ingresa una cantidad válida mayor a 0.");
+    return;
+  }
+
+  if (!observacion) {
+    alert("La observación es obligatoria para dar de baja un producto.");
+    return;
+  }
 
   try {
     const token = localStorage.getItem("token");
+    const institucionId = obtenerInstitucionActivaId();
 
-    const res = await fetch(`${API_URL}/api/productos/${producto.id}/desactivar`, {
-      method: "PATCH",
+    const res = await fetch(`${API_URL}/api/inventario/baja`, {
+      method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Authorization: `Bearer ${token}`,
       },
+      body: JSON.stringify({
+        institucion_id: Number(institucionId),
+        producto_id: Number(bajaStock.id),
+        ubicacion: bajaStock.ubicacion,
+        cantidad,
+        observacion,
+      }),
     });
 
+    const data = await res.json();
     if (!res.ok) {
-      const texto = await res.text();
-      console.warn("No se pudo desactivar en backend:", texto);
+      throw new Error(data.message || data.error || "No se pudo registrar la baja.");
     }
+
+    setBajaStock(null);
+    await Promise.all([cargarProductos(), cargarExistenciasInventario()]);
+    alert("Baja registrada correctamente.");
   } catch (error) {
-    console.error("Error desactivando producto:", error);
+    console.error("Error dando de baja stock:", error);
+    alert(error.message || "No se pudo registrar la baja.");
   }
-
-  setProductos((prev) =>
-    prev.map((p) =>
-      Number(p.id) === Number(producto.id)
-        ? { ...p, activo: false }
-        : p
-    )
-  );
-
-  setStockDetalle((prev) =>
-    prev && Number(prev.id) === Number(producto.id)
-      ? { ...prev, activo: false }
-      : prev
-  );
 };
 
 const transferirStockProductoNuevo = (producto) => {
   setStockDetalle(null);
+  setBajaStock(null);
   setStockTransferencia({
     ...producto,
+    ubicacion_origen: puntoInventarioSeleccionado,
+    ubicacion_destino: "",
     cantidad: "1",
+    observacion: "",
   });
 };
+
+const confirmarTransferenciaStock = async () => {
+  if (!stockTransferencia) return;
+
+  const cantidad = Number(stockTransferencia.cantidad || 0);
+  const origen = String(stockTransferencia.ubicacion_origen || "PRINCIPAL").trim();
+  const destino = String(stockTransferencia.ubicacion_destino || "").trim();
+  const observacion = String(stockTransferencia.observacion || "").trim();
+
+  if (!Number.isInteger(cantidad) || cantidad <= 0) {
+    alert("Ingresa una cantidad válida mayor a 0.");
+    return;
+  }
+
+  if (!destino) {
+    alert("Ingresa el punto destino.");
+    return;
+  }
+
+  if (origen.toUpperCase() === destino.toUpperCase()) {
+    alert("El punto origen y destino deben ser diferentes.");
+    return;
+  }
+
+  if (!observacion) {
+    alert("La observación es obligatoria para realizar la transferencia.");
+    return;
+  }
+
+  try {
+    const token = localStorage.getItem("token");
+    const institucionId = obtenerInstitucionActivaId();
+
+    const res = await fetch(`${API_URL}/api/inventario/transferir`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        institucion_id: Number(institucionId),
+        producto_id: Number(stockTransferencia.id),
+        ubicacion_origen: origen,
+        ubicacion_destino: destino,
+        cantidad,
+        observacion,
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || data.error || "No se pudo realizar la transferencia.");
+    }
+
+    setStockTransferencia(null);
+    await Promise.all([cargarProductos(), cargarExistenciasInventario()]);
+    alert(
+      `Transferencia realizada: ${cantidad} unidad(es) de ${origen} a ${destino}.`
+    );
+  } catch (error) {
+    console.error("Error transfiriendo stock:", error);
+    alert(error.message || "No se pudo realizar la transferencia.");
+  }
+};
+
+useEffect(() => {
+  if (!usuario || !institucionActivaId) return;
+  cargarExistenciasInventario();
+}, [institucionActivaId, vista]);
 
 const limpiarFormularioVenta = () => {
   setVentaForm({
@@ -4262,7 +4425,10 @@ if (institucionIdLogin) {
         return;
       }
 
-      const stockDisponible = Number(producto.stock || 0);
+      const stockDisponible = stockProductoEnPunto(
+        producto.id,
+        localNuevaOrden
+      );
 
       if (item.cantidad > stockDisponible) {
         alert(
@@ -4366,6 +4532,7 @@ Disponible: ${formatearMoneda(
         : ventaForm.metodo_pago,
       items: itemsLimpios,
       observacion: ventaForm.observacion?.trim() || "",
+      ubicacion: localNuevaOrden || "PRINCIPAL",
     };
 
     const res = await fetch(`${API_URL}/api/ventas`, {
@@ -8636,7 +8803,12 @@ onClick={() => eliminarEgreso(egreso)}
     {stockTransferencia && (
       <div style={{ ...styles.box, marginBottom: 20 }}>
         <div style={styles.pageHeaderSmall}>
-          <h2 style={{ margin: 0 }}>Transferencia de stock</h2>
+          <div>
+            <h2 style={{ margin: 0 }}>Transferencia de stock entre puntos</h2>
+            <p style={{ margin: "6px 0 0", color: "#64748b" }}>
+              La transferencia resta del punto origen y suma exactamente la misma cantidad al punto destino.
+            </p>
+          </div>
 
           <button
             type="button"
@@ -8659,30 +8831,73 @@ onClick={() => eliminarEgreso(egreso)}
           </div>
 
           <div style={styles.filterField}>
-            <label style={styles.label}>Código</label>
+            <label style={styles.label}>Punto origen</label>
+            <select
+              value={stockTransferencia.ubicacion_origen || "PRINCIPAL"}
+              onChange={(e) =>
+                setStockTransferencia((prev) => ({
+                  ...prev,
+                  ubicacion_origen: e.target.value,
+                }))
+              }
+              style={styles.input}
+            >
+              {existenciasDeProducto(stockTransferencia.id).map((fila) => (
+                <option key={fila.ubicacion} value={fila.ubicacion}>
+                  {fila.ubicacion} ({Number(fila.stock || 0)})
+                </option>
+              ))}
+              {!existenciasDeProducto(stockTransferencia.id).length && (
+                <option value="PRINCIPAL">
+                  PRINCIPAL ({Number(stockTransferencia.stock || 0)})
+                </option>
+              )}
+            </select>
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Stock disponible en origen</label>
             <input
               type="text"
-              value={stockTransferencia.codigo || ""}
+              value={String(
+                stockProductoEnPunto(
+                  stockTransferencia.id,
+                  stockTransferencia.ubicacion_origen || "PRINCIPAL"
+                )
+              )}
               style={styles.input}
               readOnly
             />
           </div>
 
           <div style={styles.filterField}>
-            <label style={styles.label}>Stock disponible</label>
+            <label style={styles.label}>Punto destino *</label>
             <input
               type="text"
-              value={String(stockTransferencia.stock ?? 0)}
+              list="puntos-inventario-transferencia"
+              value={stockTransferencia.ubicacion_destino || ""}
+              onChange={(e) =>
+                setStockTransferencia((prev) => ({
+                  ...prev,
+                  ubicacion_destino: e.target.value.toUpperCase(),
+                }))
+              }
               style={styles.input}
-              readOnly
+              placeholder="Ej. PUNTO B"
             />
+            <datalist id="puntos-inventario-transferencia">
+              {puntosInventario.map((punto) => (
+                <option key={punto} value={punto} />
+              ))}
+            </datalist>
           </div>
 
           <div style={styles.filterField}>
-            <label style={styles.label}>Cantidad a transferir</label>
+            <label style={styles.label}>Cantidad a transferir *</label>
             <input
               type="number"
               min="1"
+              step="1"
               value={stockTransferencia.cantidad ?? "1"}
               onChange={(e) =>
                 setStockTransferencia((prev) => ({
@@ -8693,51 +8908,121 @@ onClick={() => eliminarEgreso(egreso)}
               style={styles.input}
             />
           </div>
+
+          <div style={{ ...styles.filterField, gridColumn: "1 / -1" }}>
+            <label style={styles.label}>Observación / motivo *</label>
+            <textarea
+              value={stockTransferencia.observacion || ""}
+              onChange={(e) =>
+                setStockTransferencia((prev) => ({
+                  ...prev,
+                  observacion: e.target.value,
+                }))
+              }
+              style={{ ...styles.input, minHeight: 85, resize: "vertical" }}
+              placeholder="Ej. Envío de producto al kiosco del Punto B"
+            />
+          </div>
         </div>
 
         <div style={styles.filterButtons}>
           <button
             type="button"
             style={styles.button}
-            onClick={() => {
-              const cantidad = Number(stockTransferencia.cantidad || 0);
-              const stockActual = Number(stockTransferencia.stock || 0);
-
-              if (Number.isNaN(cantidad) || cantidad <= 0) {
-                alert("Ingresa una cantidad válida mayor a 0.");
-                return;
-              }
-
-              if (cantidad > stockActual) {
-                alert("No puedes transferir más stock del disponible.");
-                return;
-              }
-
-              const nuevoStock = stockActual - cantidad;
-
-              setProductos((prev) =>
-                prev.map((p) =>
-                  Number(p.id) === Number(stockTransferencia.id)
-                    ? { ...p, stock: nuevoStock }
-                    : p
-                )
-              );
-
-              setStockEditado((prev) => ({
-                ...prev,
-                [stockTransferencia.id]: String(nuevoStock),
-              }));
-
-              setStockDetalle((prev) =>
-                prev && Number(prev.id) === Number(stockTransferencia.id)
-                  ? { ...prev, stock: nuevoStock }
-                  : prev
-              );
-
-              setStockTransferencia(null);
-            }}
+            onClick={confirmarTransferenciaStock}
           >
             Confirmar transferencia
+          </button>
+        </div>
+      </div>
+    )}
+
+    {bajaStock && (
+      <div style={{ ...styles.box, marginBottom: 20 }}>
+        <div style={styles.pageHeaderSmall}>
+          <div>
+            <h2 style={{ margin: 0 }}>Dar de baja unidades</h2>
+            <p style={{ margin: "6px 0 0", color: "#64748b" }}>
+              Usa esta opción cuando el producto se dañó, venció, se perdió o debe salir definitivamente del inventario.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={() => setBajaStock(null)}
+          >
+            Cerrar
+          </button>
+        </div>
+
+        <div style={styles.filtersGrid}>
+          <div style={styles.filterField}>
+            <label style={styles.label}>Producto</label>
+            <input
+              type="text"
+              value={bajaStock.nombre || ""}
+              style={styles.input}
+              readOnly
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Punto *</label>
+            <select
+              value={bajaStock.ubicacion || "PRINCIPAL"}
+              onChange={(e) =>
+                setBajaStock((prev) => ({ ...prev, ubicacion: e.target.value }))
+              }
+              style={styles.input}
+            >
+              {existenciasDeProducto(bajaStock.id).map((fila) => (
+                <option key={fila.ubicacion} value={fila.ubicacion}>
+                  {fila.ubicacion} ({Number(fila.stock || 0)})
+                </option>
+              ))}
+              {!existenciasDeProducto(bajaStock.id).length && (
+                <option value="PRINCIPAL">
+                  PRINCIPAL ({Number(bajaStock.stock || 0)})
+                </option>
+              )}
+            </select>
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Cantidad a dar de baja *</label>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={bajaStock.cantidad || "1"}
+              onChange={(e) =>
+                setBajaStock((prev) => ({ ...prev, cantidad: e.target.value }))
+              }
+              style={styles.input}
+            />
+          </div>
+
+          <div style={{ ...styles.filterField, gridColumn: "1 / -1" }}>
+            <label style={styles.label}>Observación / motivo de la baja *</label>
+            <textarea
+              value={bajaStock.observacion || ""}
+              onChange={(e) =>
+                setBajaStock((prev) => ({ ...prev, observacion: e.target.value }))
+              }
+              style={{ ...styles.input, minHeight: 85, resize: "vertical" }}
+              placeholder="Ej. Producto dañado / vencido / pérdida"
+            />
+          </div>
+        </div>
+
+        <div style={styles.filterButtons}>
+          <button
+            type="button"
+            style={styles.deleteButton || styles.dangerButton || styles.button}
+            onClick={confirmarBajaStock}
+          >
+            Confirmar baja
           </button>
         </div>
       </div>
@@ -8752,6 +9037,24 @@ onClick={() => eliminarEgreso(egreso)}
           onChange={(e) => setBusquedaInventario(e.target.value)}
           style={styles.searchInput}
         />
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <label style={{ fontWeight: 700 }}>Punto activo:</label>
+          <select
+            value={puntoInventarioSeleccionado}
+            onChange={(e) => {
+              setPuntoInventarioSeleccionado(e.target.value);
+              setStockEditado({});
+            }}
+            style={{ ...styles.select, minWidth: 180 }}
+          >
+            {puntosInventario.map((punto) => (
+              <option key={punto} value={punto}>
+                {punto}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div style={styles.tableWrap}>
@@ -8762,8 +9065,8 @@ onClick={() => eliminarEgreso(egreso)}
               <th style={styles.th}>Código</th>
               <th style={styles.th}>Precio</th>
               <th style={styles.th}>Categoría</th>
-              <th style={styles.th}>Stock real</th>
-              <th style={styles.th}>Nuevo stock</th>
+              <th style={styles.th}>Stock por puntos</th>
+              <th style={styles.th}>Nuevo stock del punto activo</th>
               <th style={styles.th}>Acciones de actualización</th>
             </tr>
 
@@ -8798,7 +9101,9 @@ onClick={() => eliminarEgreso(egreso)}
                   </td>
                   <td style={styles.td}>{producto.categoria}</td>
                   <td style={styles.td}>
-                    PRINCIPAL: {Number(producto.stock || 0)}
+                    <div style={{ fontSize: 13, lineHeight: 1.45 }}>
+                      {resumenStockPorPuntos(producto)}
+                    </div>
                   </td>
                   <td style={styles.td}>
                     <input
@@ -8811,7 +9116,7 @@ onClick={() => eliminarEgreso(egreso)}
                         }))
                       }
                       style={{ ...styles.input, minWidth: 90, padding: "10px" }}
-                      placeholder="Nuevo stock"
+                      placeholder={`Actual ${stockProductoEnPunto(producto.id, puntoInventarioSeleccionado)}`}
                     />
                   </td>
                   <td style={styles.td}>
@@ -8838,7 +9143,7 @@ onClick={() => eliminarEgreso(egreso)}
                         type="button"
                         style={styles.deleteIconButton}
                         onClick={() => eliminarStockProductoNuevo(producto)}
-                        title="Eliminar o desactivar"
+                        title="Dar de baja unidades"
                       >
                         🗑
                       </button>
@@ -9828,7 +10133,11 @@ onClick={() => eliminarEgreso(egreso)}
                 onChange={(e) => setLocalNuevaOrden(e.target.value)}
                 style={{ ...styles.input, background: "#ffffff" }}
               >
-                <option value="PRINCIPAL">PRINCIPAL</option>
+                {puntosInventario.map((punto) => (
+                  <option key={punto} value={punto}>
+                    {punto}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -9879,7 +10188,8 @@ onClick={() => eliminarEgreso(egreso)}
                     String(item.producto_id) === String(producto.id)
                 );
 
-                const sinStock = Number(producto.stock || 0) <= 0;
+                const sinStock =
+                  stockProductoEnPunto(producto.id, localNuevaOrden) <= 0;
 
                 return (
                   <article
@@ -9963,7 +10273,7 @@ onClick={() => eliminarEgreso(egreso)}
                             fontWeight: 800,
                           }}
                         >
-                          Stock: {Number(producto.stock || 0)}
+                          Stock {localNuevaOrden}: {stockProductoEnPunto(producto.id, localNuevaOrden)}
                         </div>
                       </div>
                     </div>
