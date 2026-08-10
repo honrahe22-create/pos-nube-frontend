@@ -1123,7 +1123,6 @@ export default function AlumnosModulo({
           <div style={paymon.tabs}>
             <button type="button" style={vistaAlumnoDetalle === "ordenes" || vistaAlumnoDetalle === "datos" ? paymon.tabActive : paymon.tab} onClick={() => setVistaAlumnoDetalle("ordenes")}>Órdenes</button>
             <button type="button" style={vistaAlumnoDetalle === "recargas" ? paymon.tabActive : paymon.tab} onClick={() => setVistaAlumnoDetalle("recargas")}>Recargas</button>
-            <button type="button" style={vistaAlumnoDetalle === "dispositivo" ? paymon.tabActive : paymon.tab} onClick={() => setVistaAlumnoDetalle("dispositivo")}>Dispositivos</button>
             <button type="button" style={vistaAlumnoDetalle === "consumo" ? paymon.tabActive : paymon.tab} onClick={() => setVistaAlumnoDetalle("consumo")}>Consumo</button>
             <button
               type="button"
@@ -1520,7 +1519,6 @@ export default function AlumnosModulo({
             </div>
           )}
 
-          {vistaAlumnoDetalle === "dispositivo" && <div style={paymon.historyPanel}><h3>Dispositivos</h3><p>No hay dispositivos vinculados todavía.</p><button type="button" style={paymon.orangeButton}>Enlazar dispositivo</button></div>}
         </div>
       );
     })()}
@@ -1814,22 +1812,59 @@ setHistorialConsumoAlumno(
 <button
   type="button"
   style={styles.outlineButton}
-  onClick={() => setVistaAlumnoDetalle("consumo")}
+  onClick={async () => {
+    setAlumnoDetalle(a);
+    setVistaAlumnoDetalle("consumo");
+    setOrdenDetalleAlumno(null);
+
+    try {
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      const [ventasRes, recargasRes, consumoRes] = await Promise.all([
+        fetch(`${API_URL}/api/ventas?institucion_id=${institucionId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${API_URL}/api/recargas?institucion_id=${institucionId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(
+          `${API_URL}/api/ventas/alumno/${a.id}/detalle?institucion_id=${institucionId}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        ),
+      ]);
+
+      const ventas = await ventasRes.json();
+      const recargas = await recargasRes.json();
+      const consumo = await consumoRes.json();
+
+      setHistorialVentasAlumno(
+        (Array.isArray(ventas) ? ventas : []).filter(
+          (v) => Number(v.alumno_id) === Number(a.id)
+        )
+      );
+
+      setHistorialRecargasAlumno(
+        (Array.isArray(recargas) ? recargas : []).filter(
+          (r) => Number(r.alumno_id) === Number(a.id)
+        )
+      );
+
+      setHistorialConsumoAlumno(
+        Array.isArray(consumo) ? consumo : []
+      );
+    } catch (error) {
+      console.error("Error cargando consumo del alumno:", error);
+      setHistorialConsumoAlumno([]);
+      alert("No se pudo cargar el historial de consumo del alumno.");
+    }
+  }}
+  title="Ver historial de consumo"
 >
   Consumo
 </button>
-
-                          <button
-                            type="button"
-                            style={styles.outlineButton}
-                            onClick={() => {
-                              setAlumnoDetalle(a);
-                              setVistaAlumnoDetalle("dispositivo");
-                            }}
-                            title="Ver dispositivo"
-                          >
-                            💳
-                          </button>
 
                           <button
                             type="button"
