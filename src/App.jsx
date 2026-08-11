@@ -6061,8 +6061,69 @@ if (!usuario) {
         <div style={{width:"100%",maxWidth:900,minWidth:0,height:"calc(100dvh - 16px)",maxHeight:"calc(100dvh - 16px)",margin:"0 auto",background:"white",borderRadius:14,boxSizing:"border-box",overflow:"hidden",display:"flex",flexDirection:"column"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",padding:"14px",borderBottom:"1px solid #e5e7eb",flex:"0 0 auto",background:"#fff",position:"relative",zIndex:2}}><h2 style={{margin:"0",fontSize:"clamp(22px,4vw,32px)"}}>Detalle de cierre de caja</h2><button style={{...styles.outlineButton,flexShrink:0}} onClick={()=>setCierreDetalle(null)}>✕</button></div>
           <div style={{flex:"1 1 auto",minHeight:0,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",touchAction:"pan-y",overscrollBehaviorY:"contain",padding:"14px",boxSizing:"border-box"}}>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,220px),1fr))",gap:8,marginTop:18,minWidth:0}}>
-            {[['Fecha de cierre',formatearSoloFecha(cierreDetalle.fecha)],['Unidad educativa',institucionActiva?.nombre],['Negocio',cierreDetalle.negocio],['Usuario',cierreDetalle.usuario_nombre||cierreDetalle.usuario_correo],['Total recarga efectivo',formatearMoneda(cierreDetalle.recargas_efectivo)],['Egreso',formatearMoneda(cierreDetalle.egresos_total)],['Total recarga transferencia',formatearMoneda(cierreDetalle.recargas_transferencia)],['Total ventas por efectivo',formatearMoneda(cierreDetalle.ventas_efectivo)],['Total ventas por transferencia',formatearMoneda(cierreDetalle.ventas_transferencia)],['Total ventas por tarjeta',formatearMoneda(cierreDetalle.ventas_tarjeta)],['Efectivo entregado',formatearMoneda(cierreDetalle.efectivo_contado)],['Tarjeta manual',formatearMoneda(cierreDetalle.tarjeta_manual)],['Transferencia manual',formatearMoneda(cierreDetalle.transferencia_manual)],['Diferencia efectivo',formatearMoneda(cierreDetalle.diferencia_efectivo)],['Diferencia tarjeta',formatearMoneda(cierreDetalle.diferencia_tarjeta)],['Diferencia transferencia',formatearMoneda(cierreDetalle.diferencia_transferencia)],['Diferencia general',formatearMoneda(cierreDetalle.diferencia_general)],['Observación',cierreDetalle.observacion_automatica||cierreDetalle.observacion||'-']].map(([a,b])=><><div style={{color:'#64748b'}}>{a}:</div><strong>{b||'-'}</strong></>)}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,260px),1fr))",
+              gap: 12,
+              marginTop: 18,
+              minWidth: 0,
+            }}
+          >
+            {[
+              ["Fecha de cierre", formatearSoloFecha(cierreDetalle.fecha)],
+              ["Unidad educativa", institucionActiva?.nombre],
+              ["Negocio", cierreDetalle.negocio],
+              ["Usuario", cierreDetalle.usuario_nombre || cierreDetalle.usuario_correo],
+              ["Total recarga efectivo", formatearMoneda(cierreDetalle.recargas_efectivo)],
+              ["Egreso", formatearMoneda(cierreDetalle.egresos_total)],
+              ["Total recarga transferencia", formatearMoneda(cierreDetalle.recargas_transferencia)],
+              ["Total ventas por efectivo", formatearMoneda(cierreDetalle.ventas_efectivo)],
+              ["Total ventas por transferencia", formatearMoneda(cierreDetalle.ventas_transferencia)],
+              ["Total ventas por tarjeta", formatearMoneda(cierreDetalle.ventas_tarjeta)],
+              ["Efectivo entregado", formatearMoneda(cierreDetalle.efectivo_contado)],
+              ["Tarjeta manual", formatearMoneda(cierreDetalle.tarjeta_manual)],
+              ["Transferencia manual", formatearMoneda(cierreDetalle.transferencia_manual)],
+              ["Diferencia efectivo", formatearMoneda(cierreDetalle.diferencia_efectivo)],
+              ["Diferencia tarjeta", formatearMoneda(cierreDetalle.diferencia_tarjeta)],
+              ["Diferencia transferencia", formatearMoneda(cierreDetalle.diferencia_transferencia)],
+              ["Diferencia general", formatearMoneda(cierreDetalle.diferencia_general)],
+              [
+                "Observación",
+                cierreDetalle.observacion_automatica ||
+                  cierreDetalle.observacion ||
+                  "-",
+              ],
+            ].map(([etiqueta, valor]) => (
+              <div
+                key={etiqueta}
+                style={{
+                  minWidth: 0,
+                  padding: "10px 12px",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 10,
+                  background: "#fff",
+                }}
+              >
+                <div
+                  style={{
+                    color: "#64748b",
+                    fontSize: 14,
+                    marginBottom: 4,
+                  }}
+                >
+                  {etiqueta}:
+                </div>
+                <strong
+                  style={{
+                    display: "block",
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  {valor || "-"}
+                </strong>
+              </div>
+            ))}
           </div>
           <h3 style={{marginTop:24}}>Conteo de billetes y monedas</h3>
           <div style={styles.tableWrap}><table style={styles.table}><thead><tr><th style={styles.th}>Denominación</th><th style={styles.th}>Tipo</th><th style={styles.th}>Cantidad</th><th style={styles.th}>Total</th></tr></thead><tbody>{(cierreDetalle.denominaciones||[]).map((d,i)=><tr key={i}><td style={styles.td}>{Number(d.denominacion).toFixed(2)}</td><td style={styles.td}>{d.tipo}</td><td style={styles.td}>{d.cantidad}</td><td style={styles.td}>{formatearMoneda(d.total)}</td></tr>)}</tbody></table></div>
