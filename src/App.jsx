@@ -5873,9 +5873,10 @@ if (!usuario) {
     </div>
 
     {mostrarCrearCierre && createPortal((
-      <div style={{ position:"fixed", top:0, left:0, width:"100vw", height:"100dvh", background:"rgba(15,23,42,.65)", zIndex:99999, overflowY:"auto", overflowX:"hidden", padding:"8px", boxSizing:"border-box", WebkitOverflowScrolling:"touch" }}>
-        <div style={{ width:"calc(100vw - 16px)", maxWidth:900, minWidth:0, margin:"0 auto", background:"white", borderRadius:14, padding:"14px", boxSizing:"border-box", overflowX:"hidden" }}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}><h2 style={{margin:"0",fontSize:"clamp(22px,4vw,32px)"}}>Nuevo cierre de caja</h2><button style={{...styles.outlineButton,flexShrink:0}} onClick={()=>setMostrarCrearCierre(false)}>Cerrar</button></div>
+      <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, width:"100vw", height:"100dvh", minHeight:"100vh", background:"rgba(15,23,42,.65)", zIndex:99999, padding:"8px", boxSizing:"border-box", overflow:"hidden", display:"flex", alignItems:"stretch", justifyContent:"center" }}>
+        <div style={{ width:"100%", maxWidth:900, minWidth:0, height:"calc(100dvh - 16px)", maxHeight:"calc(100dvh - 16px)", margin:"0 auto", background:"white", borderRadius:14, boxSizing:"border-box", overflow:"hidden", display:"flex", flexDirection:"column" }}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",padding:"14px",borderBottom:"1px solid #e5e7eb",flex:"0 0 auto",background:"#fff",position:"relative",zIndex:2}}><h2 style={{margin:"0",fontSize:"clamp(22px,4vw,32px)"}}>Nuevo cierre de caja</h2><button style={{...styles.outlineButton,flexShrink:0}} onClick={()=>setMostrarCrearCierre(false)}>Cerrar</button></div>
+          <div style={{flex:"1 1 auto",minHeight:0,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",touchAction:"pan-y",overscrollBehaviorY:"contain",padding:"14px",boxSizing:"border-box"}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,220px),1fr))",gap:16,marginTop:18,width:"100%",minWidth:0}}>
             <div style={styles.filterField}><label style={styles.label}>Fecha de cierre</label><input type="date" style={styles.input} value={cierreForm.fecha} onChange={async(e)=>{const fecha=e.target.value;setCierreForm({...cierreForm,fecha});await cargarResumenCierre(fecha);}}/></div>
             <div style={styles.filterField}><label style={styles.label}>Usuario</label><input style={styles.input} value={usuario?.nombre || usuario?.correo || "Usuario"} readOnly/></div>
@@ -5995,14 +5996,17 @@ if (!usuario) {
               ? "Guardando cierre..."
               : "Guardar cierre"}
           </button>
+          <div style={{height:24,flex:"0 0 auto"}} />
+          </div>
         </div>
       </div>
     ), document.body)}
 
     {cierreDetalle && createPortal((
-      <div style={{ position:"fixed", top:0, left:0, width:"100vw", height:"100dvh", background:"rgba(15,23,42,.65)", zIndex:100000, overflowY:"auto", overflowX:"hidden", padding:"8px", boxSizing:"border-box", WebkitOverflowScrolling:"touch" }}>
-        <div style={{width:"calc(100vw - 16px)",maxWidth:900,minWidth:0,margin:"0 auto",background:"white",borderRadius:14,padding:"14px",boxSizing:"border-box",overflowX:"hidden"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}><h2 style={{margin:"0",fontSize:"clamp(22px,4vw,32px)"}}>Detalle de cierre de caja</h2><button style={{...styles.outlineButton,flexShrink:0}} onClick={()=>setCierreDetalle(null)}>✕</button></div>
+      <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, width:"100vw", height:"100dvh", minHeight:"100vh", background:"rgba(15,23,42,.65)", zIndex:100000, padding:"8px", boxSizing:"border-box", overflow:"hidden", display:"flex", alignItems:"stretch", justifyContent:"center" }}>
+        <div style={{width:"100%",maxWidth:900,minWidth:0,height:"calc(100dvh - 16px)",maxHeight:"calc(100dvh - 16px)",margin:"0 auto",background:"white",borderRadius:14,boxSizing:"border-box",overflow:"hidden",display:"flex",flexDirection:"column"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",padding:"14px",borderBottom:"1px solid #e5e7eb",flex:"0 0 auto",background:"#fff",position:"relative",zIndex:2}}><h2 style={{margin:"0",fontSize:"clamp(22px,4vw,32px)"}}>Detalle de cierre de caja</h2><button style={{...styles.outlineButton,flexShrink:0}} onClick={()=>setCierreDetalle(null)}>✕</button></div>
+          <div style={{flex:"1 1 auto",minHeight:0,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",touchAction:"pan-y",overscrollBehaviorY:"contain",padding:"14px",boxSizing:"border-box"}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,220px),1fr))",gap:8,marginTop:18,minWidth:0}}>
             {[['Fecha de cierre',formatearFechaHora(cierreDetalle.fecha_cierre || cierreDetalle.created_at)],['Unidad educativa',institucionActiva?.nombre],['Negocio',cierreDetalle.negocio],['Usuario',cierreDetalle.usuario_nombre||cierreDetalle.usuario_correo],['Total recarga efectivo',formatearMoneda(cierreDetalle.recargas_efectivo)],['Egreso',formatearMoneda(cierreDetalle.egresos_total)],['Total recarga transferencia',formatearMoneda(cierreDetalle.recargas_transferencia)],['Total ventas por efectivo',formatearMoneda(cierreDetalle.ventas_efectivo)],['Total ventas por transferencia',formatearMoneda(cierreDetalle.ventas_transferencia)],['Total ventas por tarjeta',formatearMoneda(cierreDetalle.ventas_tarjeta)],['Efectivo entregado',formatearMoneda(cierreDetalle.efectivo_contado)],['Tarjeta manual',formatearMoneda(cierreDetalle.tarjeta_manual)],['Transferencia manual',formatearMoneda(cierreDetalle.transferencia_manual)],['Diferencia efectivo',formatearMoneda(cierreDetalle.diferencia_efectivo)],['Diferencia tarjeta',formatearMoneda(cierreDetalle.diferencia_tarjeta)],['Diferencia transferencia',formatearMoneda(cierreDetalle.diferencia_transferencia)],['Diferencia general',formatearMoneda(cierreDetalle.diferencia_general)],['Observación',cierreDetalle.observacion_automatica||cierreDetalle.observacion||'-']].map(([a,b])=><><div style={{color:'#64748b'}}>{a}:</div><strong>{b||'-'}</strong></>)}
           </div>
@@ -6011,6 +6015,8 @@ if (!usuario) {
           <h3 style={{marginTop:24}}>Egresos incluidos en este cierre</h3>
           <div style={styles.tableWrap}><table style={styles.table}><thead><tr><th style={styles.th}>Fecha</th><th style={styles.th}>Nombre</th><th style={styles.th}>Tipo</th><th style={styles.th}>Factura</th><th style={styles.th}>Valor</th><th style={styles.th}>Usuario</th></tr></thead><tbody>{(cierreDetalle.egresos||[]).length===0?<tr><td colSpan={6} style={styles.td}>No hubo egresos activos en este cierre.</td></tr>:(cierreDetalle.egresos||[]).map((e)=><tr key={e.id}><td style={styles.td}>{formatearSoloFecha(e.fecha)}</td><td style={styles.td}>{e.nombre_egreso}</td><td style={styles.td}>{e.tipo_egreso}</td><td style={styles.td}>{e.numero_factura||'-'}</td><td style={styles.td}>{formatearMoneda(e.total)}</td><td style={styles.td}>{e.usuario||e.usuario_nombre||'-'}</td></tr>)}</tbody></table></div>
           <button style={{...styles.button,marginTop:20}} onClick={()=>window.print()}>Imprimir</button>
+          <div style={{height:24,flex:"0 0 auto"}} />
+          </div>
         </div>
       </div>
     ), document.body)}
