@@ -3974,6 +3974,122 @@ if (institucionIdLogin) {
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
 
+  const imprimirCierreCaja = (cierre) => {
+    if (!cierre) {
+      alert("No existen datos del cierre para imprimir.");
+      return;
+    }
+
+    try {
+      const cierreNativo = {
+        tipo_documento: "CIERRE_CAJA",
+        institucion:
+          institucionActiva?.nombre ||
+          cierre.institucion_nombre ||
+          "POS NUBE",
+        negocio: cierre.negocio || "POS NUBE",
+        fecha: cierre.fecha || obtenerFechaEcuadorISO(),
+        usuario:
+          cierre.usuario_nombre ||
+          cierre.usuario_correo ||
+          usuario?.correo ||
+          usuario?.nombre ||
+          "Administrador",
+
+        recargas_efectivo: Number(cierre.recargas_efectivo || 0),
+        recargas_transferencia: Number(
+          cierre.recargas_transferencia || 0
+        ),
+        ventas_efectivo: Number(cierre.ventas_efectivo || 0),
+        ventas_transferencia: Number(
+          cierre.ventas_transferencia || 0
+        ),
+        ventas_tarjeta: Number(cierre.ventas_tarjeta || 0),
+        ventas_saldo: Number(cierre.ventas_saldo || 0),
+        ventas_credito: Number(cierre.ventas_credito || 0),
+        egresos_total: Number(cierre.egresos_total || 0),
+
+        efectivo_contado: Number(cierre.efectivo_contado || 0),
+        tarjeta_manual: Number(cierre.tarjeta_manual || 0),
+        transferencia_manual: Number(
+          cierre.transferencia_manual || 0
+        ),
+
+        diferencia_efectivo: Number(
+          cierre.diferencia_efectivo || 0
+        ),
+        diferencia_tarjeta: Number(
+          cierre.diferencia_tarjeta || 0
+        ),
+        diferencia_transferencia: Number(
+          cierre.diferencia_transferencia || 0
+        ),
+        diferencia_general: Number(
+          cierre.diferencia_general || 0
+        ),
+
+        observacion:
+          cierre.observacion_automatica ||
+          cierre.observacion ||
+          "",
+
+        denominaciones: Array.isArray(cierre.denominaciones)
+          ? cierre.denominaciones.map((d) => ({
+              tipo: d.tipo || "",
+              denominacion: Number(d.denominacion || 0),
+              cantidad: Number(d.cantidad || 0),
+              total: Number(d.total || 0),
+            }))
+          : [],
+
+        egresos: Array.isArray(cierre.egresos)
+          ? cierre.egresos.map((e) => ({
+              fecha: normalizarFechaISO(e.fecha),
+              nombre:
+                e.nombre_egreso ||
+                e.nombre ||
+                "Egreso",
+              tipo: e.tipo_egreso || "",
+              factura: e.numero_factura || "",
+              total: Number(e.total || 0),
+            }))
+          : [],
+      };
+
+      if (
+        window.POSNUBEPrinter &&
+        typeof window.POSNUBEPrinter.imprimirTicket === "function"
+      ) {
+        window.POSNUBEPrinter.imprimirTicket(
+          JSON.stringify(cierreNativo)
+        );
+
+        console.log(
+          "Cierre enviado a impresora nativa iMin:",
+          cierreNativo
+        );
+        return;
+      }
+
+      if (
+        window.AndroidPrinter &&
+        typeof window.AndroidPrinter.printTicket === "function"
+      ) {
+        window.AndroidPrinter.printTicket(
+          JSON.stringify(cierreNativo)
+        );
+        return;
+      }
+    } catch (error) {
+      console.error(
+        "Error enviando cierre a impresora iMin:",
+        error
+      );
+    }
+
+    window.print();
+  };
+
   const imprimirTicketVenta = (ticket) => {
     if (!ticket) {
       alert("No existen datos para imprimir el ticket.");
@@ -6135,7 +6251,12 @@ if (!usuario) {
           <div style={styles.tableWrap}><table style={styles.table}><thead><tr><th style={styles.th}>Denominación</th><th style={styles.th}>Tipo</th><th style={styles.th}>Cantidad</th><th style={styles.th}>Total</th></tr></thead><tbody>{(cierreDetalle.denominaciones||[]).map((d,i)=><tr key={i}><td style={styles.td}>{Number(d.denominacion).toFixed(2)}</td><td style={styles.td}>{d.tipo}</td><td style={styles.td}>{d.cantidad}</td><td style={styles.td}>{formatearMoneda(d.total)}</td></tr>)}</tbody></table></div>
           <h3 style={{marginTop:24}}>Egresos incluidos en este cierre</h3>
           <div style={styles.tableWrap}><table style={styles.table}><thead><tr><th style={styles.th}>Fecha</th><th style={styles.th}>Nombre</th><th style={styles.th}>Tipo</th><th style={styles.th}>Factura</th><th style={styles.th}>Valor</th><th style={styles.th}>Usuario</th></tr></thead><tbody>{(cierreDetalle.egresos||[]).length===0?<tr><td colSpan={6} style={styles.td}>No hubo egresos activos en este cierre.</td></tr>:(cierreDetalle.egresos||[]).map((e)=><tr key={e.id}><td style={styles.td}>{formatearSoloFecha(e.fecha)}</td><td style={styles.td}>{e.nombre_egreso}</td><td style={styles.td}>{e.tipo_egreso}</td><td style={styles.td}>{e.numero_factura||'-'}</td><td style={styles.td}>{formatearMoneda(e.total)}</td><td style={styles.td}>{e.usuario||e.usuario_nombre||'-'}</td></tr>)}</tbody></table></div>
-          <button style={{...styles.button,marginTop:20}} onClick={()=>window.print()}>Imprimir</button>
+          <button
+            style={{ ...styles.button, marginTop: 20 }}
+            onClick={() => imprimirCierreCaja(cierreDetalle)}
+          >
+            Imprimir
+          </button>
           <div style={{height:24,flex:"0 0 auto"}} />
           </div>
         </div>
