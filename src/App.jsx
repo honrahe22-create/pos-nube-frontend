@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import AlumnosModulo from "./components/AlumnosModulo";
 import ConsultaAlumnoPublica from "./components/ConsultaAlumnoPublica";
 import ConfiguracionModulo from "./components/ConfiguracionModulo";
@@ -5871,9 +5872,9 @@ if (!usuario) {
       </div>
     </div>
 
-    {mostrarCrearCierre && (
-      <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,.65)", zIndex:9999, overflowY:"auto", overflowX:"hidden", padding:"clamp(8px, 2vw, 24px)", boxSizing:"border-box" }}>
-        <div style={{ width:"100%", maxWidth:1100, minWidth:0, margin:"0 auto", background:"white", borderRadius:16, padding:"clamp(14px, 2.5vw, 24px)", boxSizing:"border-box", overflowX:"hidden" }}>
+    {mostrarCrearCierre && createPortal((
+      <div style={{ position:"fixed", top:0, left:0, width:"100vw", height:"100dvh", background:"rgba(15,23,42,.65)", zIndex:99999, overflowY:"auto", overflowX:"hidden", padding:"8px", boxSizing:"border-box", WebkitOverflowScrolling:"touch" }}>
+        <div style={{ width:"calc(100vw - 16px)", maxWidth:900, minWidth:0, margin:"0 auto", background:"white", borderRadius:14, padding:"14px", boxSizing:"border-box", overflowX:"hidden" }}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}><h2 style={{margin:"0",fontSize:"clamp(22px,4vw,32px)"}}>Nuevo cierre de caja</h2><button style={{...styles.outlineButton,flexShrink:0}} onClick={()=>setMostrarCrearCierre(false)}>Cerrar</button></div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,220px),1fr))",gap:16,marginTop:18,width:"100%",minWidth:0}}>
             <div style={styles.filterField}><label style={styles.label}>Fecha de cierre</label><input type="date" style={styles.input} value={cierreForm.fecha} onChange={async(e)=>{const fecha=e.target.value;setCierreForm({...cierreForm,fecha});await cargarResumenCierre(fecha);}}/></div>
@@ -5996,11 +5997,11 @@ if (!usuario) {
           </button>
         </div>
       </div>
-    )}
+    ), document.body)}
 
-    {cierreDetalle && (
-      <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,.65)", zIndex:10000, overflowY:"auto", overflowX:"hidden", padding:"clamp(8px, 2vw, 24px)", boxSizing:"border-box" }}>
-        <div style={{width:"100%",maxWidth:1000,minWidth:0,margin:"0 auto",background:"white",borderRadius:16,padding:"clamp(14px,2.5vw,28px)",boxSizing:"border-box",overflowX:"hidden"}}>
+    {cierreDetalle && createPortal((
+      <div style={{ position:"fixed", top:0, left:0, width:"100vw", height:"100dvh", background:"rgba(15,23,42,.65)", zIndex:100000, overflowY:"auto", overflowX:"hidden", padding:"8px", boxSizing:"border-box", WebkitOverflowScrolling:"touch" }}>
+        <div style={{width:"calc(100vw - 16px)",maxWidth:900,minWidth:0,margin:"0 auto",background:"white",borderRadius:14,padding:"14px",boxSizing:"border-box",overflowX:"hidden"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}><h2 style={{margin:"0",fontSize:"clamp(22px,4vw,32px)"}}>Detalle de cierre de caja</h2><button style={{...styles.outlineButton,flexShrink:0}} onClick={()=>setCierreDetalle(null)}>✕</button></div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,220px),1fr))",gap:8,marginTop:18,minWidth:0}}>
             {[['Fecha de cierre',formatearFechaHora(cierreDetalle.fecha_cierre || cierreDetalle.created_at)],['Unidad educativa',institucionActiva?.nombre],['Negocio',cierreDetalle.negocio],['Usuario',cierreDetalle.usuario_nombre||cierreDetalle.usuario_correo],['Total recarga efectivo',formatearMoneda(cierreDetalle.recargas_efectivo)],['Egreso',formatearMoneda(cierreDetalle.egresos_total)],['Total recarga transferencia',formatearMoneda(cierreDetalle.recargas_transferencia)],['Total ventas por efectivo',formatearMoneda(cierreDetalle.ventas_efectivo)],['Total ventas por transferencia',formatearMoneda(cierreDetalle.ventas_transferencia)],['Total ventas por tarjeta',formatearMoneda(cierreDetalle.ventas_tarjeta)],['Efectivo entregado',formatearMoneda(cierreDetalle.efectivo_contado)],['Tarjeta manual',formatearMoneda(cierreDetalle.tarjeta_manual)],['Transferencia manual',formatearMoneda(cierreDetalle.transferencia_manual)],['Diferencia efectivo',formatearMoneda(cierreDetalle.diferencia_efectivo)],['Diferencia tarjeta',formatearMoneda(cierreDetalle.diferencia_tarjeta)],['Diferencia transferencia',formatearMoneda(cierreDetalle.diferencia_transferencia)],['Diferencia general',formatearMoneda(cierreDetalle.diferencia_general)],['Observación',cierreDetalle.observacion_automatica||cierreDetalle.observacion||'-']].map(([a,b])=><><div style={{color:'#64748b'}}>{a}:</div><strong>{b||'-'}</strong></>)}
@@ -6012,7 +6013,7 @@ if (!usuario) {
           <button style={{...styles.button,marginTop:20}} onClick={()=>window.print()}>Imprimir</button>
         </div>
       </div>
-    )}
+    ), document.body)}
   </>
 )}
 
