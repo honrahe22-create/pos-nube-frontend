@@ -6064,7 +6064,10 @@ if (!usuario) {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,260px),1fr))",
+              gridTemplateColumns:
+                typeof window !== "undefined" && window.innerWidth <= 1280
+                  ? "1fr"
+                  : "repeat(3,minmax(0,1fr))",
               gap: 12,
               marginTop: 18,
               minWidth: 0,
@@ -6099,7 +6102,10 @@ if (!usuario) {
                 key={etiqueta}
                 style={{
                   minWidth: 0,
-                  padding: "10px 12px",
+                  padding:
+                    typeof window !== "undefined" && window.innerWidth <= 1280
+                      ? "8px 10px"
+                      : "10px 12px",
                   border: "1px solid #e5e7eb",
                   borderRadius: 10,
                   background: "#fff",
