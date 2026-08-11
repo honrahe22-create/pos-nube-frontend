@@ -45,11 +45,52 @@ const formatearFechaHora = (valor) => {
   return fecha.toLocaleString();
 };
 
-const formatearSoloFecha = (valor) => {
-  if (!valor) return "-";
+const obtenerFechaEcuadorISO = () => {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Guayaquil",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const tomar = (tipo) =>
+    partes.find((parte) => parte.type === tipo)?.value || "";
+
+  return `${tomar("year")}-${tomar("month")}-${tomar("day")}`;
+};
+
+const normalizarFechaISO = (valor) => {
+  if (!valor) return "";
+
+  const texto = String(valor).trim();
+  const coincidencia = texto.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  if (coincidencia) {
+    return `${coincidencia[1]}-${coincidencia[2]}-${coincidencia[3]}`;
+  }
+
   const fecha = new Date(valor);
-  if (Number.isNaN(fecha.getTime())) return "-";
-  return fecha.toLocaleDateString();
+  if (Number.isNaN(fecha.getTime())) return "";
+
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Guayaquil",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(fecha);
+
+  const tomar = (tipo) =>
+    partes.find((parte) => parte.type === tipo)?.value || "";
+
+  return `${tomar("year")}-${tomar("month")}-${tomar("day")}`;
+};
+
+const formatearSoloFecha = (valor) => {
+  const fechaISO = normalizarFechaISO(valor);
+  if (!fechaISO) return "-";
+
+  const [anio, mes, dia] = fechaISO.split("-");
+  return `${dia}/${mes}/${anio}`;
 };
 
 const formatearSoloHora = (valor) => {
@@ -318,7 +359,7 @@ const [guardandoCierre, setGuardandoCierre] = useState(false);
 const [cargandoCierres, setCargandoCierres] = useState(false);
 const [resumenCierreServidor, setResumenCierreServidor] = useState(null);
 const [cierreForm, setCierreForm] = useState({
-  fecha: new Date().toISOString().slice(0, 10),
+  fecha: obtenerFechaEcuadorISO(),
   negocio: "POS NUBE",
   tarjeta_manual: "0",
   transferencia_manual: "0",
@@ -6224,7 +6265,18 @@ if (!usuario) {
 
       <button
         style={styles.secondaryButton}
-        onClick={() => setMostrarCrearEgreso(!mostrarCrearEgreso)}
+        onClick={() => {
+          const abrir = !mostrarCrearEgreso;
+
+          if (abrir && !editandoEgresoId) {
+            setEgresoForm((actual) => ({
+              ...actual,
+              fecha: actual.fecha || obtenerFechaEcuadorISO(),
+            }));
+          }
+
+          setMostrarCrearEgreso(abrir);
+        }}
       >
         {mostrarCrearEgreso ? "Cerrar formulario" : "Crear egreso"}
       </button>
@@ -6477,7 +6529,7 @@ onClick={guardarEgreso}
               <tr key={egreso.id}>
                 <td style={styles.td}>{egreso.negocio}</td>
                 <td style={styles.td}>{egreso.usuario}</td>
-                <td style={styles.td}>{egreso.fecha}</td>
+                <td style={styles.td}>{formatearSoloFecha(egreso.fecha)}</td>
                 <td style={styles.td}>{egreso.nombre_egreso}</td>
                 <td style={styles.td}>${Number(egreso.total || 0).toFixed(2)}</td>
                 <td style={styles.td}>{egreso.descripcion}</td>
@@ -6492,7 +6544,7 @@ onClick={guardarEgreso}
                         setEgresoForm({
                           negocio: egreso.negocio || "",
                           usuario: egreso.usuario || "",
-                          fecha: egreso.fecha || "",
+                          fecha: normalizarFechaISO(egreso.fecha) || "",
                           nombre_egreso: egreso.nombre_egreso || "",
                           total: egreso.total || "",
                           descripcion: egreso.descripcion || "",
