@@ -4087,7 +4087,349 @@ if (institucionIdLogin) {
       );
     }
 
-    window.print();
+    // ============================================================
+    // IMPRESIÓN PC / NAVEGADOR
+    // ============================================================
+    // No usamos window.print() directamente sobre el modal porque el
+    // detalle del cierre vive dentro de un contenedor fixed con scroll.
+    // Chrome puede repetir la primera página en impresión dúplex.
+    // En PC se crea un documento limpio y paginable exclusivamente
+    // para impresión.
+    try {
+      const moneda = (valor) =>
+        `$${Number(valor || 0).toFixed(2)}`;
+
+      const filasResumen = [
+        ["Fecha de cierre", formatearSoloFecha(cierre.fecha)],
+        [
+          "Unidad educativa",
+          institucionActiva?.nombre ||
+            cierre.institucion_nombre ||
+            "POS NUBE",
+        ],
+        ["Negocio", cierre.negocio || "POS NUBE"],
+        [
+          "Usuario",
+          cierre.usuario_nombre ||
+            cierre.usuario_correo ||
+            usuario?.correo ||
+            usuario?.nombre ||
+            "Administrador",
+        ],
+        ["Total recarga efectivo", moneda(cierre.recargas_efectivo)],
+        [
+          "Total recarga transferencia",
+          moneda(cierre.recargas_transferencia),
+        ],
+        ["Total ventas por efectivo", moneda(cierre.ventas_efectivo)],
+        [
+          "Total ventas por transferencia",
+          moneda(cierre.ventas_transferencia),
+        ],
+        ["Total ventas por tarjeta", moneda(cierre.ventas_tarjeta)],
+        ["Egresos", moneda(cierre.egresos_total)],
+        ["Efectivo entregado", moneda(cierre.efectivo_contado)],
+        ["Tarjeta manual", moneda(cierre.tarjeta_manual)],
+        [
+          "Transferencia manual",
+          moneda(cierre.transferencia_manual),
+        ],
+        [
+          "Diferencia efectivo",
+          moneda(cierre.diferencia_efectivo),
+        ],
+        ["Diferencia tarjeta", moneda(cierre.diferencia_tarjeta)],
+        [
+          "Diferencia transferencia",
+          moneda(cierre.diferencia_transferencia),
+        ],
+        ["Diferencia general", moneda(cierre.diferencia_general)],
+        [
+          "Observación",
+          cierre.observacion_automatica ||
+            cierre.observacion ||
+            "-",
+        ],
+      ];
+
+      const resumenHtml = filasResumen
+        .map(
+          ([etiqueta, valor]) => `
+            <div class="dato">
+              <div class="etiqueta">${escaparHtml(etiqueta)}</div>
+              <div class="valor">${escaparHtml(valor)}</div>
+            </div>
+          `
+        )
+        .join("");
+
+      const denominacionesHtml = (
+        Array.isArray(cierre.denominaciones)
+          ? cierre.denominaciones
+          : []
+      )
+        .map(
+          (d) => `
+            <tr>
+              <td>${Number(d.denominacion || 0).toFixed(2)}</td>
+              <td>${escaparHtml(d.tipo || "")}</td>
+              <td>${Number(d.cantidad || 0)}</td>
+              <td>${moneda(d.total)}</td>
+            </tr>
+          `
+        )
+        .join("");
+
+      const egresosHtml = (
+        Array.isArray(cierre.egresos)
+          ? cierre.egresos
+          : []
+      )
+        .map(
+          (e) => `
+            <tr>
+              <td>${escaparHtml(formatearSoloFecha(e.fecha))}</td>
+              <td>${escaparHtml(
+                e.nombre_egreso || e.nombre || "Egreso"
+              )}</td>
+              <td>${escaparHtml(e.tipo_egreso || "")}</td>
+              <td>${escaparHtml(e.numero_factura || "-")}</td>
+              <td>${moneda(e.total)}</td>
+              <td>${escaparHtml(
+                e.usuario || e.usuario_nombre || "-"
+              )}</td>
+            </tr>
+          `
+        )
+        .join("");
+
+      const ventanaImpresion = window.open(
+        "",
+        "_blank",
+        "width=1000,height=800"
+      );
+
+      if (!ventanaImpresion) {
+        alert(
+          "El navegador bloqueó la ventana de impresión. Permite ventanas emergentes para POS NUBE e intenta nuevamente."
+        );
+        return;
+      }
+
+      ventanaImpresion.document.open();
+      ventanaImpresion.document.write(`
+        <!doctype html>
+        <html lang="es">
+          <head>
+            <meta charset="utf-8" />
+            <title>Cierre de caja - ${escaparHtml(
+              formatearSoloFecha(cierre.fecha)
+            )}</title>
+            <style>
+              * {
+                box-sizing: border-box;
+              }
+
+              html,
+              body {
+                margin: 0;
+                padding: 0;
+                background: #fff;
+                color: #111827;
+                font-family: Arial, Helvetica, sans-serif;
+                font-size: 11pt;
+              }
+
+              body {
+                padding: 16mm 14mm;
+              }
+
+              h1 {
+                margin: 0 0 18px;
+                font-size: 23pt;
+              }
+
+              h2 {
+                margin: 24px 0 10px;
+                font-size: 15pt;
+                page-break-after: avoid;
+                break-after: avoid-page;
+              }
+
+              .resumen {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 8px;
+              }
+
+              .dato {
+                border: 1px solid #d7dde5;
+                border-radius: 6px;
+                padding: 8px 9px;
+                break-inside: avoid;
+                page-break-inside: avoid;
+              }
+
+              .etiqueta {
+                color: #64748b;
+                font-size: 9.5pt;
+                margin-bottom: 3px;
+              }
+
+              .valor {
+                font-weight: 700;
+                overflow-wrap: anywhere;
+              }
+
+              table {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: auto;
+              }
+
+              thead {
+                display: table-header-group;
+              }
+
+              tfoot {
+                display: table-footer-group;
+              }
+
+              tr {
+                break-inside: avoid;
+                page-break-inside: avoid;
+              }
+
+              th,
+              td {
+                border-bottom: 1px solid #e5e7eb;
+                padding: 7px 6px;
+                text-align: left;
+                vertical-align: top;
+                font-size: 10pt;
+              }
+
+              th {
+                background: #f5f7fa;
+                font-weight: 700;
+              }
+
+              .sin-registros {
+                padding: 12px 6px;
+              }
+
+              @page {
+                size: auto;
+                margin: 12mm;
+              }
+
+              @media print {
+                html,
+                body {
+                  width: auto !important;
+                  height: auto !important;
+                  overflow: visible !important;
+                }
+
+                body {
+                  padding: 0;
+                }
+
+                .resumen,
+                table,
+                tbody {
+                  overflow: visible !important;
+                }
+              }
+            </style>
+          </head>
+
+          <body>
+            <h1>Detalle de cierre de caja</h1>
+
+            <section class="resumen">
+              ${resumenHtml}
+            </section>
+
+            <h2>Conteo de billetes y monedas</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Denominación</th>
+                  <th>Tipo</th>
+                  <th>Cantidad</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${
+                  denominacionesHtml ||
+                  `
+                    <tr>
+                      <td colspan="4" class="sin-registros">
+                        No se registraron denominaciones.
+                      </td>
+                    </tr>
+                  `
+                }
+              </tbody>
+            </table>
+
+            <h2>Egresos incluidos en este cierre</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Nombre</th>
+                  <th>Tipo</th>
+                  <th>Factura</th>
+                  <th>Valor</th>
+                  <th>Usuario</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${
+                  egresosHtml ||
+                  `
+                    <tr>
+                      <td colspan="6" class="sin-registros">
+                        No hubo egresos activos en este cierre.
+                      </td>
+                    </tr>
+                  `
+                }
+              </tbody>
+            </table>
+          </body>
+        </html>
+      `);
+      ventanaImpresion.document.close();
+
+      const ejecutarImpresion = () => {
+        ventanaImpresion.focus();
+        ventanaImpresion.print();
+
+        ventanaImpresion.onafterprint = () => {
+          ventanaImpresion.close();
+        };
+      };
+
+      if (ventanaImpresion.document.readyState === "complete") {
+        setTimeout(ejecutarImpresion, 250);
+      } else {
+        ventanaImpresion.onload = () => {
+          setTimeout(ejecutarImpresion, 250);
+        };
+      }
+    } catch (error) {
+      console.error(
+        "Error preparando impresión de cierre en PC:",
+        error
+      );
+      alert(
+        "No se pudo preparar la impresión del cierre. Intenta nuevamente."
+      );
+    }
   };
 
   const imprimirTicketVenta = (ticket) => {
