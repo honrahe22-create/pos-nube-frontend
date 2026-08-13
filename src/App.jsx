@@ -8,6 +8,7 @@ import PadresModulo from "./components/PadresModulo";
 import ProductosMasVendidosModulo from "./components/ProductosMasVendidosModulo";
 import KardexModulo from "./components/KardexModulo";
 import ProductosFormaPagoModulo from "./components/ProductosFormaPagoModulo";
+import PortalUsuarioModulo from "./components/PortalUsuarioModulo";
 
 const API_URL = "https://pos-nube-backend.onrender.com";
 
@@ -18,6 +19,8 @@ const ROLES_POS = {
   ENCARGADO_LOCAL: "ENCARGADO_LOCAL",
   CAJERO: "CAJERO",
   AUDITOR: "AUDITOR",
+  PADRE: "PADRE",
+  ESTUDIANTE: "ESTUDIANTE",
 };
 
 const MENU_POR_ROL = {
@@ -47,6 +50,8 @@ const MENU_POR_ROL = {
     "profesores",
     "cierre_caja",
   ],
+  PADRE: [],
+  ESTUDIANTE: [],
   AUDITOR: [
     "consultar_ventas",
     "stock",
@@ -67,6 +72,8 @@ const VISTA_INICIAL_POR_ROL = {
   ENCARGADO_LOCAL: { vista: "dashboard" },
   CAJERO: { vista: "ventas", ventas: "registrar" },
   AUDITOR: { vista: "reporte_cierre" },
+  PADRE: { vista: "portal" },
+  ESTUDIANTE: { vista: "portal" },
 };
 
 const PERMISOS_FRONTEND = {
@@ -94,6 +101,8 @@ const PERMISOS_FRONTEND = {
     "cierres.ver",
     "cierres.crear",
   ],
+  PADRE: [],
+  ESTUDIANTE: [],
   AUDITOR: [
     "ventas.ver",
     "productos.ver",
@@ -246,6 +255,7 @@ const [cargandoCrearCuenta, setCargandoCrearCuenta] = useState(false);
 
 
   const rolActual = normalizarRol(usuario?.rol);
+  const esRolPortal = ["PADRE", "ESTUDIANTE"].includes(rolActual);
 
   const puede = (permiso) => puedeRol(rolActual, permiso);
 
@@ -5370,6 +5380,8 @@ Disponible: ${formatearMoneda(
   }, [usuario]);
 
   useEffect(() => {
+    if (esRolPortal) return;
+
     const actualizarBancos = () => {
       cargarCuentasBancarias();
     };
@@ -5388,7 +5400,7 @@ Disponible: ${formatearMoneda(
   }, [usuario, institucionSeleccionadaId]);
 
   useEffect(() => {
-    if (usuario) {
+    if (usuario && !esRolPortal) {
       cargarResumen();
       cargarProductos();
       cargarAlumnos();
@@ -5400,7 +5412,7 @@ Disponible: ${formatearMoneda(
   }, [usuario, institucionSeleccionadaId]);
 
  useEffect(() => {
-  if (!usuario) return;
+  if (!usuario || esRolPortal) return;
 
   if (vista === "productos" || vista === "inventario" || vista === "ventas") {
     cargarProductos();
@@ -6087,6 +6099,16 @@ if (!usuario) {
     </div>
   );
 }
+
+  if (esRolPortal) {
+    return (
+      <PortalUsuarioModulo
+        API_URL={API_URL}
+        usuario={usuario}
+        onCerrarSesion={cerrarSesion}
+      />
+    );
+  }
 
   return (
     <div style={styles.appShell}>

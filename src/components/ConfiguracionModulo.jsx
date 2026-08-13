@@ -30,6 +30,9 @@ export default function ConfiguracionModulo({
 
   const [usuariosSistema, setUsuariosSistema] = useState([]);
   const [cargandoUsuarios, setCargandoUsuarios] = useState(false);
+  const [padresVinculables, setPadresVinculables] = useState([]);
+  const [alumnosVinculables, setAlumnosVinculables] = useState([]);
+
   const [guardandoUsuario, setGuardandoUsuario] = useState(false);
   const [usuarioEditandoId, setUsuarioEditandoId] = useState(null);
   const [usuarioForm, setUsuarioForm] = useState({
@@ -38,6 +41,8 @@ export default function ConfiguracionModulo({
     password: "",
     rol: "CAJERO",
     estado: true,
+    padre_id: "",
+    alumno_id: "",
   });
 
   const rolesDisponibles = useMemo(() => {
@@ -46,6 +51,8 @@ export default function ConfiguracionModulo({
       { value: "ENCARGADO_LOCAL", label: "Encargado de local" },
       { value: "CAJERO", label: "Cajero" },
       { value: "AUDITOR", label: "Auditor / Consulta" },
+      { value: "PADRE", label: "Padre / Representante" },
+      { value: "ESTUDIANTE", label: "Estudiante" },
     ];
 
     if (String(usuario?.rol || "").toUpperCase() === "SUPER_ADMIN") {
@@ -279,7 +286,34 @@ export default function ConfiguracionModulo({
       password: "",
       rol: "CAJERO",
       estado: true,
+      padre_id: "",
+      alumno_id: "",
     });
+  };
+
+
+  const cargarCatalogosVinculacion = async () => {
+    if (!institucionId || !esAdministrador) return;
+
+    try {
+      const token = localStorage.getItem("token");
+      const respuesta = await fetch(
+        `${API_URL}/api/usuarios/catalogos-vinculacion?institucion_id=${institucionId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await respuesta.json();
+
+      if (!respuesta.ok) {
+        throw new Error(data.message || "No se pudieron cargar padres y estudiantes");
+      }
+
+      setPadresVinculables(Array.isArray(data.padres) ? data.padres : []);
+      setAlumnosVinculables(Array.isArray(data.alumnos) ? data.alumnos : []);
+    } catch (error) {
+      console.error("Error cargando vínculos de portal:", error);
+      setPadresVinculables([]);
+      setAlumnosVinculables([]);
+    }
   };
 
   const cargarUsuariosSistema = async () => {
@@ -299,6 +333,7 @@ export default function ConfiguracionModulo({
       }
 
       setUsuariosSistema(Array.isArray(data) ? data : []);
+      await cargarCatalogosVinculacion();
     } catch (error) {
       console.error("Error cargando usuarios:", error);
       setUsuariosSistema([]);
@@ -314,6 +349,16 @@ export default function ConfiguracionModulo({
 
     if (!usuarioForm.nombre.trim() || !usuarioForm.correo.trim()) {
       setMensaje("Nombre y correo son obligatorios.");
+      return;
+    }
+
+    if (usuarioForm.rol === "PADRE" && !usuarioForm.padre_id) {
+      setMensaje("Selecciona el padre / representante que usará esta cuenta.");
+      return;
+    }
+
+    if (usuarioForm.rol === "ESTUDIANTE" && !usuarioForm.alumno_id) {
+      setMensaje("Selecciona el estudiante que usará esta cuenta.");
       return;
     }
 
@@ -336,6 +381,14 @@ export default function ConfiguracionModulo({
         correo: usuarioForm.correo.trim().toLowerCase(),
         rol: usuarioForm.rol,
         estado: usuarioForm.estado !== false,
+        padre_id:
+          usuarioForm.rol === "PADRE"
+            ? Number(usuarioForm.padre_id || 0) || null
+            : null,
+        alumno_id:
+          usuarioForm.rol === "ESTUDIANTE"
+            ? Number(usuarioForm.alumno_id || 0) || null
+            : null,
       };
 
       if (!editando) payload.password = usuarioForm.password;
@@ -376,6 +429,8 @@ export default function ConfiguracionModulo({
       password: "",
       rol: String(item.rol || "CAJERO").toUpperCase(),
       estado: item.estado !== false,
+      padre_id: item.padre_id ? String(item.padre_id) : "",
+      alumno_id: item.alumno_id ? String(item.alumno_id) : "",
     });
     setVistaInterna("usuarios");
   };
@@ -873,6 +928,14 @@ export default function ConfiguracionModulo({
                 <strong>Auditor / Consulta</strong>
                 <span>Solo lectura de reportes, movimientos, Kardex, ventas y cierres.</span>
               </div>
+              <div style={ui.roleInfoCard}>
+                <strong>Padre / Representante</strong>
+                <span>Portal separado para consultar hijos, saldos, consumos y solicitar recargas.</span>
+              </div>
+              <div style={ui.roleInfoCard}>
+                <strong>Estudiante</strong>
+                <span>Portal personal de saldo, movimientos e identificación para compras.</span>
+              </div>
             </div>
           </div>
 
@@ -932,7 +995,15 @@ export default function ConfiguracionModulo({
                       style={ui.input}
                       value={usuarioForm.rol}
                       onChange={(e) =>
-                        setUsuarioForm({ ...usuarioForm, rol: e.target.value })
+                        setUsuarioForm({
+                          ...usuarioForm,
+                          rol: e.target.value,
+                          padre_id: e.target.value === "PADRE" ? usuarioForm.padre_id : "",
+                          alumno_id:
+                            e.target.value === "ESTUDIANTE"
+                              ? usuarioForm.alumno_id
+                              : "",
+                        })
                       }
                     >
                       {rolesDisponibles.map((rol) => (
@@ -942,6 +1013,56 @@ export default function ConfiguracionModulo({
                       ))}
                     </select>
                   </label>
+
+                  {usuarioForm.rol === "PADRE" && (
+                    <label style={ui.label}>
+                      Padre / representante vinculado *
+                      <select
+                        style={ui.input}
+                        value={usuarioForm.padre_id}
+                        onChange={(e) =>
+                          setUsuarioForm({
+                            ...usuarioForm,
+                            padre_id: e.target.value,
+                          })
+                        }
+                        required
+                      >
+                        <option value="">Seleccionar padre</option>
+                        {padresVinculables.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.nombres} {p.apellidos}
+                            {p.cedula ? ` · ${p.cedula}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+
+                  {usuarioForm.rol === "ESTUDIANTE" && (
+                    <label style={ui.label}>
+                      Estudiante vinculado *
+                      <select
+                        style={ui.input}
+                        value={usuarioForm.alumno_id}
+                        onChange={(e) =>
+                          setUsuarioForm({
+                            ...usuarioForm,
+                            alumno_id: e.target.value,
+                          })
+                        }
+                        required
+                      >
+                        <option value="">Seleccionar estudiante</option>
+                        {alumnosVinculables.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.nombres} {a.apellidos}
+                            {a.curso ? ` · ${a.curso} ${a.paralelo || ""}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
 
                   {usuarioEditandoId && (
                     <label style={ui.checkRow}>
@@ -1004,6 +1125,7 @@ export default function ConfiguracionModulo({
                     <th style={ui.th}>Nombre</th>
                     <th style={ui.th}>Correo</th>
                     <th style={ui.th}>Rol</th>
+                    <th style={ui.th}>Vinculado a</th>
                     <th style={ui.th}>Estado</th>
                     <th style={ui.th}>Acciones</th>
                   </tr>
@@ -1011,7 +1133,7 @@ export default function ConfiguracionModulo({
                 <tbody>
                   {!usuariosSistema.length ? (
                     <tr>
-                      <td colSpan="5" style={ui.empty}>
+                      <td colSpan="6" style={ui.empty}>
                         {cargandoUsuarios
                           ? "Cargando usuarios..."
                           : "No existen usuarios para mostrar."}
@@ -1035,6 +1157,7 @@ export default function ConfiguracionModulo({
                           <td style={ui.td}>
                             <span style={ui.badge}>{item.rol || "-"}</span>
                           </td>
+                          <td style={ui.td}>{item.vinculado_nombre || "-"}</td>
                           <td style={ui.td}>
                             <span
                               style={item.estado === false ? ui.badgeDanger : ui.badgeSuccess}
