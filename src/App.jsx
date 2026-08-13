@@ -11,6 +11,108 @@ import ProductosFormaPagoModulo from "./components/ProductosFormaPagoModulo";
 
 const API_URL = "https://pos-nube-backend.onrender.com";
 
+
+const ROLES_POS = {
+  SUPER_ADMIN: "SUPER_ADMIN",
+  ADMIN: "ADMIN",
+  ENCARGADO_LOCAL: "ENCARGADO_LOCAL",
+  CAJERO: "CAJERO",
+  AUDITOR: "AUDITOR",
+};
+
+const MENU_POR_ROL = {
+  SUPER_ADMIN: ["*"],
+  ADMIN: ["*"],
+  ENCARGADO_LOCAL: [
+    "dashboard",
+    "consultar_ventas",
+    "nueva_orden",
+    "alumnos",
+    "profesores",
+    "menu_cafeteria",
+    "stock",
+    "recargas",
+    "egresos",
+    "cierre_caja",
+    "productos_vendidos",
+    "productos_dia",
+    "productos_mas_vendidos",
+    "kardex_productos",
+    "productos_forma_pago",
+  ],
+  CAJERO: [
+    "consultar_ventas",
+    "nueva_orden",
+    "alumnos",
+    "profesores",
+    "cierre_caja",
+  ],
+  AUDITOR: [
+    "consultar_ventas",
+    "stock",
+    "recargas",
+    "egresos",
+    "cierre_caja",
+    "productos_vendidos",
+    "productos_dia",
+    "productos_mas_vendidos",
+    "kardex_productos",
+    "productos_forma_pago",
+  ],
+};
+
+const VISTA_INICIAL_POR_ROL = {
+  SUPER_ADMIN: { vista: "dashboard" },
+  ADMIN: { vista: "dashboard" },
+  ENCARGADO_LOCAL: { vista: "dashboard" },
+  CAJERO: { vista: "ventas", ventas: "registrar" },
+  AUDITOR: { vista: "reporte_cierre" },
+};
+
+const PERMISOS_FRONTEND = {
+  SUPER_ADMIN: ["*"],
+  ADMIN: ["*"],
+  ENCARGADO_LOCAL: [
+    "ventas.ver",
+    "ventas.crear",
+    "productos.ver",
+    "inventario.ver",
+    "inventario.gestionar",
+    "personas.ver",
+    "recargas.ver",
+    "egresos.ver",
+    "egresos.gestionar",
+    "cierres.ver",
+    "cierres.crear",
+    "reportes.ver",
+  ],
+  CAJERO: [
+    "ventas.ver",
+    "ventas.crear",
+    "productos.ver",
+    "personas.ver",
+    "cierres.ver",
+    "cierres.crear",
+  ],
+  AUDITOR: [
+    "ventas.ver",
+    "productos.ver",
+    "inventario.ver",
+    "recargas.ver",
+    "egresos.ver",
+    "cierres.ver",
+    "reportes.ver",
+  ],
+};
+
+const normalizarRol = (rol) => String(rol || "").trim().toUpperCase();
+
+const puedeRol = (rol, permiso) => {
+  const lista = PERMISOS_FRONTEND[normalizarRol(rol)] || [];
+  return lista.includes("*") || lista.includes(permiso);
+};
+
+
 const INSTITUCIONES = [
   { id: 1, nombre: "Colegio Marista" },
   { id: 2, nombre: "Colegio Pensionado Universitario" },
@@ -142,7 +244,28 @@ const [cargandoCrearCuenta, setCargandoCrearCuenta] = useState(false);
     return guardado ? JSON.parse(guardado) : null;
   });
 
-  const [vista, setVista] = useState("dashboard");
+
+  const rolActual = normalizarRol(usuario?.rol);
+
+  const puede = (permiso) => puedeRol(rolActual, permiso);
+
+  const puedeAccederMenu = (menuId) => {
+    const permitidos = MENU_POR_ROL[rolActual] || [];
+    return permitidos.includes("*") || permitidos.includes(menuId);
+  };
+
+  const aplicarVistaInicialRol = (rol, setVistaFn, setVentasFn) => {
+    const normalizado = normalizarRol(rol);
+    const inicial = VISTA_INICIAL_POR_ROL[normalizado] || { vista: "dashboard" };
+    setVistaFn(inicial.vista);
+    if (inicial.ventas) setVentasFn(inicial.ventas);
+  };
+
+  const [vista, setVista] = useState(() => {
+    const guardado = JSON.parse(localStorage.getItem("usuario") || "null");
+    const rol = normalizarRol(guardado?.rol);
+    return VISTA_INICIAL_POR_ROL[rol]?.vista || "dashboard";
+  });
   const [resumen, setResumen] = useState(null);
 
   const [institucionSeleccionadaId, setInstitucionSeleccionadaId] = useState(() => {
@@ -226,7 +349,11 @@ const [cuentasBancarias, setCuentasBancarias] = useState([]);
   });
  const [ventaItems, setVentaItems] = useState([]);
 
-  const [vistaVentasInterna, setVistaVentasInterna] = useState("consultar");
+  const [vistaVentasInterna, setVistaVentasInterna] = useState(() => {
+    const guardado = JSON.parse(localStorage.getItem("usuario") || "null");
+    const rol = normalizarRol(guardado?.rol);
+    return VISTA_INICIAL_POR_ROL[rol]?.ventas || "consultar";
+  });
 const [menuComidasAbierto, setMenuComidasAbierto] = useState(true);
 const [menuVentasAbierto, setMenuVentasAbierto] = useState(false);
 const [menuReportesAbierto, setMenuReportesAbierto] = useState(false);
@@ -2164,7 +2291,11 @@ if (institucionIdLogin) {
         correo: data.usuario?.correo || "",
       }));
 
-      setVista("dashboard");
+      aplicarVistaInicialRol(
+        data.usuario?.rol,
+        setVista,
+        setVistaVentasInterna
+      );
       setMensaje("");
     } catch (error) {
       console.error("Error login:", error);
@@ -5968,6 +6099,19 @@ if (!usuario) {
             <strong style={styles.institucionName}>
               {institucionActiva?.nombre || "Sin seleccionar"}
             </strong>
+            <span
+              style={{
+                display: "inline-block",
+                marginTop: 8,
+                padding: "4px 8px",
+                borderRadius: 999,
+                background: "rgba(255,255,255,0.15)",
+                fontSize: 11,
+                fontWeight: 800,
+              }}
+            >
+              {rolActual || "SIN ROL"}
+            </span>
           </div>
 
           <div
@@ -6113,7 +6257,7 @@ if (!usuario) {
       activo: vista === "configuracion",
       accion: () => setVista("configuracion"),
     },
-  ].map((opcion) => (
+  ].filter((opcion) => puedeAccederMenu(opcion.id)).map((opcion) => (
     <button
       key={opcion.id}
       type="button"
@@ -11704,13 +11848,15 @@ onClick={() => eliminarEgreso(egreso)}
         )}
 
 
-        {vista === "configuracion" && (
+        {vista === "configuracion" &&
+          ["ADMIN", "SUPER_ADMIN"].includes(rolActual) && (
           <ConfiguracionModulo
             API_URL={API_URL}
             usuario={usuario}
             institucion={institucionActiva}
             institucionId={institucionActivaId}
             onCerrarSesion={cerrarSesion}
+            puede={puede}
           />
         )}
 

@@ -13,6 +13,7 @@ export default function ConfiguracionModulo({
   institucion,
   institucionId,
   onCerrarSesion,
+  puede,
 }) {
   const [vistaInterna, setVistaInterna] = useState("general");
   const [resumen, setResumen] = useState(null);
@@ -25,6 +26,37 @@ export default function ConfiguracionModulo({
     banco: "",
   });
   const [guardandoCuenta, setGuardandoCuenta] = useState(false);
+
+
+  const [usuariosSistema, setUsuariosSistema] = useState([]);
+  const [cargandoUsuarios, setCargandoUsuarios] = useState(false);
+  const [guardandoUsuario, setGuardandoUsuario] = useState(false);
+  const [usuarioEditandoId, setUsuarioEditandoId] = useState(null);
+  const [usuarioForm, setUsuarioForm] = useState({
+    nombre: "",
+    correo: "",
+    password: "",
+    rol: "CAJERO",
+    estado: true,
+  });
+
+  const rolesDisponibles = useMemo(() => {
+    const base = [
+      { value: "ADMIN", label: "Administrador de cafetería" },
+      { value: "ENCARGADO_LOCAL", label: "Encargado de local" },
+      { value: "CAJERO", label: "Cajero" },
+      { value: "AUDITOR", label: "Auditor / Consulta" },
+    ];
+
+    if (String(usuario?.rol || "").toUpperCase() === "SUPER_ADMIN") {
+      return [
+        { value: "SUPER_ADMIN", label: "Super administrador" },
+        ...base,
+      ];
+    }
+
+    return base;
+  }, [usuario?.rol]);
 
   const [estadoRespaldos, setEstadoRespaldos] = useState(null);
   const [respaldosHistoricos, setRespaldosHistoricos] = useState([]);
@@ -238,6 +270,193 @@ export default function ConfiguracionModulo({
     }
   };
 
+
+  const limpiarUsuarioForm = () => {
+    setUsuarioEditandoId(null);
+    setUsuarioForm({
+      nombre: "",
+      correo: "",
+      password: "",
+      rol: "CAJERO",
+      estado: true,
+    });
+  };
+
+  const cargarUsuariosSistema = async () => {
+    if (!institucionId || !esAdministrador) return;
+
+    try {
+      setCargandoUsuarios(true);
+      const token = localStorage.getItem("token");
+      const respuesta = await fetch(
+        `${API_URL}/api/usuarios?institucion_id=${institucionId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await respuesta.json();
+
+      if (!respuesta.ok) {
+        throw new Error(data.message || "No se pudieron cargar los usuarios");
+      }
+
+      setUsuariosSistema(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Error cargando usuarios:", error);
+      setUsuariosSistema([]);
+      setMensaje(error.message || "No se pudieron cargar los usuarios.");
+    } finally {
+      setCargandoUsuarios(false);
+    }
+  };
+
+  const guardarUsuarioSistema = async (e) => {
+    e.preventDefault();
+    setMensaje("");
+
+    if (!usuarioForm.nombre.trim() || !usuarioForm.correo.trim()) {
+      setMensaje("Nombre y correo son obligatorios.");
+      return;
+    }
+
+    if (!usuarioEditandoId && String(usuarioForm.password || "").length < 6) {
+      setMensaje("La contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+
+    try {
+      setGuardandoUsuario(true);
+      const token = localStorage.getItem("token");
+      const editando = Boolean(usuarioEditandoId);
+      const url = editando
+        ? `${API_URL}/api/usuarios/${usuarioEditandoId}`
+        : `${API_URL}/api/usuarios`;
+
+      const payload = {
+        institucion_id: Number(institucionId),
+        nombre: usuarioForm.nombre.trim(),
+        correo: usuarioForm.correo.trim().toLowerCase(),
+        rol: usuarioForm.rol,
+        estado: usuarioForm.estado !== false,
+      };
+
+      if (!editando) payload.password = usuarioForm.password;
+
+      const respuesta = await fetch(url, {
+        method: editando ? "PATCH" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await respuesta.json();
+      if (!respuesta.ok) {
+        throw new Error(data.message || "No se pudo guardar el usuario");
+      }
+
+      setMensaje(
+        editando
+          ? "Usuario actualizado correctamente."
+          : "Usuario creado correctamente."
+      );
+      limpiarUsuarioForm();
+      await cargarUsuariosSistema();
+    } catch (error) {
+      setMensaje(error.message || "No se pudo guardar el usuario.");
+    } finally {
+      setGuardandoUsuario(false);
+    }
+  };
+
+  const editarUsuarioSistema = (item) => {
+    setUsuarioEditandoId(item.id);
+    setUsuarioForm({
+      nombre: item.nombre || "",
+      correo: item.correo || "",
+      password: "",
+      rol: String(item.rol || "CAJERO").toUpperCase(),
+      estado: item.estado !== false,
+    });
+    setVistaInterna("usuarios");
+  };
+
+  const cambiarEstadoUsuarioSistema = async (item) => {
+    const nuevoEstado = item.estado === false;
+    const accion = nuevoEstado ? "activar" : "desactivar";
+
+    if (
+      !window.confirm(
+        `¿Deseas ${accion} el usuario ${item.nombre || item.correo}?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      const respuesta = await fetch(`${API_URL}/api/usuarios/${item.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          institucion_id: Number(institucionId),
+          estado: nuevoEstado,
+        }),
+      });
+
+      const data = await respuesta.json();
+      if (!respuesta.ok) {
+        throw new Error(data.message || "No se pudo cambiar el estado");
+      }
+
+      setMensaje(`Usuario ${nuevoEstado ? "activado" : "desactivado"}.`);
+      await cargarUsuariosSistema();
+    } catch (error) {
+      setMensaje(error.message || "No se pudo cambiar el estado del usuario.");
+    }
+  };
+
+  const cambiarPasswordUsuarioSistema = async (item) => {
+    const nuevaPassword = window.prompt(
+      `Nueva contraseña para ${item.nombre || item.correo}:`
+    );
+
+    if (nuevaPassword === null) return;
+    if (String(nuevaPassword).length < 6) {
+      setMensaje("La contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      const respuesta = await fetch(
+        `${API_URL}/api/usuarios/${item.id}/password`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            institucion_id: Number(institucionId),
+            nuevaPassword,
+          }),
+        }
+      );
+
+      const data = await respuesta.json();
+      if (!respuesta.ok) {
+        throw new Error(data.message || "No se pudo cambiar la contraseña");
+      }
+
+      setMensaje("Contraseña actualizada correctamente.");
+    } catch (error) {
+      setMensaje(error.message || "No se pudo cambiar la contraseña.");
+    }
+  };
+
   const cargarDatos = async () => {
     if (!institucionId) return;
 
@@ -285,6 +504,7 @@ export default function ConfiguracionModulo({
       );
       await cargarCuentasBancarias();
       await cargarRespaldos();
+      await cargarUsuariosSistema();
     } catch (error) {
       console.error("Error cargando configuración:", error);
       setMensaje(error.message);
@@ -477,6 +697,7 @@ export default function ConfiguracionModulo({
         {[
           ["general", "General"],
           ["seguridad", "Seguridad"],
+          ["usuarios", "Usuarios y roles"],
           ["respaldos", "Copias de seguridad"],
           ["auditoria", "Auditoría"],
           ["impresoras", "Impresoras"],
@@ -609,6 +830,253 @@ export default function ConfiguracionModulo({
             <strong>Recomendación:</strong> usa una contraseña distinta
             para cada institución, de al menos 10 caracteres, y cambia
             las claves cuando un empleado deje de trabajar.
+          </div>
+        </div>
+      )}
+
+
+      {vistaInterna === "usuarios" && (
+        <div style={ui.userSection}>
+          <div style={ui.card}>
+            <div style={ui.header}>
+              <div>
+                <h3 style={ui.sectionTitle}>Usuarios y roles de acceso</h3>
+                <p style={ui.subtitle}>
+                  Cada usuario tendrá acceso únicamente a los módulos y acciones
+                  correspondientes a su rol.
+                </p>
+              </div>
+              <button
+                type="button"
+                style={ui.refreshButton}
+                onClick={cargarUsuariosSistema}
+                disabled={cargandoUsuarios}
+              >
+                {cargandoUsuarios ? "Actualizando..." : "Actualizar usuarios"}
+              </button>
+            </div>
+
+            <div style={ui.roleInfoGrid}>
+              <div style={ui.roleInfoCard}>
+                <strong>Administrador de cafetería</strong>
+                <span>Control completo de su institución, configuración y anulaciones.</span>
+              </div>
+              <div style={ui.roleInfoCard}>
+                <strong>Encargado de local</strong>
+                <span>Ventas, cierres, inventario, bajas, egresos y supervisión operativa.</span>
+              </div>
+              <div style={ui.roleInfoCard}>
+                <strong>Cajero</strong>
+                <span>Vender, identificar estudiantes, cobrar, consultar saldo e imprimir.</span>
+              </div>
+              <div style={ui.roleInfoCard}>
+                <strong>Auditor / Consulta</strong>
+                <span>Solo lectura de reportes, movimientos, Kardex, ventas y cierres.</span>
+              </div>
+            </div>
+          </div>
+
+          <div style={ui.grid}>
+            <div style={ui.card}>
+              <h3 style={ui.sectionTitle}>
+                {usuarioEditandoId ? "Editar usuario" : "Crear usuario"}
+              </h3>
+
+              <form onSubmit={guardarUsuarioSistema}>
+                <div style={ui.formGrid}>
+                  <label style={ui.label}>
+                    Nombre *
+                    <input
+                      style={ui.input}
+                      value={usuarioForm.nombre}
+                      onChange={(e) =>
+                        setUsuarioForm({ ...usuarioForm, nombre: e.target.value })
+                      }
+                      maxLength={255}
+                      required
+                    />
+                  </label>
+
+                  <label style={ui.label}>
+                    Correo *
+                    <input
+                      type="email"
+                      style={ui.input}
+                      value={usuarioForm.correo}
+                      onChange={(e) =>
+                        setUsuarioForm({ ...usuarioForm, correo: e.target.value })
+                      }
+                      required
+                    />
+                  </label>
+
+                  {!usuarioEditandoId && (
+                    <label style={ui.label}>
+                      Contraseña inicial *
+                      <input
+                        type="password"
+                        style={ui.input}
+                        value={usuarioForm.password}
+                        onChange={(e) =>
+                          setUsuarioForm({ ...usuarioForm, password: e.target.value })
+                        }
+                        minLength={6}
+                        required
+                      />
+                    </label>
+                  )}
+
+                  <label style={ui.label}>
+                    Rol *
+                    <select
+                      style={ui.input}
+                      value={usuarioForm.rol}
+                      onChange={(e) =>
+                        setUsuarioForm({ ...usuarioForm, rol: e.target.value })
+                      }
+                    >
+                      {rolesDisponibles.map((rol) => (
+                        <option key={rol.value} value={rol.value}>
+                          {rol.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  {usuarioEditandoId && (
+                    <label style={ui.checkRow}>
+                      <input
+                        type="checkbox"
+                        checked={usuarioForm.estado !== false}
+                        onChange={(e) =>
+                          setUsuarioForm({ ...usuarioForm, estado: e.target.checked })
+                        }
+                      />
+                      Usuario activo
+                    </label>
+                  )}
+                </div>
+
+                <div style={ui.buttonRow}>
+                  <button
+                    type="submit"
+                    style={ui.primaryButton}
+                    disabled={guardandoUsuario}
+                  >
+                    {guardandoUsuario
+                      ? "Guardando..."
+                      : usuarioEditandoId
+                      ? "Guardar cambios"
+                      : "Crear usuario"}
+                  </button>
+
+                  {usuarioEditandoId && (
+                    <button
+                      type="button"
+                      style={ui.refreshButton}
+                      onClick={limpiarUsuarioForm}
+                    >
+                      Cancelar edición
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
+
+            <div style={ui.card}>
+              <h3 style={ui.sectionTitle}>Reglas de seguridad</h3>
+              <div style={ui.securityList}>
+                <div>✓ ADMIN puede administrar usuarios de su institución.</div>
+                <div>✓ Solo SUPER_ADMIN puede crear o modificar otro SUPER_ADMIN.</div>
+                <div>✓ Un usuario no puede desactivar su propia cuenta.</div>
+                <div>✓ Cambiar el rol requiere volver a iniciar sesión para aplicar el nuevo menú.</div>
+                <div>✓ El backend también bloquea APIs no autorizadas; no es solo ocultar botones.</div>
+              </div>
+            </div>
+          </div>
+
+          <div style={ui.card}>
+            <h3 style={ui.sectionTitle}>Usuarios registrados</h3>
+            <div style={ui.tableWrap}>
+              <table style={ui.table}>
+                <thead>
+                  <tr>
+                    <th style={ui.th}>Nombre</th>
+                    <th style={ui.th}>Correo</th>
+                    <th style={ui.th}>Rol</th>
+                    <th style={ui.th}>Estado</th>
+                    <th style={ui.th}>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {!usuariosSistema.length ? (
+                    <tr>
+                      <td colSpan="5" style={ui.empty}>
+                        {cargandoUsuarios
+                          ? "Cargando usuarios..."
+                          : "No existen usuarios para mostrar."}
+                      </td>
+                    </tr>
+                  ) : (
+                    usuariosSistema.map((item) => {
+                      const esYo = Number(item.id) === Number(usuario?.id);
+                      const esSuper = String(item.rol || "").toUpperCase() === "SUPER_ADMIN";
+                      const puedoModificarSuper =
+                        String(usuario?.rol || "").toUpperCase() === "SUPER_ADMIN";
+                      const bloqueado = esSuper && !puedoModificarSuper;
+
+                      return (
+                        <tr key={item.id}>
+                          <td style={ui.td}>
+                            {item.nombre || "-"}
+                            {esYo && <span style={ui.youBadge}> Tú</span>}
+                          </td>
+                          <td style={ui.td}>{item.correo || "-"}</td>
+                          <td style={ui.td}>
+                            <span style={ui.badge}>{item.rol || "-"}</span>
+                          </td>
+                          <td style={ui.td}>
+                            <span
+                              style={item.estado === false ? ui.badgeDanger : ui.badgeSuccess}
+                            >
+                              {item.estado === false ? "Inactivo" : "Activo"}
+                            </span>
+                          </td>
+                          <td style={ui.td}>
+                            <div style={ui.buttonRow}>
+                              <button
+                                type="button"
+                                style={ui.smallButton}
+                                onClick={() => editarUsuarioSistema(item)}
+                                disabled={bloqueado}
+                              >
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                style={ui.smallButton}
+                                onClick={() => cambiarPasswordUsuarioSistema(item)}
+                                disabled={bloqueado}
+                              >
+                                Contraseña
+                              </button>
+                              <button
+                                type="button"
+                                style={item.estado === false ? ui.primaryButton : ui.dangerButton}
+                                onClick={() => cambiarEstadoUsuarioSistema(item)}
+                                disabled={bloqueado || esYo}
+                              >
+                                {item.estado === false ? "Activar" : "Desactivar"}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -1197,6 +1665,45 @@ const ui = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
     gap: 18,
+  },
+
+  userSection: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 18,
+  },
+  roleInfoGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 12,
+    marginTop: 18,
+  },
+  roleInfoCard: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 7,
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    borderRadius: 10,
+    padding: 14,
+    color: "#334155",
+    lineHeight: 1.4,
+  },
+  buttonRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  youBadge: {
+    display: "inline-block",
+    marginLeft: 6,
+    padding: "2px 6px",
+    borderRadius: 999,
+    background: "#ede9fe",
+    color: "#6d28d9",
+    fontSize: 11,
+    fontWeight: 800,
   },
   sectionTitle: {
     margin: "0 0 14px",
