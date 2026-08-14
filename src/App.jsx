@@ -11309,37 +11309,66 @@ onClick={() => eliminarEgreso(egreso)}
               <label style={styles.label}>Método de pago</label>
               <select
                 value={ventaForm.metodo_pago}
-                onChange={(e) =>
-                  setVentaForm((prev) => ({
-                    ...prev,
-                    metodo_pago: e.target.value,
-                  }))
-                }
+                onChange={(e) => {
+                  const nuevoMetodo = e.target.value;
+
+                  // Efectivo y transferencia funcionan inmediatamente.
+                  if (
+                    nuevoMetodo === "EFECTIVO" ||
+                    nuevoMetodo === "TRANSFERENCIA"
+                  ) {
+                    setVentaForm((prev) => ({
+                      ...prev,
+                      metodo_pago: nuevoMetodo,
+                    }));
+                    return;
+                  }
+
+                  // Saldo y crédito del alumno:
+                  // si todavía no hay alumno identificado, abrimos
+                  // automáticamente el buscador de estudiantes.
+                  if (
+                    nuevoMetodo === "RECARGA" ||
+                    nuevoMetodo === "CREDITO"
+                  ) {
+                    setVentaForm((prev) => ({
+                      ...prev,
+                      profesor_id: "",
+                      metodo_pago: nuevoMetodo,
+                    }));
+
+                    if (!alumnoVentaSeleccionado) {
+                      setModoNuevaOrden("identificar");
+                      setTipoUsuarioNuevaOrden("ESTUDIANTE");
+                      setBusquedaUsuarioNuevaOrden("");
+                    }
+                    return;
+                  }
+
+                  // Crédito profesor:
+                  // si todavía no hay profesor, abrimos directamente
+                  // la identificación filtrada por profesores.
+                  if (nuevoMetodo === "CREDITO_PROFESOR") {
+                    setVentaForm((prev) => ({
+                      ...prev,
+                      alumno_id: "",
+                      metodo_pago: nuevoMetodo,
+                    }));
+
+                    if (!profesorVentaSeleccionado) {
+                      setModoNuevaOrden("identificar");
+                      setTipoUsuarioNuevaOrden("PROFESOR");
+                      setBusquedaUsuarioNuevaOrden("");
+                    }
+                  }
+                }}
                 style={styles.input}
               >
                 <option value="EFECTIVO">Efectivo</option>
                 <option value="TRANSFERENCIA">Transferencia</option>
-                <option
-                  value="RECARGA"
-                  disabled={!alumnoVentaSeleccionado}
-                >
-                  Saldo del alumno
-                </option>
-                <option
-                  value="CREDITO"
-                  disabled={
-                    !alumnoVentaSeleccionado ||
-                    alumnoVentaSeleccionado.credito_habilitado !== true
-                  }
-                >
-                  Crédito del alumno
-                </option>
-                <option
-                  value="CREDITO_PROFESOR"
-                  disabled={!profesorVentaSeleccionado}
-                >
-                  Crédito del profesor
-                </option>
+                <option value="RECARGA">Saldo del alumno</option>
+                <option value="CREDITO">Crédito del alumno</option>
+                <option value="CREDITO_PROFESOR">Crédito del profesor</option>
               </select>
 
               <div style={{ height: 12 }} />
