@@ -5652,7 +5652,9 @@ Disponible: ${formatearMoneda(
       setMostrarCrearCierre(false);
       setCierreDetalle(data.cierre || null);
       await cargarCierres();
-      alert("Cierre de caja guardado correctamente.");
+      alert(
+        "Cierre de caja guardado correctamente. El próximo cierre comenzará desde este momento."
+      );
     } catch (error) {
       console.error("Error guardando cierre:", error);
       alert(error.message || "No se pudo guardar el cierre.");
@@ -6662,7 +6664,37 @@ if (!usuario) {
             <div><h2>Tarjeta crédito/débito</h2><label>Tarjetas (suma de pagos)</label><input type="number" step="0.01" style={styles.input} value={cierreForm.tarjeta_manual} onChange={(e)=>setCierreForm({...cierreForm,tarjeta_manual:e.target.value})}/></div>
             <div><h2>Transferencia</h2><label>Transferencias (suma de comprobantes)</label><input type="number" step="0.01" style={styles.input} value={cierreForm.transferencia_manual} onChange={(e)=>setCierreForm({...cierreForm,transferencia_manual:e.target.value})}/></div>
           </div>
-          {resumenCierreServidor && <div style={{...styles.box,marginTop:24}}><h3>Resumen esperado del sistema</h3><p>Ventas efectivo: {formatearMoneda(resumenCierreServidor.ventas_efectivo)}</p><p>Ventas transferencia: {formatearMoneda(resumenCierreServidor.ventas_transferencia)}</p><p>Ventas tarjeta: {formatearMoneda(resumenCierreServidor.ventas_tarjeta)}</p><p>Recargas efectivo: {formatearMoneda(resumenCierreServidor.recargas_efectivo)}</p><p>Recargas transferencia: {formatearMoneda(resumenCierreServidor.recargas_transferencia)}</p><p>Egresos activos: {formatearMoneda(resumenCierreServidor.egresos_total)}</p></div>}
+          {resumenCierreServidor && (
+            <div style={{ ...styles.box, marginTop: 24 }}>
+              <h3>Resumen esperado del sistema</h3>
+              <div
+                style={{
+                  padding: "10px 12px",
+                  marginBottom: 14,
+                  background: "#eef6ff",
+                  border: "1px solid #bfdbfe",
+                  borderRadius: 10,
+                }}
+              >
+                <strong>Período que se cerrará:</strong>
+                <div style={{ marginTop: 5 }}>
+                  {resumenCierreServidor.periodo_desde_ecuador || "Inicio"}{" "}
+                  →{" "}
+                  {resumenCierreServidor.periodo_hasta_ecuador || "Ahora"}
+                </div>
+                <small style={{ color: "#64748b" }}>
+                  Incluye todos los movimientos realizados después del último
+                  cierre hasta este momento.
+                </small>
+              </div>
+              <p>Ventas efectivo: {formatearMoneda(resumenCierreServidor.ventas_efectivo)}</p>
+              <p>Ventas transferencia: {formatearMoneda(resumenCierreServidor.ventas_transferencia)}</p>
+              <p>Ventas tarjeta: {formatearMoneda(resumenCierreServidor.ventas_tarjeta)}</p>
+              <p>Recargas efectivo: {formatearMoneda(resumenCierreServidor.recargas_efectivo)}</p>
+              <p>Recargas transferencia: {formatearMoneda(resumenCierreServidor.recargas_transferencia)}</p>
+              <p>Egresos activos: {formatearMoneda(resumenCierreServidor.egresos_total)}</p>
+            </div>
+          )}
           <div style={{marginTop:20}}><label>Observación</label><input style={styles.input} value={cierreForm.observacion} onChange={(e)=>setCierreForm({...cierreForm,observacion:e.target.value})}/></div>
           <button
             type="button"
