@@ -2748,6 +2748,123 @@ if (institucionIdLogin) {
     }
   };
 
+
+  const recargarEfectivoProfesorRapido = async () => {
+    if (!profesorDetalle?.id) {
+      alert("Selecciona un profesor.");
+      return;
+    }
+
+    const valorIngresado = window.prompt(
+      `Recarga en efectivo para ${profesorDetalle.nombres || ""} ${
+        profesorDetalle.apellidos || ""
+      }\n\nIngresa el monto a recargar:`,
+      ""
+    );
+
+    if (valorIngresado === null) return;
+
+    const monto = Number(
+      String(valorIngresado).replace(",", ".").trim()
+    );
+
+    if (!Number.isFinite(monto) || monto <= 0) {
+      alert("Ingresa un monto válido mayor que cero.");
+      return;
+    }
+
+    try {
+      setGuardandoRecargaProfesor(true);
+
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      if (!token || !institucionId) {
+        alert("Sesión o institución no válida.");
+        return;
+      }
+
+      // Usamos la ruta estable de movimientos de crédito.
+      // El backend actual acepta tipo RECARGA y acredita el saldo.
+      const res = await fetch(
+        `${API_URL}/api/profesores/${profesorDetalle.id}/creditos`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            institucion_id: Number(institucionId),
+            tipo: "RECARGA",
+            monto,
+            comercio: "POS NUBE",
+            observacion: "Recarga en efectivo",
+          }),
+        }
+      );
+
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = {};
+      }
+
+      if (!res.ok) {
+        throw new Error(
+          data.message ||
+            data.error ||
+            `No se pudo realizar la recarga. Código ${res.status}`
+        );
+      }
+
+      if (data.profesor) {
+        setProfesorDetalle(data.profesor);
+
+        setProfesores((prev) =>
+          prev.map((profesor) =>
+            Number(profesor.id) === Number(data.profesor.id)
+              ? data.profesor
+              : profesor
+          )
+        );
+      } else {
+        // Fallback visual si el backend no devuelve profesor completo.
+        setProfesorDetalle((prev) =>
+          prev
+            ? {
+                ...prev,
+                saldo: Number(prev.saldo || 0) + monto,
+                credito: Number(prev.saldo || prev.credito || 0) + monto,
+              }
+            : prev
+        );
+      }
+
+      // Actualizar historial sin bloquear el éxito de la recarga.
+      try {
+        await cargarCreditosProfesores(profesorDetalle.id);
+      } catch (errorHistorial) {
+        console.warn(
+          "La recarga se realizó, pero no se pudo refrescar el historial:",
+          errorHistorial
+        );
+      }
+
+      alert(
+        `Recarga en efectivo realizada correctamente.\nMonto: ${formatearMoneda(
+          monto
+        )}`
+      );
+    } catch (error) {
+      console.error("Error realizando recarga rápida del profesor:", error);
+      alert(error.message || "No se pudo realizar la recarga.");
+    } finally {
+      setGuardandoRecargaProfesor(false);
+    }
+  };
+
   const registrarRecargaProfesor = async (e) => {
     e.preventDefault();
 
@@ -2781,35 +2898,45 @@ if (institucionIdLogin) {
       const token = localStorage.getItem("token");
       const institucionId = obtenerInstitucionActivaId();
 
-      const res = await fetch(
-        `${API_URL}/api/profesores/${profesorDetalle.id}/recargas`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
+      const esEfectivo =
+        recargaProfesorForm.metodo_pago === "EFECTIVO";
+
+      const urlRecargaProfesor = esEfectivo
+        ? `${API_URL}/api/profesores/${profesorDetalle.id}/creditos`
+        : `${API_URL}/api/profesores/${profesorDetalle.id}/recargas`;
+
+      const payloadRecargaProfesor = esEfectivo
+        ? {
+            institucion_id: Number(institucionId),
+            tipo: "RECARGA",
+            monto,
+            comercio: "POS NUBE",
+            observacion:
+              recargaProfesorForm.observacion || "Recarga en efectivo",
+          }
+        : {
             institucion_id: Number(institucionId),
             monto,
             metodo_pago: recargaProfesorForm.metodo_pago,
-            numero_comprobante:
-              recargaProfesorForm.metodo_pago === "TRANSFERENCIA"
-                ? String(recargaProfesorForm.numero_comprobante).trim()
-                : null,
-            banco:
-              recargaProfesorForm.metodo_pago === "TRANSFERENCIA"
-                ? recargaProfesorForm.banco
-                : null,
-            cuenta_bancaria_id:
-              recargaProfesorForm.metodo_pago === "TRANSFERENCIA"
-                ? Number(recargaProfesorForm.cuenta_bancaria_id)
-                : null,
+            numero_comprobante: String(
+              recargaProfesorForm.numero_comprobante
+            ).trim(),
+            banco: recargaProfesorForm.banco,
+            cuenta_bancaria_id: Number(
+              recargaProfesorForm.cuenta_bancaria_id
+            ),
             comercio: "POS NUBE",
             observacion: recargaProfesorForm.observacion,
-          }),
-        }
-      );
+          };
+
+      const res = await fetch(urlRecargaProfesor, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payloadRecargaProfesor),
+      });
 
       const data = await res.json();
 
@@ -8926,9 +9053,12 @@ onClick={() => eliminarEgreso(egreso)}
               <button
                 type="button"
                 style={{ ...styles.button, width: "100%", marginTop: 18 }}
-                onClick={() => setVistaProfesorDetalle("recargas")}
+                onClick={recargarEfectivoProfesorRapido}
+                disabled={guardandoRecargaProfesor}
               >
-                Recargar efectivo
+                {guardandoRecargaProfesor
+                  ? "Procesando..."
+                  : "Recargar efectivo"}
               </button>
             </div>
           </div>
