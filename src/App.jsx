@@ -429,11 +429,20 @@ const [mostrarFormularioProfesor, setMostrarFormularioProfesor] = useState(false
 const [creditosProfesores, setCreditosProfesores] = useState([]);
 const [cargandoCreditosProfesores, setCargandoCreditosProfesores] = useState(false);
 const [creditoProfesorForm, setCreditoProfesorForm] = useState({
-  tipo: "RECARGA",
+  tipo: "AJUSTE_POSITIVO",
   monto: "",
   comercio: "POS NUBE",
   observacion: "",
 });
+const [recargaProfesorForm, setRecargaProfesorForm] = useState({
+  monto: "",
+  metodo_pago: "EFECTIVO",
+  numero_comprobante: "",
+  banco: "",
+  cuenta_bancaria_id: "",
+  observacion: "",
+});
+const [guardandoRecargaProfesor, setGuardandoRecargaProfesor] = useState(false);
 const [creditosProfesoresFiltros, setCreditosProfesoresFiltros] = useState({
   fecha_inicio: "",
   fecha_fin: "",
@@ -2739,6 +2748,107 @@ if (institucionIdLogin) {
     }
   };
 
+  const registrarRecargaProfesor = async (e) => {
+    e.preventDefault();
+
+    if (!profesorDetalle?.id) {
+      alert("Selecciona un profesor.");
+      return;
+    }
+
+    const monto = Number(recargaProfesorForm.monto || 0);
+
+    if (!Number.isFinite(monto) || monto <= 0) {
+      alert("Ingresa un monto válido mayor que cero.");
+      return;
+    }
+
+    if (recargaProfesorForm.metodo_pago === "TRANSFERENCIA") {
+      if (!recargaProfesorForm.cuenta_bancaria_id || !recargaProfesorForm.banco) {
+        alert("Selecciona el banco receptor.");
+        return;
+      }
+
+      if (!String(recargaProfesorForm.numero_comprobante || "").trim()) {
+        alert("Ingresa el número de comprobante de la transferencia.");
+        return;
+      }
+    }
+
+    try {
+      setGuardandoRecargaProfesor(true);
+
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      const res = await fetch(
+        `${API_URL}/api/profesores/${profesorDetalle.id}/recargas`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            institucion_id: Number(institucionId),
+            monto,
+            metodo_pago: recargaProfesorForm.metodo_pago,
+            numero_comprobante:
+              recargaProfesorForm.metodo_pago === "TRANSFERENCIA"
+                ? String(recargaProfesorForm.numero_comprobante).trim()
+                : null,
+            banco:
+              recargaProfesorForm.metodo_pago === "TRANSFERENCIA"
+                ? recargaProfesorForm.banco
+                : null,
+            cuenta_bancaria_id:
+              recargaProfesorForm.metodo_pago === "TRANSFERENCIA"
+                ? Number(recargaProfesorForm.cuenta_bancaria_id)
+                : null,
+            comercio: "POS NUBE",
+            observacion: recargaProfesorForm.observacion,
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.message || data.error || "No se pudo realizar la recarga"
+        );
+      }
+
+      if (data.profesor) {
+        setProfesorDetalle(data.profesor);
+        setProfesores((prev) =>
+          prev.map((profesor) =>
+            Number(profesor.id) === Number(data.profesor.id)
+              ? data.profesor
+              : profesor
+          )
+        );
+      }
+
+      setRecargaProfesorForm({
+        monto: "",
+        metodo_pago: "EFECTIVO",
+        numero_comprobante: "",
+        banco: "",
+        cuenta_bancaria_id: "",
+        observacion: "",
+      });
+
+      await cargarCreditosProfesores(profesorDetalle.id);
+      alert("Recarga realizada correctamente. El saldo se actualizó inmediatamente.");
+    } catch (error) {
+      console.error("Error realizando recarga del profesor:", error);
+      alert(error.message || "No se pudo realizar la recarga.");
+    } finally {
+      setGuardandoRecargaProfesor(false);
+    }
+  };
+
   const registrarCreditoProfesor = async (e) => {
     e.preventDefault();
 
@@ -2795,7 +2905,7 @@ if (institucionIdLogin) {
       );
 
       setCreditoProfesorForm({
-        tipo: "RECARGA",
+        tipo: "AJUSTE_POSITIVO",
         monto: "",
         comercio: "POS NUBE",
         observacion: "",
@@ -8987,67 +9097,244 @@ onClick={() => eliminarEgreso(egreso)}
               )}
 
               {vistaProfesorDetalle === "recargas" && (
-                <div style={styles.tableWrap}>
-                  <table style={styles.table}>
-                    <thead>
-                      <tr>
-                        <th style={styles.th}>Fecha</th>
-                        <th style={styles.th}>Monto</th>
-                        <th style={styles.th}>Forma</th>
-                        <th style={styles.th}>Usuario</th>
-                        <th style={styles.th}>Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {creditosProfesoresFiltrados.filter(
-                        (movimiento) =>
-                          Number(movimiento.profesor_id) ===
-                            Number(profesorDetalle.id) &&
-                          movimiento.tipo === "RECARGA"
-                      ).length === 0 ? (
+                <div>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 16,
+                      flexWrap: "wrap",
+                      marginBottom: 18,
+                    }}
+                  >
+                    <div>
+                      <h3 style={{ margin: 0 }}>Recargas del profesor</h3>
+                      <p style={{ margin: "6px 0 0", color: "#64748b" }}>
+                        Saldo disponible: {" "}
+                        <strong>
+                          {formatearMoneda(
+                            profesorDetalle.saldo || profesorDetalle.credito || 0
+                          )}
+                        </strong>
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      style={styles.secondaryButton}
+                      onClick={() => cargarCreditosProfesores(profesorDetalle.id)}
+                    >
+                      Actualizar
+                    </button>
+                  </div>
+
+                  <form
+                    onSubmit={registrarRecargaProfesor}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+                      gap: 12,
+                      marginBottom: 22,
+                      padding: 16,
+                      border: "1px solid #e5e7eb",
+                      borderRadius: 12,
+                      background: "#f8fafc",
+                    }}
+                  >
+                    <div>
+                      <label style={styles.filterLabelTop}>Monto *</label>
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={recargaProfesorForm.monto}
+                        onChange={(e) =>
+                          setRecargaProfesorForm((prev) => ({
+                            ...prev,
+                            monto: e.target.value,
+                          }))
+                        }
+                        style={styles.input}
+                        placeholder="0.00"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label style={styles.filterLabelTop}>Forma de pago</label>
+                      <select
+                        value={recargaProfesorForm.metodo_pago}
+                        onChange={(e) =>
+                          setRecargaProfesorForm((prev) => ({
+                            ...prev,
+                            metodo_pago: e.target.value,
+                            numero_comprobante: "",
+                            banco: "",
+                            cuenta_bancaria_id: "",
+                          }))
+                        }
+                        style={styles.input}
+                      >
+                        <option value="EFECTIVO">Efectivo</option>
+                        <option value="TRANSFERENCIA">Transferencia</option>
+                      </select>
+                    </div>
+
+                    {recargaProfesorForm.metodo_pago === "TRANSFERENCIA" && (
+                      <>
+                        <div>
+                          <label style={styles.filterLabelTop}>Banco *</label>
+                          <select
+                            value={recargaProfesorForm.cuenta_bancaria_id || ""}
+                            onChange={(e) => {
+                              const cuenta = cuentasBancarias.find(
+                                (item) => String(item.id) === String(e.target.value)
+                              );
+
+                              setRecargaProfesorForm((prev) => ({
+                                ...prev,
+                                cuenta_bancaria_id: e.target.value,
+                                banco: cuenta ? cuenta.banco : "",
+                              }));
+                            }}
+                            style={styles.input}
+                            required
+                          >
+                            <option value="">Seleccionar banco</option>
+                            {cuentasBancarias
+                              .filter((cuenta) => cuenta.activo !== false)
+                              .map((cuenta) => (
+                                <option key={cuenta.id} value={cuenta.id}>
+                                  {cuenta.banco}
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label style={styles.filterLabelTop}>No. comprobante *</label>
+                          <input
+                            type="text"
+                            value={recargaProfesorForm.numero_comprobante}
+                            onChange={(e) =>
+                              setRecargaProfesorForm((prev) => ({
+                                ...prev,
+                                numero_comprobante: e.target.value,
+                              }))
+                            }
+                            style={styles.input}
+                            placeholder="Número de comprobante"
+                            maxLength={100}
+                            required
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    <div>
+                      <label style={styles.filterLabelTop}>Observación</label>
+                      <input
+                        type="text"
+                        value={recargaProfesorForm.observacion}
+                        onChange={(e) =>
+                          setRecargaProfesorForm((prev) => ({
+                            ...prev,
+                            observacion: e.target.value,
+                          }))
+                        }
+                        style={styles.input}
+                        placeholder="Opcional"
+                        maxLength={500}
+                      />
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "end" }}>
+                      <button
+                        type="submit"
+                        style={styles.button}
+                        disabled={guardandoRecargaProfesor}
+                      >
+                        {guardandoRecargaProfesor
+                          ? "Registrando..."
+                          : recargaProfesorForm.metodo_pago === "EFECTIVO"
+                          ? "Recargar efectivo"
+                          : "Registrar transferencia"}
+                      </button>
+                    </div>
+                  </form>
+
+                  <div style={styles.tableWrap}>
+                    <table style={styles.table}>
+                      <thead>
                         <tr>
-                          <td style={styles.td} colSpan={5}>
-                            No hay recargas registradas.
-                          </td>
+                          <th style={styles.th}>Fecha</th>
+                          <th style={styles.th}>Monto</th>
+                          <th style={styles.th}>Forma</th>
+                          <th style={styles.th}>Banco</th>
+                          <th style={styles.th}>Comprobante</th>
+                          <th style={styles.th}>Usuario</th>
+                          <th style={styles.th}>Saldo nuevo</th>
+                          <th style={styles.th}>Estado</th>
                         </tr>
-                      ) : (
-                        creditosProfesoresFiltrados
-                          .filter(
-                            (movimiento) =>
-                              Number(movimiento.profesor_id) ===
-                                Number(profesorDetalle.id) &&
-                              movimiento.tipo === "RECARGA"
-                          )
-                          .map((movimiento) => (
-                            <tr key={movimiento.id}>
-                              <td style={styles.td}>
-                                {movimiento.created_at
-                                  ? new Date(
-                                      movimiento.created_at
-                                    ).toLocaleString()
-                                  : "-"}
-                              </td>
-                              <td style={styles.td}>
-                                {formatearMoneda(
-                                  movimiento.monto || 0
-                                )}
-                              </td>
-                              <td style={styles.td}>
-                                Recarga de crédito
-                              </td>
-                              <td style={styles.td}>
-                                {movimiento.usuario_nombre ||
-                                  movimiento.usuario_correo ||
-                                  "Sistema"}
-                              </td>
-                              <td style={styles.td}>
-                                {movimiento.estado || "ACTIVO"}
-                              </td>
-                            </tr>
-                          ))
-                      )}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {creditosProfesoresFiltrados.filter(
+                          (movimiento) =>
+                            Number(movimiento.profesor_id) ===
+                              Number(profesorDetalle.id) &&
+                            movimiento.tipo === "RECARGA"
+                        ).length === 0 ? (
+                          <tr>
+                            <td style={styles.td} colSpan={8}>
+                              No hay recargas registradas.
+                            </td>
+                          </tr>
+                        ) : (
+                          creditosProfesoresFiltrados
+                            .filter(
+                              (movimiento) =>
+                                Number(movimiento.profesor_id) ===
+                                  Number(profesorDetalle.id) &&
+                                movimiento.tipo === "RECARGA"
+                            )
+                            .map((movimiento) => (
+                              <tr key={movimiento.id}>
+                                <td style={styles.td}>
+                                  {movimiento.created_at
+                                    ? new Date(movimiento.created_at).toLocaleString(
+                                        "es-EC",
+                                        { timeZone: "America/Guayaquil" }
+                                      )
+                                    : "-"}
+                                </td>
+                                <td style={styles.td}>
+                                  {formatearMoneda(movimiento.monto || 0)}
+                                </td>
+                                <td style={styles.td}>
+                                  {movimiento.metodo_pago || "EFECTIVO"}
+                                </td>
+                                <td style={styles.td}>{movimiento.banco || "-"}</td>
+                                <td style={styles.td}>
+                                  {movimiento.numero_comprobante || "-"}
+                                </td>
+                                <td style={styles.td}>
+                                  {movimiento.usuario_nombre ||
+                                    movimiento.usuario_correo ||
+                                    "Sistema"}
+                                </td>
+                                <td style={styles.td}>
+                                  {formatearMoneda(movimiento.saldo_nuevo || 0)}
+                                </td>
+                                <td style={styles.td}>
+                                  {movimiento.estado || "ACTIVO"}
+                                </td>
+                              </tr>
+                            ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
 
@@ -9124,8 +9411,8 @@ onClick={() => eliminarEgreso(egreso)}
                       }
                       style={styles.input}
                     >
-                      <option value="RECARGA">
-                        Recargar crédito
+                      <option value="AJUSTE_POSITIVO">
+                        Ajuste positivo
                       </option>
                       <option value="CONSUMO">
                         Registrar consumo
