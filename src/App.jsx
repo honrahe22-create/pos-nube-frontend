@@ -5319,7 +5319,8 @@ Disponible: ${formatearMoneda(
       cargarResumen(),
     ]);
 
-    // Si la venta fue desde la ficha del alumno
+    // Si la venta fue iniciada desde la ficha del alumno,
+    // conservamos el comportamiento existente y regresamos a su ficha.
     if (
       alumnoDetalle &&
       Number(alumnoDetalle.id) ===
@@ -5348,13 +5349,23 @@ Disponible: ${formatearMoneda(
 
       setVista("alumnos");
       setVistaAlumnoDetalle("datos");
+      limpiarFormularioVenta();
     } else {
-      setVistaVentasInterna("consultar");
+      // FLUJO RÁPIDO DE CAJA:
+      // después de guardar/imprimir una orden normal,
+      // limpiar todo y dejar inmediatamente otra Nueva Orden lista.
+      limpiarFormularioVenta();
+      setVista("ventas");
+      setVistaVentasInterna("registrar");
+      setBusquedaUsuarioNuevaOrden("");
+      setBusquedaProductoNuevaOrden("");
+      setCodigoBarraNuevaOrden("");
+      setCategoriaNuevaOrden("TODOS");
+      setModoNuevaOrden("consumidor_final");
+      setTipoUsuarioNuevaOrden("TODOS");
     }
 
-    limpiarFormularioVenta();
-
-    alert("Venta registrada correctamente");
+    alert("Venta registrada correctamente. Nueva orden lista.");
   } catch (error) {
     console.error("Error creando venta:", error);
     alert("No se pudo registrar la venta");
