@@ -5315,6 +5315,7 @@ Disponible: ${formatearMoneda(
     await Promise.all([
       cargarVentas(),
       cargarProductos(),
+      cargarExistenciasInventario(),
       cargarAlumnos(),
       cargarResumen(),
     ]);
