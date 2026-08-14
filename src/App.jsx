@@ -443,6 +443,7 @@ const [recargaProfesorForm, setRecargaProfesorForm] = useState({
   observacion: "",
 });
 const [guardandoRecargaProfesor, setGuardandoRecargaProfesor] = useState(false);
+const [mostrarModalRecargaProfesor, setMostrarModalRecargaProfesor] = useState(false);
 const [creditosProfesoresFiltros, setCreditosProfesoresFiltros] = useState({
   fecha_inicio: "",
   fecha_fin: "",
@@ -2749,6 +2750,36 @@ if (institucionIdLogin) {
   };
 
 
+  const abrirModalRecargaProfesor = () => {
+    if (!profesorDetalle?.id) {
+      alert("Selecciona un profesor.");
+      return;
+    }
+
+    setRecargaProfesorForm({
+      monto: "",
+      metodo_pago: "EFECTIVO",
+      numero_comprobante: "",
+      banco: "",
+      cuenta_bancaria_id: "",
+      observacion: "",
+    });
+    setMostrarModalRecargaProfesor(true);
+  };
+
+  const cerrarModalRecargaProfesor = () => {
+    if (guardandoRecargaProfesor) return;
+    setMostrarModalRecargaProfesor(false);
+    setRecargaProfesorForm({
+      monto: "",
+      metodo_pago: "EFECTIVO",
+      numero_comprobante: "",
+      banco: "",
+      cuenta_bancaria_id: "",
+      observacion: "",
+    });
+  };
+
   const recargarEfectivoProfesorRapido = async () => {
     if (!profesorDetalle?.id) {
       alert("Selecciona un profesor.");
@@ -2967,6 +2998,7 @@ if (institucionIdLogin) {
       });
 
       await cargarCreditosProfesores(profesorDetalle.id);
+      setMostrarModalRecargaProfesor(false);
       alert("Recarga realizada correctamente. El saldo se actualizó inmediatamente.");
     } catch (error) {
       console.error("Error realizando recarga del profesor:", error);
@@ -8372,6 +8404,316 @@ onClick={() => eliminarEgreso(egreso)}
 
 {vista === "profesores" && (
   <>
+    {mostrarModalRecargaProfesor && profesorDetalle && (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(15, 23, 42, 0.62)",
+          zIndex: 99999,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 18,
+        }}
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) {
+            cerrarModalRecargaProfesor();
+          }
+        }}
+      >
+        <div
+          style={{
+            width: "min(780px, 96vw)",
+            maxHeight: "92vh",
+            overflowY: "auto",
+            background: "#ffffff",
+            borderRadius: 18,
+            padding: "28px 32px",
+            boxShadow: "0 24px 70px rgba(15, 23, 42, 0.35)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              gap: 16,
+              marginBottom: 24,
+            }}
+          >
+            <div>
+              <h3 style={{ margin: 0, fontSize: 25, color: "#172033" }}>
+                Recarga de saldo
+              </h3>
+              <div style={{ marginTop: 8, color: "#334155" }}>
+                {`${profesorDetalle.nombres || ""} ${
+                  profesorDetalle.apellidos || ""
+                }`.trim()}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={cerrarModalRecargaProfesor}
+              disabled={guardandoRecargaProfesor}
+              style={{
+                border: "none",
+                background: "transparent",
+                fontSize: 34,
+                lineHeight: 1,
+                color: "#64748b",
+                cursor: "pointer",
+              }}
+            >
+              ×
+            </button>
+          </div>
+
+          <form onSubmit={registrarRecargaProfesor}>
+            <label
+              style={{
+                display: "block",
+                fontWeight: 800,
+                color: "#334155",
+                fontSize: 17,
+                marginBottom: 8,
+              }}
+            >
+              Valor a recargar *
+            </label>
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={recargaProfesorForm.monto}
+              onChange={(e) =>
+                setRecargaProfesorForm((prev) => ({
+                  ...prev,
+                  monto: e.target.value,
+                }))
+              }
+              placeholder="0.00"
+              autoFocus
+              required
+              style={{
+                width: "100%",
+                height: 56,
+                border: "2px solid #172033",
+                borderRadius: 12,
+                padding: "0 16px",
+                fontSize: 20,
+                boxSizing: "border-box",
+                outline: "none",
+              }}
+            />
+
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 20,
+                marginTop: 24,
+                fontWeight: 800,
+                color: "#475569",
+                fontSize: 18,
+                cursor: "pointer",
+              }}
+            >
+              <span>¿Es transferencia?</span>
+              <input
+                type="checkbox"
+                checked={
+                  recargaProfesorForm.metodo_pago === "TRANSFERENCIA"
+                }
+                onChange={(e) =>
+                  setRecargaProfesorForm((prev) => ({
+                    ...prev,
+                    metodo_pago: e.target.checked
+                      ? "TRANSFERENCIA"
+                      : "EFECTIVO",
+                    cuenta_bancaria_id: "",
+                    banco: "",
+                    numero_comprobante: "",
+                  }))
+                }
+                style={{ width: 20, height: 20 }}
+              />
+            </label>
+
+            {recargaProfesorForm.metodo_pago === "TRANSFERENCIA" && (
+              <>
+                <label
+                  style={{
+                    display: "block",
+                    fontWeight: 800,
+                    color: "#334155",
+                    fontSize: 17,
+                    marginTop: 22,
+                    marginBottom: 8,
+                  }}
+                >
+                  Banco donde realizó la transferencia *
+                </label>
+                <select
+                  value={recargaProfesorForm.cuenta_bancaria_id}
+                  onChange={(e) => {
+                    const cuenta = cuentasBancarias.find(
+                      (c) => String(c.id) === String(e.target.value)
+                    );
+
+                    setRecargaProfesorForm((prev) => ({
+                      ...prev,
+                      cuenta_bancaria_id: e.target.value,
+                      banco: cuenta ? cuenta.banco : "",
+                    }));
+                  }}
+                  required
+                  style={{
+                    width: "100%",
+                    height: 54,
+                    border: "1px solid #cbd5e1",
+                    borderRadius: 10,
+                    padding: "0 14px",
+                    fontSize: 16,
+                    background: "#ffffff",
+                    boxSizing: "border-box",
+                  }}
+                >
+                  <option value="">Seleccionar banco</option>
+                  {cuentasBancarias
+                    .filter((cuenta) => cuenta.activo !== false)
+                    .map((cuenta) => (
+                      <option key={cuenta.id} value={cuenta.id}>
+                        {cuenta.banco}
+                      </option>
+                    ))}
+                </select>
+
+                {!cuentasBancarias.length && (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      padding: 10,
+                      borderRadius: 8,
+                      background: "#fff7ed",
+                      color: "#9a3412",
+                    }}
+                  >
+                    No hay bancos configurados. Regístralos en
+                    Configuración → Bancos.
+                  </div>
+                )}
+
+                <label
+                  style={{
+                    display: "block",
+                    fontWeight: 800,
+                    color: "#334155",
+                    fontSize: 17,
+                    marginTop: 20,
+                    marginBottom: 8,
+                  }}
+                >
+                  Número de comprobante *
+                </label>
+                <input
+                  type="text"
+                  value={recargaProfesorForm.numero_comprobante}
+                  onChange={(e) =>
+                    setRecargaProfesorForm((prev) => ({
+                      ...prev,
+                      numero_comprobante: e.target.value,
+                    }))
+                  }
+                  placeholder="Número de documento"
+                  required
+                  style={{
+                    width: "100%",
+                    height: 54,
+                    border: "1px solid #cbd5e1",
+                    borderRadius: 10,
+                    padding: "0 14px",
+                    fontSize: 16,
+                    boxSizing: "border-box",
+                  }}
+                />
+              </>
+            )}
+
+            <label
+              style={{
+                display: "block",
+                fontWeight: 800,
+                color: "#334155",
+                fontSize: 17,
+                marginTop: 22,
+                marginBottom: 8,
+              }}
+            >
+              Observación
+            </label>
+            <input
+              type="text"
+              value={recargaProfesorForm.observacion}
+              onChange={(e) =>
+                setRecargaProfesorForm((prev) => ({
+                  ...prev,
+                  observacion: e.target.value,
+                }))
+              }
+              placeholder="Observación opcional"
+              style={{
+                width: "100%",
+                height: 54,
+                border: "1px solid #cbd5e1",
+                borderRadius: 10,
+                padding: "0 14px",
+                fontSize: 16,
+                boxSizing: "border-box",
+              }}
+            />
+
+            <div style={{ textAlign: "center", marginTop: 26 }}>
+              <button
+                type="submit"
+                disabled={guardandoRecargaProfesor}
+                style={{
+                  minWidth: 245,
+                  border: "none",
+                  borderRadius: 10,
+                  padding: "15px 24px",
+                  background: "#2929bd",
+                  color: "#ffffff",
+                  fontSize: 18,
+                  fontWeight: 900,
+                  cursor: guardandoRecargaProfesor
+                    ? "not-allowed"
+                    : "pointer",
+                  opacity: guardandoRecargaProfesor ? 0.7 : 1,
+                }}
+              >
+                {guardandoRecargaProfesor
+                  ? "Procesando..."
+                  : "Realizar recarga"}
+              </button>
+            </div>
+
+            <p
+              style={{
+                margin: "22px 0 0",
+                textAlign: "center",
+                color: "#64748b",
+              }}
+            >
+              La recarga se acreditará inmediatamente al saldo del profesor.
+            </p>
+          </form>
+        </div>
+      </div>
+    )}
+
     <div style={styles.pageHeader}>
       <div>
         <h1 style={styles.dashboardTitle}>Profesores</h1>
@@ -9053,12 +9395,10 @@ onClick={() => eliminarEgreso(egreso)}
               <button
                 type="button"
                 style={{ ...styles.button, width: "100%", marginTop: 18 }}
-                onClick={recargarEfectivoProfesorRapido}
+                onClick={abrirModalRecargaProfesor}
                 disabled={guardandoRecargaProfesor}
               >
-                {guardandoRecargaProfesor
-                  ? "Procesando..."
-                  : "Recargar efectivo"}
+                Recargar saldo
               </button>
             </div>
           </div>
