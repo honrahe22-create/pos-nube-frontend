@@ -2001,20 +2001,14 @@ const guardarEdicionPunto=async(e)=>{
 
 
 const cargarInstitucionesTransferencia=async()=>{
-  try{
-    const token=localStorage.getItem("token");
-    const res=await fetch(`${API_URL}/api/instituciones`,{
-      headers:{Authorization:`Bearer ${token}`},
-    });
-    const data=await res.json();
-    if(!res.ok)throw new Error(data.message||"No se pudieron cargar las instituciones");
-    setInstitucionesTransferencia(Array.isArray(data)?data:[]);
-    return Array.isArray(data)?data:[];
-  }catch(error){
-    console.error(error);
-    setInstitucionesTransferencia([]);
-    return [];
-  }
+  /*
+   * POS NUBE ya tiene el catálogo de instituciones en INSTITUCIONES.
+   * No consultamos /api/instituciones porque la base actual no usa
+   * una tabla "instituciones".
+   */
+  const lista=Array.isArray(INSTITUCIONES)?INSTITUCIONES:[];
+  setInstitucionesTransferencia(lista);
+  return lista;
 };
 
 const cargarPuntosDestinoLocal=async(institucionDestinoId)=>{
@@ -2023,18 +2017,39 @@ const cargarPuntosDestinoLocal=async(institucionDestinoId)=>{
       setPuntosDestinoLocal([]);
       return;
     }
+
     const token=localStorage.getItem("token");
+
     const res=await fetch(
-      `${API_URL}/api/puntos?institucion_id=${Number(institucionDestinoId)}`,
-      {headers:{Authorization:`Bearer ${token}`}}
+      `${API_URL}/api/inventario/destinos-locales?institucion_destino_id=${Number(institucionDestinoId)}&t=${Date.now()}`,
+      {
+        headers:{
+          Authorization:`Bearer ${token}`,
+        },
+        cache:"no-store",
+      }
     );
+
     const data=await res.json();
-    if(!res.ok)throw new Error(data.message||"No se pudieron cargar los puntos destino");
-    setPuntosDestinoLocal(Array.isArray(data)?data.filter(p=>p.activo!==false):[]);
+
+    if(!res.ok){
+      throw new Error(
+        data.message||"No se pudieron cargar los puntos destino"
+      );
+    }
+
+    setPuntosDestinoLocal(
+      Array.isArray(data)
+        ? data.filter((p)=>p.activo!==false)
+        : []
+    );
   }catch(error){
     console.error(error);
     setPuntosDestinoLocal([]);
-    alert(error.message||"No se pudieron cargar los puntos destino.");
+    alert(
+      error.message||
+      "No se pudieron cargar los puntos del local destino."
+    );
   }
 };
 
