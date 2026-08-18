@@ -377,6 +377,17 @@ const [bajaStock, setBajaStock] = useState(null);
 const [existenciasInventario, setExistenciasInventario] = useState([]);
 const [puntosInventario, setPuntosInventario] = useState(["PRINCIPAL"]);
 const [puntoInventarioSeleccionado, setPuntoInventarioSeleccionado] = useState("PRINCIPAL");
+const [puntosOperacion,setPuntosOperacion]=useState([]);
+const [jornadaActiva,setJornadaActiva]=useState(()=>{try{return JSON.parse(localStorage.getItem("jornadaActiva")||"null")}catch{return null}});
+const [mostrarSelectorJornada,setMostrarSelectorJornada]=useState(false);
+const [puntoJornadaSeleccionado,setPuntoJornadaSeleccionado]=useState("");
+const [cargandoJornada,setCargandoJornada]=useState(false);
+const [mostrarPuntosStock,setMostrarPuntosStock]=useState(false);
+const [nuevoPuntoForm,setNuevoPuntoForm]=useState({nombre:"",codigo:"",descripcion:""});
+const [mostrarNuevoProductoStock,setMostrarNuevoProductoStock]=useState(false);
+const [nuevoProductoStockForm,setNuevoProductoStockForm]=useState({nombre:"",codigo:"",precio:"",categoria:"",stock_minimo:"",cantidad_inicial:"",concepto_inicial:"COMPRA",observacion_inicial:""});
+const [movimientoStock,setMovimientoStock]=useState(null);
+const [filtroCategoriaStock,setFiltroCategoriaStock]=useState("");
 
 const [stockEditado, setStockEditado] = useState({});
 const inputImportarStockRef = useRef(null);
@@ -1789,9 +1800,10 @@ const guardarStockProducto = async (producto) => {
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        institucion_id: Number(institucionId),
-        producto_id: Number(producto.id),
-        ubicacion: puntoInventarioSeleccionado,
+        institucion_id:Number(institucionId),
+        jornada_id:Number(jornadaActiva?.id),
+        producto_id:Number(producto.id),
+        ubicacion:puntoInventarioSeleccionado,
         stock_nuevo: stockNumero,
         observacion: String(observacion || "").trim() || "Ajuste manual",
       }),
@@ -1895,6 +1907,48 @@ const limpiarFiltrosVentas = () => {
   setVistaVentasInterna("consultar");
 };
 
+
+const crearPuntoOperacion=async(e)=>{
+  e.preventDefault();const nombre=String(nuevoPuntoForm.nombre||"").trim();if(!nombre)return alert("Ingresa el nombre del punto.");
+  try{const token=localStorage.getItem("token"),institucionId=obtenerInstitucionActivaId();
+    const res=await fetch(`${API_URL}/api/puntos`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({institucion_id:Number(institucionId),...nuevoPuntoForm})});
+    const data=await res.json();if(!res.ok)throw new Error(data.message||"Error creando punto");
+    setNuevoPuntoForm({nombre:"",codigo:"",descripcion:""});await Promise.all([cargarPuntosOperacion(),cargarExistenciasInventario()]);alert(`Punto ${data.nombre} creado.`);
+  }catch(e){alert(e.message||"No se pudo crear el punto")}
+};
+const crearProductoDesdeStock=async(e)=>{
+  e.preventDefault();if(!jornadaActiva?.id)return alert("Debes abrir una jornada.");
+  const cantidad=Number(nuevoProductoStockForm.cantidad_inicial||0);
+  if(!nuevoProductoStockForm.nombre.trim())return alert("Nombre obligatorio.");
+  if(!Number.isInteger(cantidad)||cantidad<0)return alert("Cantidad inicial inválida.");
+  try{const token=localStorage.getItem("token"),institucionId=obtenerInstitucionActivaId();
+    const res=await fetch(`${API_URL}/api/productos`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({
+      institucion_id:Number(institucionId),jornada_id:Number(jornadaActiva.id),
+      nombre:nuevoProductoStockForm.nombre.trim(),codigo:nuevoProductoStockForm.codigo.trim()||null,
+      precio:Number(nuevoProductoStockForm.precio||0),stock:cantidad,stock_minimo:Number(nuevoProductoStockForm.stock_minimo||0),
+      categoria:nuevoProductoStockForm.categoria.trim()||null,concepto_inicial:nuevoProductoStockForm.concepto_inicial,
+      observacion_inicial:nuevoProductoStockForm.observacion_inicial.trim()||"Ingreso inicial desde Stock"
+    })});
+    const data=await res.json();if(!res.ok)throw new Error(data.message||"Error creando producto");
+    setMostrarNuevoProductoStock(false);setNuevoProductoStockForm({nombre:"",codigo:"",precio:"",categoria:"",stock_minimo:"",cantidad_inicial:"",concepto_inicial:"COMPRA",observacion_inicial:""});
+    await cargarExistenciasInventario();alert(`Producto creado en ${jornadaActiva.punto_nombre}.`);
+  }catch(e){alert(e.message||"No se pudo crear el producto")}
+};
+const abrirMovimientoStock=(producto)=>setMovimientoStock({...producto,concepto:"COMPRA",cantidad:"1",observacion:""});
+const confirmarMovimientoStock=async()=>{
+  if(!movimientoStock)return;const cantidad=Number(movimientoStock.cantidad||0);
+  if(!Number.isInteger(cantidad)||cantidad<=0)return alert("Cantidad inválida.");
+  if(!String(movimientoStock.observacion||"").trim())return alert("Observación obligatoria.");
+  try{const token=localStorage.getItem("token"),institucionId=obtenerInstitucionActivaId();
+    const res=await fetch(`${API_URL}/api/inventario/movimiento`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({
+      institucion_id:Number(institucionId),jornada_id:Number(jornadaActiva?.id),producto_id:Number(movimientoStock.id),
+      concepto:movimientoStock.concepto,cantidad,observacion:movimientoStock.observacion.trim()
+    })});
+    const data=await res.json();if(!res.ok)throw new Error(data.message||"Error registrando movimiento");
+    setMovimientoStock(null);await cargarExistenciasInventario();alert(data.message||"Movimiento registrado.");
+  }catch(e){alert(e.message||"No se pudo registrar el movimiento")}
+};
+
 const verMovimientosStockNuevo = (producto) => {
   setStockTransferencia(null);
   setBajaStock(null);
@@ -1907,8 +1961,9 @@ const eliminarStockProductoNuevo = (producto) => {
   setBajaStock({
     ...producto,
     ubicacion: puntoInventarioSeleccionado,
-    cantidad: "1",
-    observacion: "",
+    cantidad:"1",
+    motivo_baja:"DAÑO",
+    observacion:"",
   });
 };
 
@@ -1939,10 +1994,12 @@ const confirmarBajaStock = async () => {
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        institucion_id: Number(institucionId),
-        producto_id: Number(bajaStock.id),
-        ubicacion: bajaStock.ubicacion,
+        institucion_id:Number(institucionId),
+        jornada_id:Number(jornadaActiva?.id),
+        producto_id:Number(bajaStock.id),
+        ubicacion:bajaStock.ubicacion,
         cantidad,
+        motivo_baja:bajaStock.motivo_baja||"OTRO",
         observacion,
       }),
     });
@@ -2012,9 +2069,10 @@ const confirmarTransferenciaStock = async () => {
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        institucion_id: Number(institucionId),
-        producto_id: Number(stockTransferencia.id),
-        ubicacion_origen: origen,
+        institucion_id:Number(institucionId),
+        jornada_id:Number(jornadaActiva?.id),
+        producto_id:Number(stockTransferencia.id),
+        ubicacion_origen:origen,
         ubicacion_destino: destino,
         cantidad,
         observacion,
@@ -2036,6 +2094,8 @@ const confirmarTransferenciaStock = async () => {
     alert(error.message || "No se pudo realizar la transferencia.");
   }
 };
+
+useEffect(()=>{if(usuario&&institucionActivaId&&!esRolPortal)cargarContextoJornada()},[usuario?.id,institucionActivaId]);
 
 useEffect(() => {
   if (!usuario || !institucionActivaId || esRolPortal) return;
@@ -2345,6 +2405,61 @@ const exportarVentasExcel = () => {
     }
   };
 
+
+  const cargarPuntosOperacion=async({tokenForzado=null,institucionForzada=null}={})=>{
+    try{
+      const token=tokenForzado||localStorage.getItem("token");
+      const institucionId=Number(institucionForzada)||obtenerInstitucionActivaId();
+      if(!token||!institucionId)return[];
+      const res=await fetch(`${API_URL}/api/puntos?institucion_id=${institucionId}&t=${Date.now()}`,{headers:{Authorization:`Bearer ${token}`},cache:"no-store"});
+      const data=await res.json(); if(!res.ok)throw new Error(data.message||"Error cargando puntos");
+      const lista=Array.isArray(data)?data.filter(p=>p.activo!==false):[];
+      setPuntosOperacion(lista);
+      const nombres=lista.map(p=>String(p.nombre||"PRINCIPAL").trim().toUpperCase());
+      setPuntosInventario(nombres.length?nombres:["PRINCIPAL"]);
+      return lista;
+    }catch(e){console.error(e);return[]}
+  };
+  const aplicarJornada=(j)=>{
+    if(!j)return;
+    const punto=String(j.punto_nombre||"PRINCIPAL").trim().toUpperCase();
+    setJornadaActiva(j);localStorage.setItem("jornadaActiva",JSON.stringify(j));
+    setPuntoInventarioSeleccionado(punto);setLocalNuevaOrden(punto);setMostrarSelectorJornada(false);
+  };
+  const cargarContextoJornada=async({tokenForzado=null,institucionForzada=null,usuarioForzado=null}={})=>{
+    const u=usuarioForzado||usuario;
+    if(!u||["PADRE","ESTUDIANTE"].includes(normalizarRol(u.rol)))return;
+    const token=tokenForzado||localStorage.getItem("token");
+    const institucionId=Number(institucionForzada)||obtenerInstitucionActivaId();
+    if(!token||!institucionId)return;
+    const puntos=await cargarPuntosOperacion({tokenForzado:token,institucionForzada:institucionId});
+    try{
+      const res=await fetch(`${API_URL}/api/jornadas/activa?institucion_id=${institucionId}&t=${Date.now()}`,{headers:{Authorization:`Bearer ${token}`},cache:"no-store"});
+      const data=await res.json(); if(!res.ok)throw new Error(data.message||"Error consultando jornada");
+      if(data?.id){aplicarJornada(data);return}
+    }catch(e){console.error(e)}
+    localStorage.removeItem("jornadaActiva");setJornadaActiva(null);
+    setPuntoJornadaSeleccionado(puntos[0]?.id?String(puntos[0].id):"");setMostrarSelectorJornada(true);
+  };
+  const abrirJornada=async()=>{
+    if(!puntoJornadaSeleccionado)return alert("Selecciona el punto de trabajo.");
+    try{
+      setCargandoJornada(true);const token=localStorage.getItem("token");const institucionId=obtenerInstitucionActivaId();
+      const res=await fetch(`${API_URL}/api/jornadas/abrir`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({institucion_id:Number(institucionId),punto_id:Number(puntoJornadaSeleccionado)})});
+      const data=await res.json();if(!res.ok)throw new Error(data.message||"Error abriendo jornada");aplicarJornada(data);
+    }catch(e){alert(e.message||"No se pudo abrir la jornada")}finally{setCargandoJornada(false)}
+  };
+  const cerrarJornadaOperativa=async()=>{
+    if(!jornadaActiva?.id)return;
+    if(!window.confirm(`¿Cerrar tu jornada en ${jornadaActiva.punto_nombre}?`))return;
+    try{
+      const token=localStorage.getItem("token"),institucionId=obtenerInstitucionActivaId();
+      const res=await fetch(`${API_URL}/api/jornadas/${jornadaActiva.id}/cerrar`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({institucion_id:Number(institucionId)})});
+      const data=await res.json();if(!res.ok)throw new Error(data.message||"Error cerrando jornada");
+      localStorage.removeItem("jornadaActiva");setJornadaActiva(null);setMostrarSelectorJornada(true);
+    }catch(e){alert(e.message||"No se pudo cerrar la jornada")}
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setMensaje("");
@@ -2397,11 +2512,8 @@ if (institucionIdLogin) {
         correo: data.usuario?.correo || "",
       }));
 
-      aplicarVistaInicialRol(
-        data.usuario?.rol,
-        setVista,
-        setVistaVentasInterna
-      );
+      aplicarVistaInicialRol(data.usuario?.rol,setVista,setVistaVentasInterna);
+      await cargarContextoJornada({tokenForzado:data.token,institucionForzada:institucionIdLogin,usuarioForzado:data.usuario});
       setMensaje("");
     } catch (error) {
       console.error("Error login:", error);
@@ -3880,13 +3992,17 @@ if (institucionIdLogin) {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          institucion_id: Number(institucionId),
-          nombre: productoForm.nombre,
-          descripcion: productoForm.descripcion,
+          institucion_id:Number(institucionId),
+          jornada_id:Number(jornadaActiva?.id),
+          nombre:productoForm.nombre,
+          codigo:productoForm.codigo||null,
+          descripcion:productoForm.descripcion,
           precio: Number(productoForm.precio || 0),
           stock: Number(productoForm.stock || 0),
-          stock_minimo: Number(productoForm.stock_minimo || 0),
-          categoria: productoForm.categoria,
+          stock_minimo:Number(productoForm.stock_minimo||0),
+          categoria:productoForm.categoria,
+          concepto_inicial:"COMPRA",
+          observacion_inicial:"Producto creado desde Menú Cafetería",
         }),
       });
 
@@ -5527,8 +5643,9 @@ Disponible: ${formatearMoneda(
         ? "CREDITO_PROFESOR"
         : ventaForm.metodo_pago,
       items: itemsLimpios,
-      observacion: ventaForm.observacion?.trim() || "",
-      ubicacion: localNuevaOrden || "PRINCIPAL",
+      observacion:ventaForm.observacion?.trim()||"",
+      ubicacion:localNuevaOrden||"PRINCIPAL",
+      jornada_id:Number(jornadaActiva?.id),
     };
 
     const res = await fetch(`${API_URL}/api/ventas`, {
@@ -6078,7 +6195,9 @@ Disponible: ${formatearMoneda(
     localStorage.removeItem("token");
     localStorage.removeItem("usuario");
     localStorage.removeItem("institucionSeleccionadaId");
+    localStorage.removeItem("jornadaActiva");
     setUsuario(null);
+    setJornadaActiva(null);setPuntosOperacion([]);setMostrarSelectorJornada(false);
     setResumen(null);
     setProductos([]);
     setAlumnos([]);
@@ -6485,6 +6604,19 @@ if (!usuario) {
 
   return (
     <div style={styles.appShell}>
+      {mostrarSelectorJornada&&<div style={{position:"fixed",inset:0,zIndex:200000,background:"rgba(15,23,42,.72)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+        <div style={{width:"min(560px,96vw)",background:"#fff",borderRadius:18,padding:28,boxShadow:"0 25px 70px rgba(0,0,0,.35)"}}>
+          <h2 style={{margin:0,fontSize:28}}>Iniciar jornada</h2>
+          <p style={{color:"#64748b",lineHeight:1.5}}>{usuario?.nombre||usuario?.correo}, selecciona el punto donde vas a trabajar. Todo quedará identificado con tu usuario.</p>
+          <label style={styles.label}>Punto de trabajo *</label>
+          <select style={{...styles.input,marginTop:8}} value={puntoJornadaSeleccionado} onChange={e=>setPuntoJornadaSeleccionado(e.target.value)}>
+            <option value="">Seleccionar punto</option>
+            {puntosOperacion.filter(p=>p.activo!==false).map(p=><option key={p.id} value={p.id}>{p.nombre}</option>)}
+          </select>
+          <button type="button" style={{...styles.button,width:"100%",marginTop:20}} onClick={abrirJornada} disabled={cargandoJornada||!puntoJornadaSeleccionado}>{cargandoJornada?"Abriendo jornada...":"Comenzar jornada"}</button>
+          {["SUPER_ADMIN","ADMIN"].includes(rolActual)&&<p style={{marginTop:14,fontSize:13,color:"#64748b"}}>Para crear BAR PRINCIPAL o KIOSKO, inicia en PRINCIPAL y luego ve a Stock → Puntos / ubicaciones.</p>}
+        </div>
+      </div>}
       <aside style={styles.sidebar}>
         <div>
           <h2 style={styles.logo}>POS NUBE</h2>
@@ -6797,9 +6929,8 @@ if (!usuario) {
       <div style={{ fontSize: 15, color: "#111827", fontWeight: 800 }}>
         {usuario?.correo || correo || "Usuario sin correo"}
       </div>
-      <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-        {usuario?.rol || "Administrador"}
-      </div>
+      <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{usuario?.rol || "Administrador"}</div>
+      {jornadaActiva?.punto_nombre&&<div style={{fontSize:11,color:"#0f766e",fontWeight:800,marginTop:3}}>Punto: {jornadaActiva.punto_nombre} · Jornada #{jornadaActiva.id}</div>}
     </div>
   </div>
 </div>
@@ -10356,6 +10487,8 @@ onClick={() => eliminarEgreso(egreso)}
       </button>
 
       <div style={styles.headerActions}>
+        {puede("inventario.gestionar")&&<button type="button" style={styles.button} onClick={()=>setMostrarNuevoProductoStock(true)}>+ Nuevo producto</button>}
+        {["SUPER_ADMIN","ADMIN"].includes(rolActual)&&<button type="button" style={styles.outlineButton} onClick={()=>setMostrarPuntosStock(v=>!v)}>Puntos / ubicaciones</button>}
         <button
           type="button"
           style={styles.outlineButton}
@@ -10383,6 +10516,48 @@ onClick={() => eliminarEgreso(egreso)}
         />
       </div>
     </div>
+
+
+    <div style={{...styles.box,marginBottom:20,padding:"14px 18px",background:"#eff6ff",border:"1px solid #bfdbfe",display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+      <div><strong>Punto de trabajo:</strong> {jornadaActiva?.punto_nombre||"SIN JORNADA"}<div style={{fontSize:13,color:"#64748b",marginTop:4}}>Operador: {usuario?.nombre||usuario?.correo} · Jornada #{jornadaActiva?.id||"-"}</div></div>
+      <button type="button" style={styles.outlineButton} onClick={cerrarJornadaOperativa}>Cerrar jornada</button>
+    </div>
+
+    {mostrarPuntosStock&&<div style={{...styles.box,marginBottom:20}}>
+      <div style={styles.pageHeaderSmall}><div><h2 style={{margin:0}}>Puntos / ubicaciones</h2><p style={{color:"#64748b"}}>Ejemplo: BAR PRINCIPAL y KIOSKO.</p></div><button type="button" style={styles.outlineButton} onClick={()=>setMostrarPuntosStock(false)}>Cerrar</button></div>
+      <form onSubmit={crearPuntoOperacion} style={styles.filtersGrid}>
+        <div style={styles.filterField}><label style={styles.label}>Nombre *</label><input style={styles.input} value={nuevoPuntoForm.nombre} onChange={e=>setNuevoPuntoForm(p=>({...p,nombre:e.target.value}))} placeholder="BAR PRINCIPAL"/></div>
+        <div style={styles.filterField}><label style={styles.label}>Código</label><input style={styles.input} value={nuevoPuntoForm.codigo} onChange={e=>setNuevoPuntoForm(p=>({...p,codigo:e.target.value}))}/></div>
+        <div style={{...styles.filterField,gridColumn:"1 / -1"}}><label style={styles.label}>Descripción</label><input style={styles.input} value={nuevoPuntoForm.descripcion} onChange={e=>setNuevoPuntoForm(p=>({...p,descripcion:e.target.value}))}/></div>
+        <button type="submit" style={styles.button}>Crear punto</button>
+      </form>
+      <div style={{marginTop:15,display:"flex",gap:8,flexWrap:"wrap"}}>{puntosOperacion.map(p=><span key={p.id} style={{padding:"7px 11px",borderRadius:999,background:"#dcfce7",fontWeight:800}}>{p.nombre}</span>)}</div>
+    </div>}
+
+    {mostrarNuevoProductoStock&&<div style={{...styles.box,marginBottom:20}}>
+      <div style={styles.pageHeaderSmall}><div><h2 style={{margin:0}}>Nuevo producto desde Stock</h2><p style={{color:"#64748b"}}>Ubicación: {jornadaActiva?.punto_nombre}</p></div><button type="button" style={styles.outlineButton} onClick={()=>setMostrarNuevoProductoStock(false)}>Cerrar</button></div>
+      <form onSubmit={crearProductoDesdeStock} style={styles.filtersGrid}>
+        <div style={styles.filterField}><label style={styles.label}>Nombre *</label><input required style={styles.input} value={nuevoProductoStockForm.nombre} onChange={e=>setNuevoProductoStockForm(p=>({...p,nombre:e.target.value}))}/></div>
+        <div style={styles.filterField}><label style={styles.label}>Código</label><input style={styles.input} value={nuevoProductoStockForm.codigo} onChange={e=>setNuevoProductoStockForm(p=>({...p,codigo:e.target.value}))}/></div>
+        <div style={styles.filterField}><label style={styles.label}>Precio *</label><input required type="number" min="0" step="0.01" style={styles.input} value={nuevoProductoStockForm.precio} onChange={e=>setNuevoProductoStockForm(p=>({...p,precio:e.target.value}))}/></div>
+        <div style={styles.filterField}><label style={styles.label}>Categoría</label><input style={styles.input} value={nuevoProductoStockForm.categoria} onChange={e=>setNuevoProductoStockForm(p=>({...p,categoria:e.target.value}))}/></div>
+        <div style={styles.filterField}><label style={styles.label}>Cantidad inicial</label><input type="number" min="0" step="1" style={styles.input} value={nuevoProductoStockForm.cantidad_inicial} onChange={e=>setNuevoProductoStockForm(p=>({...p,cantidad_inicial:e.target.value}))}/></div>
+        <div style={styles.filterField}><label style={styles.label}>Stock mínimo</label><input type="number" min="0" step="1" style={styles.input} value={nuevoProductoStockForm.stock_minimo} onChange={e=>setNuevoProductoStockForm(p=>({...p,stock_minimo:e.target.value}))}/></div>
+        <div style={styles.filterField}><label style={styles.label}>Concepto inicial</label><select style={styles.input} value={nuevoProductoStockForm.concepto_inicial} onChange={e=>setNuevoProductoStockForm(p=>({...p,concepto_inicial:e.target.value}))}><option value="COMPRA">Compra</option><option value="PRODUCCION">Producción</option></select></div>
+        <div style={{...styles.filterField,gridColumn:"1 / -1"}}><label style={styles.label}>Observación</label><input style={styles.input} value={nuevoProductoStockForm.observacion_inicial} onChange={e=>setNuevoProductoStockForm(p=>({...p,observacion_inicial:e.target.value}))}/></div>
+        <button type="submit" style={styles.button}>Crear producto</button>
+      </form>
+    </div>}
+
+    {movimientoStock&&<div style={{...styles.box,marginBottom:20}}>
+      <div style={styles.pageHeaderSmall}><div><h2 style={{margin:0}}>Ingreso de stock</h2><p style={{color:"#64748b"}}>{movimientoStock.nombre} · {jornadaActiva?.punto_nombre}</p></div><button type="button" style={styles.outlineButton} onClick={()=>setMovimientoStock(null)}>Cerrar</button></div>
+      <div style={styles.filtersGrid}>
+        <div style={styles.filterField}><label style={styles.label}>Concepto</label><select style={styles.input} value={movimientoStock.concepto} onChange={e=>setMovimientoStock(p=>({...p,concepto:e.target.value}))}><option value="COMPRA">Compra</option><option value="PRODUCCION">Producción</option></select></div>
+        <div style={styles.filterField}><label style={styles.label}>Cantidad</label><input type="number" min="1" step="1" style={styles.input} value={movimientoStock.cantidad} onChange={e=>setMovimientoStock(p=>({...p,cantidad:e.target.value}))}/></div>
+        <div style={{...styles.filterField,gridColumn:"1 / -1"}}><label style={styles.label}>Observación *</label><textarea style={{...styles.input,minHeight:80}} value={movimientoStock.observacion} onChange={e=>setMovimientoStock(p=>({...p,observacion:e.target.value}))}/></div>
+      </div>
+      <button type="button" style={styles.button} onClick={confirmarMovimientoStock}>Confirmar ingreso</button>
+    </div>}
 
     {stockDetalle && (
       <div style={{ ...styles.box, marginBottom: 20 }}>
@@ -10499,27 +10674,7 @@ onClick={() => eliminarEgreso(egreso)}
 
           <div style={styles.filterField}>
             <label style={styles.label}>Punto origen</label>
-            <select
-              value={stockTransferencia.ubicacion_origen || "PRINCIPAL"}
-              onChange={(e) =>
-                setStockTransferencia((prev) => ({
-                  ...prev,
-                  ubicacion_origen: e.target.value,
-                }))
-              }
-              style={styles.input}
-            >
-              {existenciasDeProducto(stockTransferencia.id).map((fila) => (
-                <option key={fila.ubicacion} value={fila.ubicacion}>
-                  {fila.ubicacion} ({Number(fila.stock || 0)})
-                </option>
-              ))}
-              {!existenciasDeProducto(stockTransferencia.id).length && (
-                <option value="PRINCIPAL">
-                  PRINCIPAL ({Number(stockTransferencia.stock || 0)})
-                </option>
-              )}
-            </select>
+            <input value={jornadaActiva?.punto_nombre||"PRINCIPAL"} style={styles.input} readOnly />
           </div>
 
           <div style={styles.filterField}>
@@ -10670,6 +10825,7 @@ onClick={() => eliminarEgreso(egreso)}
             />
           </div>
 
+          <div style={styles.filterField}><label style={styles.label}>Motivo de baja *</label><select style={styles.input} value={bajaStock.motivo_baja||"DAÑO"} onChange={e=>setBajaStock(p=>({...p,motivo_baja:e.target.value}))}><option value="DAÑO">Daño</option><option value="PERDIDA">Pérdida</option><option value="CORTESIA">Cortesía</option><option value="VENCIMIENTO">Vencimiento</option><option value="OTRO">Otro</option></select></div>
           <div style={{ ...styles.filterField, gridColumn: "1 / -1" }}>
             <label style={styles.label}>Observación / motivo de la baja *</label>
             <textarea
@@ -10707,20 +10863,7 @@ onClick={() => eliminarEgreso(egreso)}
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <label style={{ fontWeight: 700 }}>Punto activo:</label>
-          <select
-            value={puntoInventarioSeleccionado}
-            onChange={(e) => {
-              setPuntoInventarioSeleccionado(e.target.value);
-              setStockEditado({});
-            }}
-            style={{ ...styles.select, minWidth: 180 }}
-          >
-            {puntosInventario.map((punto) => (
-              <option key={punto} value={punto}>
-                {punto}
-              </option>
-            ))}
-          </select>
+          <div style={{...styles.select,minWidth:180,background:"#eef6ff",fontWeight:900}}>{jornadaActiva?.punto_nombre||puntoInventarioSeleccionado}</div>
         </div>
       </div>
 
@@ -10742,8 +10885,9 @@ onClick={() => eliminarEgreso(egreso)}
               <th style={styles.th}></th>
               <th style={styles.th}></th>
               <th style={styles.th}>
-                <select style={styles.select}>
-                  <option value="">Seleccionar</option>
+                <select style={styles.select} value={filtroCategoriaStock} onChange={e=>setFiltroCategoriaStock(e.target.value)}>
+                  <option value="">Todas las categorías</option>
+                  {[...new Set(productos.map(p=>String(p.categoria||"").trim()).filter(Boolean))].sort().map(c=><option key={c} value={c}>{c}</option>)}
                 </select>
               </th>
               <th style={styles.th}></th>
@@ -10754,11 +10898,11 @@ onClick={() => eliminarEgreso(egreso)}
 
           <tbody>
             {productos
-              .filter((p) =>
-                String(p.nombre || "")
-                  .toLowerCase()
-                  .includes(busquedaInventario.toLowerCase())
-              )
+              .filter((p)=>{
+                const n=String(p.nombre||"").toLowerCase().includes(busquedaInventario.toLowerCase());
+                const c=!filtroCategoriaStock||String(p.categoria||"")===filtroCategoriaStock;
+                return n&&c;
+              })
               .map((producto) => (
                 <tr key={producto.id}>
                   <td style={styles.td}>{producto.nombre}</td>
@@ -10797,6 +10941,7 @@ onClick={() => eliminarEgreso(egreso)}
                         💾
                       </button>
 
+                      {puede("inventario.gestionar")&&<button type="button" style={styles.viewIconButton} onClick={()=>abrirMovimientoStock(producto)} title="Compra / producción">+</button>}
                       <button
                         type="button"
                         style={styles.viewIconButton}
@@ -11795,17 +11940,7 @@ onClick={() => eliminarEgreso(egreso)}
           >
             <div>
               <label style={styles.label}>Local</label>
-              <select
-                value={localNuevaOrden}
-                onChange={(e) => setLocalNuevaOrden(e.target.value)}
-                style={{ ...styles.input, background: "#ffffff" }}
-              >
-                {puntosInventario.map((punto) => (
-                  <option key={punto} value={punto}>
-                    {punto}
-                  </option>
-                ))}
-              </select>
+              <input value={jornadaActiva?.punto_nombre||localNuevaOrden} style={styles.input} readOnly />
             </div>
 
             <div>
