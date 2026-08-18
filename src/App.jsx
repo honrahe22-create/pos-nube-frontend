@@ -408,6 +408,68 @@ const [institucionesTransferencia,setInstitucionesTransferencia]=useState([]);
 const [puntosDestinoLocal,setPuntosDestinoLocal]=useState([]);
 const [filtroCategoriaStock,setFiltroCategoriaStock]=useState("");
 
+const [stockSeccion,setStockSeccion]=useState("");
+const [stockTipoIngreso,setStockTipoIngreso]=useState("");
+const [stockTipoEgreso,setStockTipoEgreso]=useState("");
+const [stockBusquedaOperacion,setStockBusquedaOperacion]=useState("");
+const [stockFamiliaOperacion,setStockFamiliaOperacion]=useState("TODAS");
+const [stockItemsOperacion,setStockItemsOperacion]=useState({});
+const [stockCompraForm,setStockCompraForm]=useState({
+  proveedor_id:"",
+  proveedor_nuevo:"",
+  numero_factura:"",
+  observacion:"",
+});
+const [stockOperacionForm,setStockOperacionForm]=useState({
+  observacion:"",
+  ubicacion_destino:"",
+  institucion_destino_id:"",
+  punto_destino_id:"",
+  destinatario_cortesia:"",
+});
+const [proveedoresStock,setProveedoresStock]=useState([]);
+const [stockConfirmacion,setStockConfirmacion]=useState(null);
+const [guardandoStockOperacion,setGuardandoStockOperacion]=useState(false);
+
+
+
+const familiasOperacionStock = useMemo(() => {
+  const valores = productos
+    .filter((p) => p?.activo !== false)
+    .map((p) => String(p?.categoria || "").trim())
+    .filter(Boolean);
+
+  return [...new Set(valores)].sort((a,b)=>a.localeCompare(b));
+}, [productos]);
+
+const productosOperacionStock = useMemo(() => {
+  const texto = String(stockBusquedaOperacion || "").trim().toLowerCase();
+  const familia = String(stockFamiliaOperacion || "TODAS").trim();
+
+  return productos
+    .filter((p) => p?.activo !== false)
+    .filter((p) => {
+      if (familia === "TODAS") return true;
+      return String(p?.categoria || "").trim() === familia;
+    })
+    .filter((p) => {
+      if (!texto) return true;
+      return [
+        p?.nombre,
+        p?.codigo,
+        p?.categoria,
+        p?.descripcion,
+      ]
+        .map((v) => String(v || "").toLowerCase())
+        .some((v) => v.includes(texto));
+    })
+    .sort((a,b)=>String(a.nombre||"").localeCompare(String(b.nombre||"")));
+}, [
+  productos,
+  stockBusquedaOperacion,
+  stockFamiliaOperacion,
+]);
+
 const [stockEditado, setStockEditado] = useState({});
 const inputImportarStockRef = useRef(null);
 const inputImportarAlumnosRef = useRef(null);
@@ -2184,6 +2246,409 @@ const confirmarTransferenciaLocales=async()=>{
       error.message||
       "No se pudo realizar la transferencia entre locales."
     );
+  }
+};
+
+
+const cargarProveedoresStock=async()=>{
+  try{
+    const token=localStorage.getItem("token");
+    const institucionId=obtenerInstitucionActivaId();
+
+    if(!token||!institucionId){
+      setProveedoresStock([]);
+      return [];
+    }
+
+    const res=await fetch(
+      `${API_URL}/api/inventario/proveedores?institucion_id=${Number(institucionId)}&t=${Date.now()}`,
+      {
+        headers:{Authorization:`Bearer ${token}`},
+        cache:"no-store",
+      }
+    );
+
+    const data=await res.json();
+
+    if(!res.ok){
+      throw new Error(data.message||"No se pudieron cargar los proveedores");
+    }
+
+    const lista=Array.isArray(data)?data:[];
+    setProveedoresStock(lista);
+    return lista;
+  }catch(error){
+    console.error("Error cargando proveedores de Stock:",error);
+    setProveedoresStock([]);
+    return [];
+  }
+};
+
+const limpiarOperacionStock=()=>{
+  setStockItemsOperacion({});
+  setStockBusquedaOperacion("");
+  setStockFamiliaOperacion("TODAS");
+  setStockCompraForm({
+    proveedor_id:"",
+    proveedor_nuevo:"",
+    numero_factura:"",
+    observacion:"",
+  });
+  setStockOperacionForm({
+    observacion:"",
+    ubicacion_destino:"",
+    institucion_destino_id:"",
+    punto_destino_id:"",
+    destinatario_cortesia:"",
+  });
+  setStockConfirmacion(null);
+};
+
+const cambiarSeccionStock=(valor)=>{
+  setStockSeccion(valor);
+  setStockTipoIngreso("");
+  setStockTipoEgreso("");
+  limpiarOperacionStock();
+};
+
+const cambiarTipoIngresoStock=async(valor)=>{
+  setStockTipoIngreso(valor);
+  setStockTipoEgreso("");
+  limpiarOperacionStock();
+
+  if(valor==="COMPRA"){
+    await cargarProveedoresStock();
+  }
+
+  if(valor==="TRANSFERENCIA_LOCALES"){
+    await cargarInstitucionesTransferencia();
+  }
+};
+
+const cambiarTipoEgresoStock=(valor)=>{
+  setStockTipoEgreso(valor);
+  setStockTipoIngreso("");
+  limpiarOperacionStock();
+};
+
+const toggleProductoOperacionStock=(producto)=>{
+  setStockItemsOperacion((prev)=>{
+    const copia={...prev};
+    const id=String(producto.id);
+
+    if(copia[id]){
+      delete copia[id];
+    }else{
+      copia[id]=1;
+    }
+
+    return copia;
+  });
+};
+
+const cambiarCantidadOperacionStock=(productoId,valor)=>{
+  const cantidad=Math.max(0,Math.trunc(Number(valor||0)));
+
+  setStockItemsOperacion((prev)=>({
+    ...prev,
+    [String(productoId)]:cantidad,
+  }));
+};
+
+const itemsValidosOperacionStock=()=>{
+  return Object.entries(stockItemsOperacion)
+    .map(([producto_id,cantidad])=>({
+      producto_id:Number(producto_id),
+      cantidad:Number(cantidad),
+    }))
+    .filter(
+      (item)=>
+        item.producto_id &&
+        Number.isInteger(item.cantidad) &&
+        item.cantidad>0
+    );
+};
+
+const prepararConfirmacionOperacionStock=()=>{
+  if(!jornadaActiva?.id){
+    alert("Debes iniciar una jornada antes de operar Stock.");
+    return;
+  }
+
+  const items=itemsValidosOperacionStock();
+
+  if(!items.length){
+    alert("Selecciona al menos un producto e ingresa una cantidad mayor a 0.");
+    return;
+  }
+
+  if(stockSeccion==="INGRESOS"){
+    if(!stockTipoIngreso){
+      alert("Selecciona el tipo de ingreso.");
+      return;
+    }
+
+    if(stockTipoIngreso==="COMPRA"){
+      if(
+        !stockCompraForm.proveedor_id &&
+        !String(stockCompraForm.proveedor_nuevo||"").trim()
+      ){
+        alert("Selecciona o ingresa un proveedor.");
+        return;
+      }
+
+      if(!String(stockCompraForm.numero_factura||"").trim()){
+        alert("Ingresa el número de factura.");
+        return;
+      }
+    }
+
+    if(stockTipoIngreso==="TRANSFERENCIA_UBICACIONES"){
+      if(!String(stockOperacionForm.ubicacion_destino||"").trim()){
+        alert("Selecciona la ubicación destino.");
+        return;
+      }
+    }
+
+    if(stockTipoIngreso==="TRANSFERENCIA_LOCALES"){
+      if(
+        !Number(stockOperacionForm.institucion_destino_id) ||
+        !Number(stockOperacionForm.punto_destino_id)
+      ){
+        alert("Selecciona el local y la ubicación destino.");
+        return;
+      }
+    }
+
+    if(
+      ["PRODUCCION_COCINA","OTROS","TRANSFERENCIA_UBICACIONES","TRANSFERENCIA_LOCALES"]
+        .includes(stockTipoIngreso) &&
+      !String(stockOperacionForm.observacion||"").trim()
+    ){
+      alert("La observación es obligatoria.");
+      return;
+    }
+
+    setStockConfirmacion({
+      grupo:"INGRESOS",
+      tipo:stockTipoIngreso,
+      items,
+    });
+    return;
+  }
+
+  if(stockSeccion==="EGRESOS"){
+    if(!stockTipoEgreso){
+      alert("Selecciona BAJA o CORTESÍA.");
+      return;
+    }
+
+    if(!String(stockOperacionForm.observacion||"").trim()){
+      alert("La observación es obligatoria.");
+      return;
+    }
+
+    if(
+      stockTipoEgreso==="CORTESIA" &&
+      !String(stockOperacionForm.destinatario_cortesia||"").trim()
+    ){
+      alert("Indica a quién se entrega la cortesía.");
+      return;
+    }
+
+    setStockConfirmacion({
+      grupo:"EGRESOS",
+      tipo:stockTipoEgreso,
+      items,
+    });
+  }
+};
+
+const confirmarOperacionStockNueva=async()=>{
+  if(!stockConfirmacion||guardandoStockOperacion)return;
+
+  try{
+    setGuardandoStockOperacion(true);
+
+    const token=localStorage.getItem("token");
+    const institucionId=obtenerInstitucionActivaId();
+    const items=stockConfirmacion.items||[];
+
+    if(stockConfirmacion.grupo==="INGRESOS"){
+      if(
+        ["COMPRA","PRODUCCION_COCINA","OTROS"].includes(
+          stockConfirmacion.tipo
+        )
+      ){
+        const res=await fetch(
+          `${API_URL}/api/inventario/ingresos/masivo`,
+          {
+            method:"POST",
+            headers:{
+              "Content-Type":"application/json",
+              Authorization:`Bearer ${token}`,
+            },
+            body:JSON.stringify({
+              institucion_id:Number(institucionId),
+              jornada_id:Number(jornadaActiva?.id),
+              tipo_ingreso:stockConfirmacion.tipo,
+              proveedor_id:
+                stockConfirmacion.tipo==="COMPRA"
+                  ? Number(stockCompraForm.proveedor_id||0)||null
+                  : null,
+              proveedor_nombre:
+                stockConfirmacion.tipo==="COMPRA"
+                  ? String(stockCompraForm.proveedor_nuevo||"").trim()||null
+                  : null,
+              numero_factura:
+                stockConfirmacion.tipo==="COMPRA"
+                  ? String(stockCompraForm.numero_factura||"").trim()
+                  : null,
+              observacion:
+                stockConfirmacion.tipo==="COMPRA"
+                  ? String(stockCompraForm.observacion||"").trim()
+                  : String(stockOperacionForm.observacion||"").trim(),
+              items,
+            }),
+          }
+        );
+
+        const data=await res.json();
+
+        if(!res.ok){
+          throw new Error(
+            data.message||
+            data.error||
+            "No se pudo registrar el ingreso"
+          );
+        }
+      }else if(stockConfirmacion.tipo==="TRANSFERENCIA_UBICACIONES"){
+        for(const item of items){
+          const res=await fetch(
+            `${API_URL}/api/inventario/transferir`,
+            {
+              method:"POST",
+              headers:{
+                "Content-Type":"application/json",
+                Authorization:`Bearer ${token}`,
+              },
+              body:JSON.stringify({
+                institucion_id:Number(institucionId),
+                jornada_id:Number(jornadaActiva?.id),
+                producto_id:Number(item.producto_id),
+                ubicacion_destino:String(
+                  stockOperacionForm.ubicacion_destino||""
+                ).trim(),
+                cantidad:Number(item.cantidad),
+                observacion:String(
+                  stockOperacionForm.observacion||""
+                ).trim(),
+              }),
+            }
+          );
+
+          const data=await res.json();
+
+          if(!res.ok){
+            throw new Error(
+              data.message||
+              `No se pudo transferir el producto ${item.producto_id}`
+            );
+          }
+        }
+      }else if(stockConfirmacion.tipo==="TRANSFERENCIA_LOCALES"){
+        for(const item of items){
+          const res=await fetch(
+            `${API_URL}/api/inventario/transferir-locales`,
+            {
+              method:"POST",
+              headers:{
+                "Content-Type":"application/json",
+                Authorization:`Bearer ${token}`,
+              },
+              body:JSON.stringify({
+                institucion_id:Number(institucionId),
+                jornada_id:Number(jornadaActiva?.id),
+                producto_id:Number(item.producto_id),
+                institucion_destino_id:Number(
+                  stockOperacionForm.institucion_destino_id
+                ),
+                punto_destino_id:Number(
+                  stockOperacionForm.punto_destino_id
+                ),
+                cantidad:Number(item.cantidad),
+                observacion:String(
+                  stockOperacionForm.observacion||""
+                ).trim(),
+              }),
+            }
+          );
+
+          const data=await res.json();
+
+          if(!res.ok){
+            throw new Error(
+              data.message||
+              `No se pudo transferir el producto ${item.producto_id}`
+            );
+          }
+        }
+      }
+    }else{
+      const res=await fetch(
+        `${API_URL}/api/inventario/egresos/masivo`,
+        {
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json",
+            Authorization:`Bearer ${token}`,
+          },
+          body:JSON.stringify({
+            institucion_id:Number(institucionId),
+            jornada_id:Number(jornadaActiva?.id),
+            tipo_egreso:stockConfirmacion.tipo,
+            destinatario_cortesia:
+              stockConfirmacion.tipo==="CORTESIA"
+                ? String(
+                    stockOperacionForm.destinatario_cortesia||""
+                  ).trim()
+                : null,
+            observacion:String(
+              stockOperacionForm.observacion||""
+            ).trim(),
+            items,
+          }),
+        }
+      );
+
+      const data=await res.json();
+
+      if(!res.ok){
+        throw new Error(
+          data.message||
+          data.error||
+          "No se pudo registrar el egreso"
+        );
+      }
+    }
+
+    setStockConfirmacion(null);
+    limpiarOperacionStock();
+
+    await Promise.all([
+      cargarProductos(),
+      cargarExistenciasInventario(),
+    ]);
+
+    alert("OK. Movimiento de Stock registrado correctamente.");
+  }catch(error){
+    console.error("Error confirmando operación Stock:",error);
+    alert(
+      error.message||
+      "No se pudo confirmar el movimiento de Stock."
+    );
+  }finally{
+    setGuardandoStockOperacion(false);
   }
 };
 
@@ -11446,19 +11911,26 @@ onClick={() => eliminarEgreso(egreso)}
   <>
     <div style={styles.pageHeader}>
       <div>
-        <h1 style={styles.dashboardTitle}>Existencias</h1>
+        <h1 style={styles.dashboardTitle}>Stock</h1>
+        <p style={{margin:"6px 0 0",color:"#64748b"}}>
+          Control de ingresos y egresos de inventario por ubicación.
+        </p>
       </div>
 
-      <button
-        type="button"
-        style={styles.refreshButton}
-        onClick={() => cargarExistenciasInventario()}
-      >
-        Refrescar stock
-      </button>
-
       <div style={styles.headerActions}>
-        {puede("inventario.gestionar")&&<button type="button" style={styles.button} onClick={()=>{
+        <button
+          type="button"
+          style={styles.refreshButton}
+          onClick={() => cargarExistenciasInventario()}
+        >
+          Refrescar stock
+        </button>
+
+        {puede("inventario.gestionar")&&(
+          <button
+            type="button"
+            style={styles.button}
+            onClick={()=>{
               setNuevoProductoStockForm((p)=>({
                 ...p,
                 ubicacion_inicial:
@@ -11468,421 +11940,552 @@ onClick={() => eliminarEgreso(egreso)}
                   "PRINCIPAL",
               }));
               setMostrarNuevoProductoStock(true);
-            }}>+ Nuevo producto</button>}
-        {["SUPER_ADMIN","ADMIN"].includes(rolActual)&&<button type="button" style={styles.outlineButton} onClick={()=>setMostrarPuntosStock(v=>!v)}>Puntos / ubicaciones</button>}
+            }}
+          >
+            + Nuevo producto
+          </button>
+        )}
+
+        {["SUPER_ADMIN","ADMIN"].includes(rolActual)&&(
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={()=>setMostrarPuntosStock((v)=>!v)}
+          >
+            Puntos / ubicaciones
+          </button>
+        )}
+
         <button
           type="button"
           style={styles.outlineButton}
-          onClick={exportarStockExcel}
-          title="Exportar existencias"
+          onClick={exportarStockCsv}
         >
           Exportar existencias
         </button>
 
-       <button
-  type="button"
-  style={styles.secondaryButton}
-  onClick={abrirImportadorStock}
-  title="Importar productos"
->
-  Importar productos
-</button>
+        {puede("inventario.gestionar")&&(
+          <button
+            type="button"
+            style={styles.button}
+            onClick={()=>inputImportarStockRef.current?.click()}
+          >
+            Importar productos
+          </button>
+        )}
 
         <input
           ref={inputImportarStockRef}
           type="file"
           accept=".csv,.xlsx,.xls"
-          style={{ display: "none" }}
           onChange={importarStockArchivo}
+          style={{display:"none"}}
         />
       </div>
     </div>
 
+    <div style={{
+      ...styles.box,
+      marginBottom:20,
+      border:"1px solid #bfdbfe",
+      background:"#eff6ff"
+    }}>
+      <div style={{
+        display:"flex",
+        justifyContent:"space-between",
+        gap:16,
+        flexWrap:"wrap",
+        alignItems:"center"
+      }}>
+        <div>
+          <strong style={{fontSize:18}}>
+            Punto de trabajo: {jornadaActiva?.punto_nombre||"SIN JORNADA"}
+          </strong>
+          <div style={{color:"#64748b",marginTop:6}}>
+            Operador:{" "}
+            {jornadaActiva?.usuario_nombre||
+              jornadaActiva?.usuario_correo||
+              usuario?.nombre||
+              usuario?.correo||
+              "-"}{" "}
+            · Jornada #{jornadaActiva?.id||"-"}
+          </div>
+        </div>
 
-    <div style={{...styles.box,marginBottom:20,padding:"14px 18px",background:"#eff6ff",border:"1px solid #bfdbfe",display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
-      <div><strong>Punto de trabajo:</strong> {jornadaActiva?.punto_nombre||"SIN JORNADA"}<div style={{fontSize:13,color:"#64748b",marginTop:4}}>Operador: {usuario?.nombre||usuario?.correo} · Jornada #{jornadaActiva?.id||"-"}</div></div>
-      <button type="button" style={styles.outlineButton} onClick={cerrarJornadaOperativa}>Cerrar jornada</button>
+        {jornadaActiva?.id&&(
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={cerrarJornadaOperativa}
+          >
+            Cerrar jornada
+          </button>
+        )}
+      </div>
     </div>
 
-    {mostrarPuntosStock&&<div style={{...styles.box,marginBottom:20}}>
-      <div style={styles.pageHeaderSmall}><div><h2 style={{margin:0}}>Puntos / ubicaciones</h2><p style={{color:"#64748b"}}>Ejemplo: BAR PRINCIPAL y KIOSKO.</p></div><button type="button" style={styles.outlineButton} onClick={()=>setMostrarPuntosStock(false)}>Cerrar</button></div>
-      <form onSubmit={crearPuntoOperacion} style={styles.filtersGrid}>
-        <div style={styles.filterField}><label style={styles.label}>Nombre *</label><input style={styles.input} value={nuevoPuntoForm.nombre} onChange={e=>setNuevoPuntoForm(p=>({...p,nombre:e.target.value}))} placeholder="BAR PRINCIPAL"/></div>
-        <div style={styles.filterField}><label style={styles.label}>Código</label><input style={styles.input} value={nuevoPuntoForm.codigo} onChange={e=>setNuevoPuntoForm(p=>({...p,codigo:e.target.value}))}/></div>
-        <div style={{...styles.filterField,gridColumn:"1 / -1"}}><label style={styles.label}>Descripción</label><input style={styles.input} value={nuevoPuntoForm.descripcion} onChange={e=>setNuevoPuntoForm(p=>({...p,descripcion:e.target.value}))}/></div>
-        <button type="submit" style={styles.button}>Crear punto</button>
-      </form>
-      <div style={{marginTop:18,display:"grid",gap:10}}>
-        {puntosOperacion.map((p)=>(
-          <div
-            key={p.id}
-            style={{
-              border:"1px solid #e2e8f0",
-              borderRadius:12,
-              padding:"12px 14px",
-              display:"flex",
-              alignItems:"center",
-              justifyContent:"space-between",
-              gap:12,
-              flexWrap:"wrap",
-              background:"#fff",
-            }}
-          >
-            <div>
-              <div style={{fontWeight:900}}>{p.nombre}</div>
-              <div style={{fontSize:13,color:"#64748b",marginTop:3}}>
-                Código: {p.codigo||"-"}
-                {p.descripcion?` · ${p.descripcion}`:""}
-              </div>
-            </div>
-
-            <button
-              type="button"
-              style={styles.outlineButton}
-              onClick={()=>comenzarEdicionPunto(p)}
-            >
-              Editar
-            </button>
-          </div>
-        ))}
-      </div>
-
-      {editarPuntoStock&&(
-        <form
-          onSubmit={guardarEdicionPunto}
-          style={{
-            ...styles.filtersGrid,
-            marginTop:20,
-            paddingTop:18,
-            borderTop:"1px solid #e2e8f0",
-          }}
-        >
-          <div style={{gridColumn:"1 / -1"}}>
-            <h3 style={{margin:"0 0 8px"}}>Editar ubicación</h3>
-            <p style={{margin:0,color:"#64748b"}}>
-              El stock existente se conservará al cambiar el nombre.
+    {mostrarPuntosStock&&(
+      <div style={{...styles.box,marginBottom:20}}>
+        <div style={styles.pageHeaderSmall}>
+          <div>
+            <h2 style={{margin:0}}>Puntos / ubicaciones</h2>
+            <p style={{color:"#64748b",margin:"6px 0 0"}}>
+              Crea o edita BAR PRINCIPAL, KIOSKO y demás ubicaciones.
             </p>
           </div>
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={()=>setMostrarPuntosStock(false)}
+          >
+            Cerrar
+          </button>
+        </div>
 
+        <form
+          onSubmit={crearPuntoOperacion}
+          style={{...styles.filtersGrid,marginTop:18}}
+        >
           <div style={styles.filterField}>
             <label style={styles.label}>Nombre *</label>
             <input
               style={styles.input}
-              value={editarPuntoStock.nombre}
-              onChange={(e)=>
-                setEditarPuntoStock((p)=>({...p,nombre:e.target.value}))
-              }
+              value={nuevoPuntoForm.nombre}
+              onChange={(e)=>setNuevoPuntoForm((p)=>({...p,nombre:e.target.value}))}
+              placeholder="Ej. KIOSKO"
             />
           </div>
-
           <div style={styles.filterField}>
             <label style={styles.label}>Código</label>
             <input
               style={styles.input}
-              value={editarPuntoStock.codigo}
-              onChange={(e)=>
-                setEditarPuntoStock((p)=>({...p,codigo:e.target.value}))
-              }
+              value={nuevoPuntoForm.codigo}
+              onChange={(e)=>setNuevoPuntoForm((p)=>({...p,codigo:e.target.value}))}
             />
           </div>
-
-          <div style={{...styles.filterField,gridColumn:"1 / -1"}}>
+          <div style={styles.filterField}>
             <label style={styles.label}>Descripción</label>
             <input
               style={styles.input}
-              value={editarPuntoStock.descripcion}
-              onChange={(e)=>
-                setEditarPuntoStock((p)=>({...p,descripcion:e.target.value}))
-              }
+              value={nuevoPuntoForm.descripcion}
+              onChange={(e)=>setNuevoPuntoForm((p)=>({...p,descripcion:e.target.value}))}
             />
           </div>
-
-          <div style={{display:"flex",gap:10}}>
-            <button type="submit" style={styles.button}>
-              Guardar cambios
-            </button>
-            <button
-              type="button"
-              style={styles.outlineButton}
-              onClick={()=>setEditarPuntoStock(null)}
-            >
-              Cancelar
-            </button>
+          <div style={{display:"flex",alignItems:"end"}}>
+            <button type="submit" style={styles.button}>Crear ubicación</button>
           </div>
         </form>
-      )}
-    </div>}
 
-    {mostrarNuevoProductoStock&&<div style={{...styles.box,marginBottom:20}}>
-      <div style={styles.pageHeaderSmall}><div><h2 style={{margin:0}}>Nuevo producto desde Stock</h2><p style={{color:"#64748b"}}>Ubicación: {jornadaActiva?.punto_nombre}</p></div><button type="button" style={styles.outlineButton} onClick={()=>setMostrarNuevoProductoStock(false)}>Cerrar</button></div>
-      <form onSubmit={crearProductoDesdeStock} style={styles.filtersGrid}>
-        <div style={styles.filterField}><label style={styles.label}>Nombre *</label><input required style={styles.input} value={nuevoProductoStockForm.nombre} onChange={e=>setNuevoProductoStockForm(p=>({...p,nombre:e.target.value}))}/></div>
-        <div style={styles.filterField}><label style={styles.label}>Código</label><input style={styles.input} value={nuevoProductoStockForm.codigo} onChange={e=>setNuevoProductoStockForm(p=>({...p,codigo:e.target.value}))}/></div>
-        <div style={styles.filterField}><label style={styles.label}>Precio *</label><input required type="number" min="0" step="0.01" style={styles.input} value={nuevoProductoStockForm.precio} onChange={e=>setNuevoProductoStockForm(p=>({...p,precio:e.target.value}))}/></div>
-        <div style={styles.filterField}><label style={styles.label}>Categoría</label><input style={styles.input} value={nuevoProductoStockForm.categoria} onChange={e=>setNuevoProductoStockForm(p=>({...p,categoria:e.target.value}))}/></div>
-        <div style={styles.filterField}><label style={styles.label}>Cantidad inicial</label><input type="number" min="0" step="1" style={styles.input} value={nuevoProductoStockForm.cantidad_inicial} onChange={e=>setNuevoProductoStockForm(p=>({...p,cantidad_inicial:e.target.value}))}/></div>
-        <div style={styles.filterField}><label style={styles.label}>Stock mínimo</label><input type="number" min="0" step="1" style={styles.input} value={nuevoProductoStockForm.stock_minimo} onChange={e=>setNuevoProductoStockForm(p=>({...p,stock_minimo:e.target.value}))}/></div>
-        <div style={styles.filterField}>
-          <label style={styles.label}>Ubicación inicial *</label>
-          <select
-            style={styles.input}
-            value={
-              nuevoProductoStockForm.ubicacion_inicial ||
-              jornadaActiva?.punto_nombre ||
-              ""
-            }
-            onChange={(e)=>
-              setNuevoProductoStockForm((p)=>({
-                ...p,
-                ubicacion_inicial:e.target.value,
-              }))
-            }
-          >
-            {puntosOperacion
-              .filter((p)=>p.activo!==false)
-              .map((punto)=>(
-                <option key={punto.id} value={punto.nombre}>
-                  {punto.nombre}
-                </option>
-              ))}
-          </select>
-        </div>
-
-        <div style={styles.filterField}><label style={styles.label}>Concepto inicial</label><select style={styles.input} value={nuevoProductoStockForm.concepto_inicial} onChange={e=>setNuevoProductoStockForm(p=>({...p,concepto_inicial:e.target.value}))}><option value="COMPRA">Compra</option><option value="PRODUCCION">Producción</option></select></div>
-        <div style={{...styles.filterField,gridColumn:"1 / -1"}}><label style={styles.label}>Observación</label><input style={styles.input} value={nuevoProductoStockForm.observacion_inicial} onChange={e=>setNuevoProductoStockForm(p=>({...p,observacion_inicial:e.target.value}))}/></div>
-        <button type="submit" style={styles.button}>Crear producto</button>
-      </form>
-    </div>}
-
-
-    {panelMovimientoStock&&(
-      <div style={{...styles.box,marginBottom:20}}>
-        <div style={styles.pageHeaderSmall}>
-          <div>
-            <h2 style={{margin:0}}>Movimiento de stock</h2>
-            <p style={{color:"#64748b",margin:"6px 0 0"}}>
-              {panelMovimientoStock.nombre} · Punto actual:{" "}
-              {jornadaActiva?.punto_nombre||"SIN JORNADA"}
-            </p>
-          </div>
-
-          <button
-            type="button"
-            style={styles.outlineButton}
-            onClick={()=>{
-              setPanelMovimientoStock(null);
-              setMovimientoStock(null);
-              setStockTransferencia(null);
-              setTransferenciaLocales(null);
-              setBajaStock(null);
-            }}
-          >
-            Cerrar
-          </button>
-        </div>
-
-        <div
-          style={{
-            display:"grid",
-            gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",
-            gap:12,
-            marginTop:18,
-          }}
-        >
-          <button
-            type="button"
-            style={styles.button}
-            onClick={()=>seleccionarConceptoStock("COMPRA")}
-          >
-            Compra
-          </button>
-
-          <button
-            type="button"
-            style={styles.button}
-            onClick={()=>seleccionarConceptoStock("PRODUCCION")}
-          >
-            Producción
-          </button>
-
-          <button
-            type="button"
-            style={styles.outlineButton}
-            onClick={()=>seleccionarConceptoStock("TRANSFERIR_UBICACIONES")}
-          >
-            Transferir entre ubicaciones
-          </button>
-
-          {["SUPER_ADMIN","ADMIN"].includes(rolActual)&&(
-            <button
-              type="button"
-              style={styles.outlineButton}
-              onClick={()=>seleccionarConceptoStock("TRANSFERIR_LOCALES")}
+        <div style={{display:"grid",gap:10,marginTop:18}}>
+          {puntosOperacion.map((punto)=>(
+            <div
+              key={punto.id}
+              style={{
+                display:"flex",
+                justifyContent:"space-between",
+                gap:12,
+                alignItems:"center",
+                padding:12,
+                border:"1px solid #e2e8f0",
+                borderRadius:10
+              }}
             >
-              Transferir entre locales
-            </button>
-          )}
-
-          <button
-            type="button"
-            style={{
-              ...styles.outlineButton,
-              border:"1px solid #fecaca",
-              background:"#fff1f2",
-              color:"#be123c",
-            }}
-            onClick={()=>seleccionarConceptoStock("BAJA")}
-          >
-            Bajas
-          </button>
+              <div>
+                <strong>{punto.nombre}</strong>
+                <div style={{color:"#64748b",fontSize:14}}>
+                  {punto.codigo||"-"} · {punto.descripcion||"Sin descripción"}
+                </div>
+              </div>
+              <button
+                type="button"
+                style={styles.outlineButton}
+                onClick={()=>comenzarEdicionPunto(punto)}
+              >
+                Editar
+              </button>
+            </div>
+          ))}
         </div>
+
+        {editarPuntoStock&&(
+          <form
+            onSubmit={guardarEdicionPunto}
+            style={{
+              ...styles.filtersGrid,
+              marginTop:20,
+              paddingTop:18,
+              borderTop:"1px solid #e2e8f0"
+            }}
+          >
+            <div style={styles.filterField}>
+              <label style={styles.label}>Nombre *</label>
+              <input
+                style={styles.input}
+                value={editarPuntoStock.nombre}
+                onChange={(e)=>setEditarPuntoStock((p)=>({...p,nombre:e.target.value}))}
+              />
+            </div>
+            <div style={styles.filterField}>
+              <label style={styles.label}>Código</label>
+              <input
+                style={styles.input}
+                value={editarPuntoStock.codigo}
+                onChange={(e)=>setEditarPuntoStock((p)=>({...p,codigo:e.target.value}))}
+              />
+            </div>
+            <div style={styles.filterField}>
+              <label style={styles.label}>Descripción</label>
+              <input
+                style={styles.input}
+                value={editarPuntoStock.descripcion}
+                onChange={(e)=>setEditarPuntoStock((p)=>({...p,descripcion:e.target.value}))}
+              />
+            </div>
+            <div style={{display:"flex",gap:10,alignItems:"end"}}>
+              <button type="submit" style={styles.button}>Guardar cambios</button>
+              <button
+                type="button"
+                style={styles.outlineButton}
+                onClick={()=>setEditarPuntoStock(null)}
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     )}
 
-    {movimientoStock&&<div style={{...styles.box,marginBottom:20}}>
-      <div style={styles.pageHeaderSmall}><div><h2 style={{margin:0}}>
-            {movimientoStock?.concepto==="PRODUCCION"
-              ?"Producción"
-              :"Compra / ingreso"}
-          </h2><p style={{color:"#64748b"}}>{movimientoStock.nombre} · {jornadaActiva?.punto_nombre}</p></div><button type="button" style={styles.outlineButton} onClick={()=>setMovimientoStock(null)}>Cerrar</button></div>
-      <div style={styles.filtersGrid}>
-        <div style={styles.filterField}><label style={styles.label}>Concepto</label><select style={styles.input} value={movimientoStock.concepto} onChange={e=>setMovimientoStock(p=>({...p,concepto:e.target.value}))}><option value="COMPRA">Compra</option><option value="PRODUCCION">Producción</option></select></div>
-        <div style={styles.filterField}><label style={styles.label}>Cantidad</label><input type="number" min="1" step="1" style={styles.input} value={movimientoStock.cantidad} onChange={e=>setMovimientoStock(p=>({...p,cantidad:e.target.value}))}/></div>
-        <div style={{...styles.filterField,gridColumn:"1 / -1"}}><label style={styles.label}>Observación *</label><textarea style={{...styles.input,minHeight:80}} value={movimientoStock.observacion} onChange={e=>setMovimientoStock(p=>({...p,observacion:e.target.value}))}/></div>
-      </div>
-      <button type="button" style={styles.button} onClick={confirmarMovimientoStock}>Confirmar ingreso</button>
-    </div>}
-
-    {stockDetalle && (
-      <div style={{ ...styles.box, marginBottom: 20 }}>
+    {mostrarNuevoProductoStock&&(
+      <div style={{...styles.box,marginBottom:20}}>
         <div style={styles.pageHeaderSmall}>
-          <h2 style={{ margin: 0 }}>Detalle de existencias</h2>
-
+          <div>
+            <h2 style={{margin:0}}>Nuevo producto</h2>
+            <p style={{color:"#64748b",margin:"6px 0 0"}}>
+              Crea el producto dentro de Stock. Después podrás ingresarlo por compra,
+              producción u otro ingreso.
+            </p>
+          </div>
           <button
             type="button"
             style={styles.outlineButton}
-            onClick={() => setStockDetalle(null)}
+            onClick={()=>setMostrarNuevoProductoStock(false)}
           >
             Cerrar
           </button>
         </div>
 
-        <div style={styles.filtersGrid}>
+        <form
+          onSubmit={crearProductoDesdeStock}
+          style={{...styles.filtersGrid,marginTop:18}}
+        >
           <div style={styles.filterField}>
-            <label style={styles.label}>Nombre</label>
+            <label style={styles.label}>Nombre *</label>
             <input
-              type="text"
-              value={stockDetalle.nombre || ""}
               style={styles.input}
-              readOnly
+              value={nuevoProductoStockForm.nombre}
+              onChange={(e)=>setNuevoProductoStockForm((p)=>({...p,nombre:e.target.value}))}
             />
           </div>
-
           <div style={styles.filterField}>
             <label style={styles.label}>Código</label>
             <input
-              type="text"
-              value={stockDetalle.codigo || ""}
               style={styles.input}
-              readOnly
+              value={nuevoProductoStockForm.codigo}
+              onChange={(e)=>setNuevoProductoStockForm((p)=>({...p,codigo:e.target.value}))}
             />
           </div>
-
-          <div style={styles.filterField}>
-            <label style={styles.label}>Categoría</label>
-            <input
-              type="text"
-              value={stockDetalle.categoria || ""}
-              style={styles.input}
-              readOnly
-            />
-          </div>
-
           <div style={styles.filterField}>
             <label style={styles.label}>Precio</label>
             <input
-              type="text"
-              value={Number(stockDetalle.precio || 0).toFixed(2)}
+              type="number"
+              step="0.01"
+              min="0"
               style={styles.input}
-              readOnly
+              value={nuevoProductoStockForm.precio}
+              onChange={(e)=>setNuevoProductoStockForm((p)=>({...p,precio:e.target.value}))}
             />
           </div>
-
           <div style={styles.filterField}>
-            <label style={styles.label}>Stock actual</label>
+            <label style={styles.label}>Familia / categoría</label>
             <input
-              type="text"
-              value={String(stockDetalle.stock ?? 0)}
               style={styles.input}
-              readOnly
+              value={nuevoProductoStockForm.categoria}
+              onChange={(e)=>setNuevoProductoStockForm((p)=>({...p,categoria:e.target.value}))}
+              placeholder="Bebidas, Brunch, Golosinas, Helados..."
             />
           </div>
-
           <div style={styles.filterField}>
-            <label style={styles.label}>Nuevo stock ingresado</label>
+            <label style={styles.label}>Stock mínimo</label>
             <input
-              type="text"
+              type="number"
+              min="0"
+              step="1"
+              style={styles.input}
+              value={nuevoProductoStockForm.stock_minimo}
+              onChange={(e)=>setNuevoProductoStockForm((p)=>({...p,stock_minimo:e.target.value}))}
+            />
+          </div>
+          <div style={styles.filterField}>
+            <label style={styles.label}>Ubicación inicial</label>
+            <select
+              style={styles.input}
               value={
-                stockEditado[stockDetalle.id] === undefined ||
-                stockEditado[stockDetalle.id] === ""
-                  ? "-"
-                  : String(stockEditado[stockDetalle.id])
+                nuevoProductoStockForm.ubicacion_inicial||
+                jornadaActiva?.punto_nombre||
+                ""
               }
+              onChange={(e)=>setNuevoProductoStockForm((p)=>({
+                ...p,
+                ubicacion_inicial:e.target.value
+              }))}
+            >
+              {puntosOperacion.filter((p)=>p.activo!==false).map((p)=>(
+                <option key={p.id} value={p.nombre}>{p.nombre}</option>
+              ))}
+            </select>
+          </div>
+          <div style={styles.filterField}>
+            <label style={styles.label}>Cantidad inicial</label>
+            <input
+              type="number"
+              min="0"
+              step="1"
               style={styles.input}
-              readOnly
+              value={nuevoProductoStockForm.cantidad_inicial}
+              onChange={(e)=>setNuevoProductoStockForm((p)=>({...p,cantidad_inicial:e.target.value}))}
+            />
+          </div>
+          <div style={{...styles.filterField,gridColumn:"1 / -1"}}>
+            <label style={styles.label}>Observación inicial</label>
+            <input
+              style={styles.input}
+              value={nuevoProductoStockForm.observacion_inicial}
+              onChange={(e)=>setNuevoProductoStockForm((p)=>({...p,observacion_inicial:e.target.value}))}
+            />
+          </div>
+          <button type="submit" style={styles.button}>Crear producto</button>
+        </form>
+      </div>
+    )}
+
+    <div style={{...styles.box,marginBottom:20}}>
+      <div style={styles.pageHeaderSmall}>
+        <div>
+          <h2 style={{margin:0}}>Movimiento de Stock</h2>
+          <p style={{color:"#64748b",margin:"6px 0 0"}}>
+            Selecciona primero si registrarás un ingreso o un egreso.
+          </p>
+        </div>
+      </div>
+
+      <div style={{
+        display:"grid",
+        gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",
+        gap:16,
+        marginTop:18
+      }}>
+        <button
+          type="button"
+          style={{
+            ...styles.button,
+            minHeight:82,
+            fontSize:20,
+            opacity:stockSeccion==="INGRESOS"?1:.82
+          }}
+          onClick={()=>cambiarSeccionStock("INGRESOS")}
+        >
+          INGRESOS
+        </button>
+
+        <button
+          type="button"
+          style={{
+            ...styles.outlineButton,
+            minHeight:82,
+            fontSize:20,
+            border:stockSeccion==="EGRESOS"
+              ?"2px solid #dc2626"
+              :"1px solid #cbd5e1",
+            color:"#b91c1c"
+          }}
+          onClick={()=>cambiarSeccionStock("EGRESOS")}
+        >
+          EGRESOS
+        </button>
+      </div>
+    </div>
+
+    {stockSeccion==="INGRESOS"&&(
+      <div style={{...styles.box,marginBottom:20}}>
+        <h2 style={{marginTop:0}}>Tipo de ingreso</h2>
+
+        <div style={styles.filterField}>
+          <label style={styles.label}>Seleccionar *</label>
+          <select
+            style={styles.input}
+            value={stockTipoIngreso}
+            onChange={(e)=>cambiarTipoIngresoStock(e.target.value)}
+          >
+            <option value="">Seleccionar tipo de ingreso</option>
+            <option value="COMPRA">1. Compras</option>
+            <option value="PRODUCCION_COCINA">2. Producción cocina</option>
+            <option value="TRANSFERENCIA_UBICACIONES">3. Transferencia entre ubicaciones</option>
+            <option value="TRANSFERENCIA_LOCALES">4. Transferencia entre locales</option>
+            <option value="OTROS">5. Otros</option>
+          </select>
+        </div>
+      </div>
+    )}
+
+    {stockSeccion==="EGRESOS"&&(
+      <div style={{...styles.box,marginBottom:20}}>
+        <h2 style={{marginTop:0}}>Tipo de egreso</h2>
+        <p style={{color:"#64748b"}}>
+          Estos movimientos son salidas administrativas de inventario.
+          <strong> No son ventas.</strong>
+        </p>
+
+        <div style={styles.filterField}>
+          <label style={styles.label}>Seleccionar *</label>
+          <select
+            style={styles.input}
+            value={stockTipoEgreso}
+            onChange={(e)=>cambiarTipoEgresoStock(e.target.value)}
+          >
+            <option value="">Seleccionar tipo de egreso</option>
+            <option value="BAJA">Bajas</option>
+            <option value="CORTESIA">Cortesía</option>
+          </select>
+        </div>
+      </div>
+    )}
+
+    {stockSeccion==="INGRESOS"&&stockTipoIngreso==="COMPRA"&&(
+      <div style={{...styles.box,marginBottom:20}}>
+        <h2 style={{marginTop:0}}>Compra a proveedor</h2>
+        <div style={styles.filtersGrid}>
+          <div style={styles.filterField}>
+            <label style={styles.label}>Número de factura *</label>
+            <input
+              style={styles.input}
+              value={stockCompraForm.numero_factura}
+              onChange={(e)=>setStockCompraForm((p)=>({...p,numero_factura:e.target.value}))}
+              placeholder="Ej. 001-001-000123456"
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Proveedor *</label>
+            <select
+              style={styles.input}
+              value={stockCompraForm.proveedor_id}
+              onChange={(e)=>setStockCompraForm((p)=>({
+                ...p,
+                proveedor_id:e.target.value,
+                proveedor_nuevo:e.target.value ? "" : p.proveedor_nuevo
+              }))}
+            >
+              <option value="">Nuevo proveedor / escribir abajo</option>
+              {proveedoresStock.map((prov)=>(
+                <option key={prov.id} value={prov.id}>{prov.nombre}</option>
+              ))}
+            </select>
+          </div>
+
+          {!stockCompraForm.proveedor_id&&(
+            <div style={styles.filterField}>
+              <label style={styles.label}>Nombre nuevo proveedor *</label>
+              <input
+                style={styles.input}
+                value={stockCompraForm.proveedor_nuevo}
+                onChange={(e)=>setStockCompraForm((p)=>({...p,proveedor_nuevo:e.target.value}))}
+                placeholder="Nombre del proveedor"
+              />
+            </div>
+          )}
+
+          <div style={{...styles.filterField,gridColumn:"1 / -1"}}>
+            <label style={styles.label}>Observación</label>
+            <input
+              style={styles.input}
+              value={stockCompraForm.observacion}
+              onChange={(e)=>setStockCompraForm((p)=>({...p,observacion:e.target.value}))}
+              placeholder="Observación opcional de la compra"
             />
           </div>
         </div>
       </div>
     )}
 
-
-    {transferenciaLocales&&(
+    {stockSeccion==="INGRESOS"&&stockTipoIngreso==="TRANSFERENCIA_UBICACIONES"&&(
       <div style={{...styles.box,marginBottom:20}}>
-        <div style={styles.pageHeaderSmall}>
-          <div>
-            <h2 style={{margin:0}}>Transferir entre locales</h2>
-            <p style={{color:"#64748b",margin:"6px 0 0"}}>
-              {transferenciaLocales.nombre} · Origen:{" "}
-              {jornadaActiva?.punto_nombre}
-            </p>
+        <h2 style={{marginTop:0}}>Transferencia entre ubicaciones</h2>
+        <div style={styles.filtersGrid}>
+          <div style={styles.filterField}>
+            <label style={styles.label}>Origen</label>
+            <input
+              style={styles.input}
+              value={jornadaActiva?.punto_nombre||"PRINCIPAL"}
+              readOnly
+            />
           </div>
-
-          <button
-            type="button"
-            style={styles.outlineButton}
-            onClick={()=>setTransferenciaLocales(null)}
-          >
-            Cerrar
-          </button>
+          <div style={styles.filterField}>
+            <label style={styles.label}>Ubicación destino *</label>
+            <select
+              style={styles.input}
+              value={stockOperacionForm.ubicacion_destino}
+              onChange={(e)=>setStockOperacionForm((p)=>({
+                ...p,
+                ubicacion_destino:e.target.value
+              }))}
+            >
+              <option value="">Seleccionar ubicación</option>
+              {puntosOperacion
+                .filter((p)=>p.activo!==false)
+                .filter((p)=>String(p.nombre).toUpperCase()!==String(jornadaActiva?.punto_nombre||"").toUpperCase())
+                .map((p)=>(
+                  <option key={p.id} value={p.nombre}>{p.nombre}</option>
+                ))}
+            </select>
+          </div>
+          <div style={{...styles.filterField,gridColumn:"1 / -1"}}>
+            <label style={styles.label}>Observación *</label>
+            <input
+              style={styles.input}
+              value={stockOperacionForm.observacion}
+              onChange={(e)=>setStockOperacionForm((p)=>({...p,observacion:e.target.value}))}
+              placeholder="Motivo de la transferencia"
+            />
+          </div>
         </div>
+      </div>
+    )}
 
+    {stockSeccion==="INGRESOS"&&stockTipoIngreso==="TRANSFERENCIA_LOCALES"&&(
+      <div style={{...styles.box,marginBottom:20}}>
+        <h2 style={{marginTop:0}}>Transferencia entre locales</h2>
         <div style={styles.filtersGrid}>
           <div style={styles.filterField}>
             <label style={styles.label}>Local / institución destino *</label>
             <select
               style={styles.input}
-              value={transferenciaLocales.institucion_destino_id||""}
+              value={stockOperacionForm.institucion_destino_id}
               onChange={async(e)=>{
                 const valor=e.target.value;
-                setTransferenciaLocales((p)=>({
+                setStockOperacionForm((p)=>({
                   ...p,
                   institucion_destino_id:valor,
-                  punto_destino_id:"",
+                  punto_destino_id:""
                 }));
                 await cargarPuntosDestinoLocal(valor);
               }}
             >
               <option value="">Seleccionar local</option>
               {institucionesTransferencia
-                .filter(
-                  (i)=>
-                    Number(i.id)!==Number(obtenerInstitucionActivaId())
-                )
+                .filter((i)=>Number(i.id)!==Number(obtenerInstitucionActivaId()))
                 .map((i)=>(
-                  <option key={i.id} value={i.id}>
-                    {i.nombre}
-                  </option>
+                  <option key={i.id} value={i.id}>{i.nombre}</option>
                 ))}
             </select>
           </div>
@@ -11891,408 +12494,435 @@ onClick={() => eliminarEgreso(egreso)}
             <label style={styles.label}>Ubicación destino *</label>
             <select
               style={styles.input}
-              value={transferenciaLocales.punto_destino_id||""}
-              onChange={(e)=>
-                setTransferenciaLocales((p)=>({
-                  ...p,
-                  punto_destino_id:e.target.value,
-                }))
-              }
+              value={stockOperacionForm.punto_destino_id}
+              disabled={!stockOperacionForm.institucion_destino_id}
+              onChange={(e)=>setStockOperacionForm((p)=>({
+                ...p,
+                punto_destino_id:e.target.value
+              }))}
             >
               <option value="">Seleccionar ubicación</option>
               {puntosDestinoLocal.map((p)=>(
-                <option key={p.id} value={p.id}>
-                  {p.nombre}
-                </option>
+                <option key={p.id} value={p.id}>{p.nombre}</option>
               ))}
             </select>
-          </div>
-
-          <div style={styles.filterField}>
-            <label style={styles.label}>Cantidad *</label>
-            <input
-              type="number"
-              min="1"
-              step="1"
-              style={styles.input}
-              value={transferenciaLocales.cantidad||"1"}
-              onChange={(e)=>
-                setTransferenciaLocales((p)=>({
-                  ...p,
-                  cantidad:e.target.value,
-                }))
-              }
-            />
           </div>
 
           <div style={{...styles.filterField,gridColumn:"1 / -1"}}>
             <label style={styles.label}>Observación *</label>
-            <textarea
-              style={{...styles.input,minHeight:80}}
-              value={transferenciaLocales.observacion||""}
-              onChange={(e)=>
-                setTransferenciaLocales((p)=>({
-                  ...p,
-                  observacion:e.target.value,
-                }))
-              }
+            <input
+              style={styles.input}
+              value={stockOperacionForm.observacion}
+              onChange={(e)=>setStockOperacionForm((p)=>({...p,observacion:e.target.value}))}
               placeholder="Motivo / referencia de la transferencia"
             />
           </div>
         </div>
-
-        <button
-          type="button"
-          style={styles.button}
-          onClick={confirmarTransferenciaLocales}
-        >
-          Confirmar transferencia entre locales
-        </button>
       </div>
     )}
 
-    {stockTransferencia && (
-      <div style={{ ...styles.box, marginBottom: 20 }}>
+    {stockSeccion==="INGRESOS"&&
+      ["PRODUCCION_COCINA","OTROS"].includes(stockTipoIngreso)&&(
+      <div style={{...styles.box,marginBottom:20}}>
+        <h2 style={{marginTop:0}}>
+          {stockTipoIngreso==="PRODUCCION_COCINA"
+            ?"Producción cocina"
+            :"Otros ingresos"}
+        </h2>
+        <div style={styles.filterField}>
+          <label style={styles.label}>Observación *</label>
+          <input
+            style={styles.input}
+            value={stockOperacionForm.observacion}
+            onChange={(e)=>setStockOperacionForm((p)=>({...p,observacion:e.target.value}))}
+            placeholder={
+              stockTipoIngreso==="PRODUCCION_COCINA"
+                ?"Ej. Producción del turno de cocina"
+                :"Describe el motivo del ingreso"
+            }
+          />
+        </div>
+      </div>
+    )}
+
+    {stockSeccion==="EGRESOS"&&stockTipoEgreso&&(
+      <div style={{...styles.box,marginBottom:20}}>
+        <h2 style={{marginTop:0}}>
+          {stockTipoEgreso==="CORTESIA"?"Cortesía":"Baja de inventario"}
+        </h2>
+
+        <div style={styles.filtersGrid}>
+          {stockTipoEgreso==="CORTESIA"&&(
+            <div style={styles.filterField}>
+              <label style={styles.label}>¿A quién se entrega? *</label>
+              <input
+                style={styles.input}
+                value={stockOperacionForm.destinatario_cortesia}
+                onChange={(e)=>setStockOperacionForm((p)=>({
+                  ...p,
+                  destinatario_cortesia:e.target.value
+                }))}
+                placeholder="Nombre de la persona / institución"
+              />
+            </div>
+          )}
+
+          <div style={{
+            ...styles.filterField,
+            gridColumn:stockTipoEgreso==="CORTESIA"?"auto":"1 / -1"
+          }}>
+            <label style={styles.label}>
+              {stockTipoEgreso==="CORTESIA"
+                ?"¿Por qué se entrega? / Observación *"
+                :"Motivo / Observación *"}
+            </label>
+            <input
+              style={styles.input}
+              value={stockOperacionForm.observacion}
+              onChange={(e)=>setStockOperacionForm((p)=>({...p,observacion:e.target.value}))}
+              placeholder={
+                stockTipoEgreso==="CORTESIA"
+                  ?"Ej. Invitado institucional, evento, atención..."
+                  :"Describe la razón de la baja"
+              }
+            />
+          </div>
+        </div>
+      </div>
+    )}
+
+    {(
+      (stockSeccion==="INGRESOS"&&stockTipoIngreso)||
+      (stockSeccion==="EGRESOS"&&stockTipoEgreso)
+    )&&(
+      <div style={{...styles.box,marginBottom:20}}>
         <div style={styles.pageHeaderSmall}>
           <div>
-            <h2 style={{ margin: 0 }}>Transferencia de stock entre puntos</h2>
-            <p style={{ margin: "6px 0 0", color: "#64748b" }}>
-              La transferencia resta del punto origen y suma exactamente la misma cantidad al punto destino.
+            <h2 style={{margin:0}}>Seleccionar productos</h2>
+            <p style={{color:"#64748b",margin:"6px 0 0"}}>
+              Busca por producto o filtra por familia. Puedes seleccionar varios
+              productos y escribir cantidades de 100, 500, 1000 o las que necesites.
             </p>
           </div>
+          <div style={{
+            padding:"8px 12px",
+            borderRadius:999,
+            background:"#dcfce7",
+            fontWeight:800
+          }}>
+            Seleccionados: {itemsValidosOperacionStock().length}
+          </div>
+        </div>
 
+        <div style={{
+          display:"grid",
+          gridTemplateColumns:"minmax(240px,1fr) minmax(220px,320px)",
+          gap:12,
+          marginTop:18
+        }}>
+          <div style={styles.filterField}>
+            <label style={styles.label}>Buscar producto</label>
+            <input
+              style={styles.input}
+              value={stockBusquedaOperacion}
+              onChange={(e)=>setStockBusquedaOperacion(e.target.value)}
+              placeholder="Nombre, código o familia"
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Familia de producto</label>
+            <select
+              style={styles.input}
+              value={stockFamiliaOperacion}
+              onChange={(e)=>setStockFamiliaOperacion(e.target.value)}
+            >
+              <option value="TODAS">Todas las familias</option>
+              {familiasOperacionStock.map((familia)=>(
+                <option key={familia} value={familia}>{familia}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div style={{...styles.tableWrap,marginTop:16,maxHeight:520,overflowY:"auto"}}>
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                <th style={styles.th}>Seleccionar</th>
+                <th style={styles.th}>Producto</th>
+                <th style={styles.th}>Código</th>
+                <th style={styles.th}>Familia</th>
+                <th style={styles.th}>Stock en {jornadaActiva?.punto_nombre||"punto"}</th>
+                <th style={styles.th}>Cantidad</th>
+              </tr>
+            </thead>
+            <tbody>
+              {productosOperacionStock.length===0?(
+                <tr>
+                  <td colSpan={6} style={styles.td}>
+                    No hay productos para este filtro.
+                  </td>
+                </tr>
+              ):(
+                productosOperacionStock.map((producto)=>{
+                  const id=String(producto.id);
+                  const seleccionado=Object.prototype.hasOwnProperty.call(
+                    stockItemsOperacion,id
+                  );
+
+                  return (
+                    <tr key={producto.id}>
+                      <td style={styles.td}>
+                        <input
+                          type="checkbox"
+                          checked={seleccionado}
+                          onChange={()=>toggleProductoOperacionStock(producto)}
+                        />
+                      </td>
+                      <td style={{...styles.td,fontWeight:800}}>
+                        {producto.nombre}
+                      </td>
+                      <td style={styles.td}>{producto.codigo||"-"}</td>
+                      <td style={styles.td}>{producto.categoria||"Sin familia"}</td>
+                      <td style={styles.td}>
+                        {stockProductoEnPunto(
+                          producto.id,
+                          jornadaActiva?.punto_nombre||"PRINCIPAL"
+                        )}
+                      </td>
+                      <td style={styles.td}>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          disabled={!seleccionado}
+                          value={seleccionado?stockItemsOperacion[id]:""}
+                          onChange={(e)=>cambiarCantidadOperacionStock(
+                            producto.id,
+                            e.target.value
+                          )}
+                          style={{
+                            ...styles.input,
+                            minWidth:120,
+                            opacity:seleccionado?1:.5
+                          }}
+                          placeholder="0"
+                        />
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={{
+          display:"flex",
+          justifyContent:"flex-end",
+          gap:12,
+          marginTop:18
+        }}>
           <button
             type="button"
             style={styles.outlineButton}
-            onClick={() => setStockTransferencia(null)}
+            onClick={limpiarOperacionStock}
           >
-            Cerrar
+            Limpiar
           </button>
-        </div>
-
-        <div style={styles.filtersGrid}>
-          <div style={styles.filterField}>
-            <label style={styles.label}>Producto</label>
-            <input
-              type="text"
-              value={stockTransferencia.nombre || ""}
-              style={styles.input}
-              readOnly
-            />
-          </div>
-
-          <div style={styles.filterField}>
-            <label style={styles.label}>Punto origen</label>
-            <input value={jornadaActiva?.punto_nombre||"PRINCIPAL"} style={styles.input} readOnly />
-          </div>
-
-          <div style={styles.filterField}>
-            <label style={styles.label}>Stock disponible en origen</label>
-            <input
-              type="text"
-              value={String(
-                stockProductoEnPunto(
-                  stockTransferencia.id,
-                  stockTransferencia.ubicacion_origen || "PRINCIPAL"
-                )
-              )}
-              style={styles.input}
-              readOnly
-            />
-          </div>
-
-          <div style={styles.filterField}>
-            <label style={styles.label}>Punto destino *</label>
-            <input
-              type="text"
-              list="puntos-inventario-transferencia"
-              value={stockTransferencia.ubicacion_destino || ""}
-              onChange={(e) =>
-                setStockTransferencia((prev) => ({
-                  ...prev,
-                  ubicacion_destino: e.target.value.toUpperCase(),
-                }))
-              }
-              style={styles.input}
-              placeholder="Ej. PUNTO B"
-            />
-            <datalist id="puntos-inventario-transferencia">
-              {puntosInventario.map((punto) => (
-                <option key={punto} value={punto} />
-              ))}
-            </datalist>
-          </div>
-
-          <div style={styles.filterField}>
-            <label style={styles.label}>Cantidad a transferir *</label>
-            <input
-              type="number"
-              min="1"
-              step="1"
-              value={stockTransferencia.cantidad ?? "1"}
-              onChange={(e) =>
-                setStockTransferencia((prev) => ({
-                  ...prev,
-                  cantidad: e.target.value,
-                }))
-              }
-              style={styles.input}
-            />
-          </div>
-
-          <div style={{ ...styles.filterField, gridColumn: "1 / -1" }}>
-            <label style={styles.label}>Observación / motivo *</label>
-            <textarea
-              value={stockTransferencia.observacion || ""}
-              onChange={(e) =>
-                setStockTransferencia((prev) => ({
-                  ...prev,
-                  observacion: e.target.value,
-                }))
-              }
-              style={{ ...styles.input, minHeight: 85, resize: "vertical" }}
-              placeholder="Ej. Envío de producto al kiosco del Punto B"
-            />
-          </div>
-        </div>
-
-        <div style={styles.filterButtons}>
           <button
             type="button"
             style={styles.button}
-            onClick={confirmarTransferenciaStock}
+            onClick={prepararConfirmacionOperacionStock}
           >
-            Confirmar transferencia
+            Guardar y revisar
           </button>
         </div>
       </div>
     )}
 
-    {bajaStock && (
-      <div style={{ ...styles.box, marginBottom: 20 }}>
-        <div style={styles.pageHeaderSmall}>
-          <div>
-            <h2 style={{ margin: 0 }}>Dar de baja unidades</h2>
-            <p style={{ margin: "6px 0 0", color: "#64748b" }}>
-              Usa esta opción cuando el producto se dañó, venció, se perdió o debe salir definitivamente del inventario.
-            </p>
+    {stockConfirmacion&&(
+      <div style={{
+        position:"fixed",
+        inset:0,
+        zIndex:100005,
+        background:"rgba(15,23,42,.68)",
+        display:"flex",
+        alignItems:"center",
+        justifyContent:"center",
+        padding:16
+      }}>
+        <div style={{
+          width:"min(760px,96vw)",
+          maxHeight:"90vh",
+          overflowY:"auto",
+          background:"#fff",
+          borderRadius:18,
+          padding:24
+        }}>
+          <h2 style={{marginTop:0}}>Confirmar movimiento</h2>
+          <p>
+            Revisa la información antes de afectar las existencias.
+          </p>
+
+          <div style={{
+            display:"grid",
+            gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",
+            gap:10,
+            margin:"18px 0"
+          }}>
+            <div style={styles.statCard}>
+              <span>Movimiento</span>
+              <strong>{stockConfirmacion.grupo}</strong>
+            </div>
+            <div style={styles.statCard}>
+              <span>Tipo</span>
+              <strong>{String(stockConfirmacion.tipo).replaceAll("_"," ")}</strong>
+            </div>
+            <div style={styles.statCard}>
+              <span>Punto</span>
+              <strong>{jornadaActiva?.punto_nombre||"-"}</strong>
+            </div>
+            <div style={styles.statCard}>
+              <span>Productos</span>
+              <strong>{stockConfirmacion.items?.length||0}</strong>
+            </div>
           </div>
 
-          <button
-            type="button"
-            style={styles.outlineButton}
-            onClick={() => setBajaStock(null)}
-          >
-            Cerrar
-          </button>
-        </div>
+          {stockConfirmacion.tipo==="COMPRA"&&(
+            <div style={{marginBottom:16}}>
+              <strong>Factura:</strong> {stockCompraForm.numero_factura||"-"}
+              <br/>
+              <strong>Proveedor:</strong>{" "}
+              {proveedoresStock.find(
+                (p)=>Number(p.id)===Number(stockCompraForm.proveedor_id)
+              )?.nombre||
+                stockCompraForm.proveedor_nuevo||
+                "-"}
+            </div>
+          )}
 
-        <div style={styles.filtersGrid}>
-          <div style={styles.filterField}>
-            <label style={styles.label}>Producto</label>
-            <input
-              type="text"
-              value={bajaStock.nombre || ""}
-              style={styles.input}
-              readOnly
-            />
+          {stockConfirmacion.tipo==="CORTESIA"&&(
+            <div style={{marginBottom:16}}>
+              <strong>Destinatario de cortesía:</strong>{" "}
+              {stockOperacionForm.destinatario_cortesia}
+            </div>
+          )}
+
+          <div style={styles.tableWrap}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Producto</th>
+                  <th style={styles.th}>Cantidad</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(stockConfirmacion.items||[]).map((item)=>{
+                  const producto=productos.find(
+                    (p)=>Number(p.id)===Number(item.producto_id)
+                  );
+                  return (
+                    <tr key={item.producto_id}>
+                      <td style={styles.td}>
+                        {producto?.nombre||`Producto #${item.producto_id}`}
+                      </td>
+                      <td style={{...styles.td,fontWeight:900}}>
+                        {item.cantidad}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
 
-          <div style={styles.filterField}>
-            <label style={styles.label}>Punto *</label>
-            <select
-              value={bajaStock.ubicacion || "PRINCIPAL"}
-              onChange={(e) =>
-                setBajaStock((prev) => ({ ...prev, ubicacion: e.target.value }))
-              }
-              style={styles.input}
+          <div style={{
+            display:"flex",
+            justifyContent:"flex-end",
+            gap:12,
+            marginTop:20
+          }}>
+            <button
+              type="button"
+              style={styles.outlineButton}
+              disabled={guardandoStockOperacion}
+              onClick={()=>setStockConfirmacion(null)}
             >
-              {existenciasDeProducto(bajaStock.id).map((fila) => (
-                <option key={fila.ubicacion} value={fila.ubicacion}>
-                  {fila.ubicacion} ({Number(fila.stock || 0)})
-                </option>
-              ))}
-              {!existenciasDeProducto(bajaStock.id).length && (
-                <option value="PRINCIPAL">
-                  PRINCIPAL ({Number(bajaStock.stock || 0)})
-                </option>
-              )}
-            </select>
+              Volver
+            </button>
+            <button
+              type="button"
+              style={styles.button}
+              disabled={guardandoStockOperacion}
+              onClick={confirmarOperacionStockNueva}
+            >
+              {guardandoStockOperacion
+                ?"Guardando..."
+                :"Confirmar"}
+            </button>
           </div>
-
-          <div style={styles.filterField}>
-            <label style={styles.label}>Cantidad a dar de baja *</label>
-            <input
-              type="number"
-              min="1"
-              step="1"
-              value={bajaStock.cantidad || "1"}
-              onChange={(e) =>
-                setBajaStock((prev) => ({ ...prev, cantidad: e.target.value }))
-              }
-              style={styles.input}
-            />
-          </div>
-
-          <div style={styles.filterField}><label style={styles.label}>Motivo de baja *</label><select style={styles.input} value={bajaStock.motivo_baja||"DAÑO"} onChange={e=>setBajaStock(p=>({...p,motivo_baja:e.target.value}))}><option value="DAÑO">Daño</option>
-              <option value="PERDIDA">Pérdida</option>
-              <option value="CORTESIA">Cortesía</option>
-              <option value="OTRO">Otro</option></select></div>
-          <div style={{ ...styles.filterField, gridColumn: "1 / -1" }}>
-            <label style={styles.label}>Observación / motivo de la baja *</label>
-            <textarea
-              value={bajaStock.observacion || ""}
-              onChange={(e) =>
-                setBajaStock((prev) => ({ ...prev, observacion: e.target.value }))
-              }
-              style={{ ...styles.input, minHeight: 85, resize: "vertical" }}
-              placeholder="Ej. Producto dañado / vencido / pérdida"
-            />
-          </div>
-        </div>
-
-        <div style={styles.filterButtons}>
-          <button
-            type="button"
-            style={styles.deleteButton || styles.dangerButton || styles.button}
-            onClick={confirmarBajaStock}
-          >
-            Confirmar baja
-          </button>
         </div>
       </div>
     )}
 
     <div style={styles.box}>
       <div style={styles.pageHeaderSmall}>
-        <input
-          type="text"
-          placeholder="Buscar"
-          value={busquedaInventario}
-          onChange={(e) => setBusquedaInventario(e.target.value)}
-          style={styles.searchInput}
-        />
-
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <label style={{ fontWeight: 700 }}>Punto activo:</label>
-          <div style={{...styles.select,minWidth:180,background:"#eef6ff",fontWeight:900}}>{jornadaActiva?.punto_nombre||puntoInventarioSeleccionado}</div>
+        <div>
+          <h2 style={{margin:0}}>Existencias actuales</h2>
+          <p style={{color:"#64748b",margin:"6px 0 0"}}>
+            Consulta del stock disponible por punto. Las ventas siguen su flujo
+            independiente y no se registran como egresos manuales de Stock.
+          </p>
         </div>
       </div>
 
-      <div style={styles.tableWrap}>
+      <div style={{...styles.tableWrap,marginTop:16}}>
         <table style={styles.table}>
           <thead>
             <tr>
-              <th style={styles.th}>Nombre</th>
+              <th style={styles.th}>Producto</th>
               <th style={styles.th}>Código</th>
-              <th style={styles.th}>Precio</th>
-              <th style={styles.th}>Categoría</th>
+              <th style={styles.th}>Familia</th>
               <th style={styles.th}>Stock por puntos</th>
-              <th style={styles.th}>Nuevo stock del punto activo</th>
-              <th style={styles.th}>Acciones de actualización</th>
-            </tr>
-
-            <tr>
-              <th style={styles.th}></th>
-              <th style={styles.th}></th>
-              <th style={styles.th}></th>
-              <th style={styles.th}>
-                <select style={styles.select} value={filtroCategoriaStock} onChange={e=>setFiltroCategoriaStock(e.target.value)}>
-                  <option value="">Todas las categorías</option>
-                  {[...new Set(productos.map(p=>String(p.categoria||"").trim()).filter(Boolean))].sort().map(c=><option key={c} value={c}>{c}</option>)}
-                </select>
-              </th>
-              <th style={styles.th}></th>
-              <th style={styles.th}></th>
-              <th style={styles.th}></th>
+              <th style={styles.th}>Total</th>
             </tr>
           </thead>
-
           <tbody>
             {productos
-              .filter((p)=>{
-                const n=String(p.nombre||"").toLowerCase().includes(busquedaInventario.toLowerCase());
-                const c=!filtroCategoriaStock||String(p.categoria||"")===filtroCategoriaStock;
-                return n&&c;
-              })
-              .map((producto) => (
-                <tr key={producto.id}>
-                  <td style={styles.td}>{producto.nombre}</td>
-                  <td style={styles.td}>{producto.codigo || ""}</td>
-                  <td style={styles.td}>
-                    {Number(producto.precio || 0).toFixed(4)}
-                  </td>
-                  <td style={styles.td}>{producto.categoria}</td>
-                  <td style={styles.td}>
-                    <div style={{ fontSize: 13, lineHeight: 1.45 }}>
-                      {resumenStockPorPuntos(producto)}
-                    </div>
-                  </td>
-                  <td style={styles.td}>
-                    <input
-                      type="number"
-                      value={stockEditado[producto.id] ?? ""}
-                      onChange={(e) =>
-                        setStockEditado((prev) => ({
-                          ...prev,
-                          [producto.id]: e.target.value,
-                        }))
-                      }
-                      style={{ ...styles.input, minWidth: 90, padding: "10px" }}
-                      placeholder={`Actual ${stockProductoEnPunto(producto.id, puntoInventarioSeleccionado)}`}
-                    />
-                  </td>
-                  <td style={styles.td}>
-                    <div style={{ display: "flex", gap: 10 }}>
-                      <button
-                        type="button"
-                        style={styles.saveIconButton}
-                        onClick={() => guardarStockProducto(producto)}
-                        title="Guardar stock"
-                      >
-                        💾
-                      </button>
+              .filter((p)=>p?.activo!==false)
+              .map((producto)=>{
+                const existencias=existenciasInventario.filter(
+                  (e)=>Number(e.producto_id)===Number(producto.id)
+                );
+                const total=existencias.reduce(
+                  (s,e)=>s+Number(e.stock||0),
+                  0
+                );
 
-                      {puede("inventario.gestionar")&&(
-                        <button
-                          type="button"
-                          style={styles.viewIconButton}
-                          onClick={()=>abrirPanelMovimientoStock(producto)}
-                          title="Movimientos de stock"
-                        >
-                          ⇄
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        style={styles.viewIconButton}
-                        onClick={() => verMovimientosStockNuevo(producto)}
-                        title="Ver movimientos"
-                      >
-                        ◉
-                      </button>
-
-                      <button
-                        type="button"
-                        style={styles.deleteIconButton}
-                        onClick={() => eliminarStockProductoNuevo(producto)}
-                        title="Dar de baja unidades"
-                      >
-                        🗑
-                      </button>
-
-                      <button
-                        type="button"
-                        style={styles.moveIconButton}
-                        onClick={() => transferirStockProductoNuevo(producto)}
-                        title="Transferir stock"
-                      >
-                        ⇄
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                return (
+                  <tr key={producto.id}>
+                    <td style={{...styles.td,fontWeight:800}}>
+                      {producto.nombre}
+                    </td>
+                    <td style={styles.td}>{producto.codigo||"-"}</td>
+                    <td style={styles.td}>{producto.categoria||"-"}</td>
+                    <td style={styles.td}>
+                      {existencias.length
+                        ? existencias
+                            .map(
+                              (e)=>`${e.ubicacion}: ${Number(e.stock||0)}`
+                            )
+                            .join(" | ")
+                        : "Sin existencias"}
+                    </td>
+                    <td style={{...styles.td,fontWeight:900}}>
+                      {total}
+                    </td>
+                  </tr>
+                );
+              })}
           </tbody>
         </table>
       </div>
