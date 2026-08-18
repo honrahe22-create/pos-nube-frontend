@@ -535,6 +535,8 @@ const [cierreDetalle, setCierreDetalle] = useState(null);
 const [guardandoCierre, setGuardandoCierre] = useState(false);
 const [cargandoCierres, setCargandoCierres] = useState(false);
 const [resumenCierreServidor, setResumenCierreServidor] = useState(null);
+const [cierreConsolidado, setCierreConsolidado] = useState(null);
+const [cargandoConsolidado, setCargandoConsolidado] = useState(false);
 const [cierreForm, setCierreForm] = useState({
   fecha: obtenerFechaEcuadorISO(),
   negocio: "POS NUBE",
@@ -6464,7 +6466,7 @@ Disponible: ${formatearMoneda(
       const token = localStorage.getItem("token");
       const institucionId = obtenerInstitucionActivaId();
       const respuesta = await fetch(
-        `${API_URL}/api/cierres/resumen?institucion_id=${institucionId}&fecha=${fecha}`,
+        `${API_URL}/api/cierres/resumen?institucion_id=${institucionId}&fecha=${fecha}&jornada_id=${Number(jornadaActiva?.id || 0)}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const data = await respuesta.json();
@@ -6525,6 +6527,7 @@ Disponible: ${formatearMoneda(
         },
         body: JSON.stringify({
           institucion_id: Number(institucionId),
+          jornada_id: Number(jornadaActiva?.id || 0),
           fecha: cierreForm.fecha,
           negocio: cierreForm.negocio || "POS NUBE",
           efectivo_contado: totalEfectivoContado,
@@ -6553,6 +6556,39 @@ Disponible: ${formatearMoneda(
       alert(error.message || "No se pudo guardar el cierre.");
     } finally {
       setGuardandoCierre(false);
+    }
+  };
+
+  const verCierreConsolidado = async () => {
+    try {
+      setCargandoConsolidado(true);
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+      const fecha = cierreCajaFiltros.fecha_fin || obtenerFechaEcuadorISO();
+
+      const respuesta = await fetch(
+        `${API_URL}/api/cierres/consolidado?institucion_id=${institucionId}&fecha=${fecha}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await respuesta.json();
+
+      if (!respuesta.ok) {
+        throw new Error(
+          data.message || data.error || "No se pudo calcular el cierre total"
+        );
+      }
+
+      setCierreConsolidado(data);
+    } catch (error) {
+      console.error("Error cargando cierre total:", error);
+      alert(error.message || "No se pudo calcular el cierre total.");
+    } finally {
+      setCargandoConsolidado(false);
     }
   };
 
@@ -7715,6 +7751,17 @@ if (!usuario) {
         >
           Crear cierre de caja
         </button>
+
+        {["SUPER_ADMIN","ADMIN","ENCARGADO_LOCAL"].includes(rolActual)&&(
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={verCierreConsolidado}
+            disabled={cargandoConsolidado}
+          >
+            {cargandoConsolidado ? "Calculando..." : "Cierre total del local"}
+          </button>
+        )}
       </div>
     </div>
 
@@ -7738,14 +7785,15 @@ if (!usuario) {
       <div style={styles.tableWrap}>
         <table style={styles.table}>
           <thead><tr>
-            <th style={styles.th}>Usuario</th><th style={styles.th}>Fecha</th><th style={styles.th}>Efectivo contado</th>
+            <th style={styles.th}>Operador</th><th style={styles.th}>Ubicación</th><th style={styles.th}>Fecha</th><th style={styles.th}>Efectivo contado</th>
             <th style={styles.th}>Recargas efectivo</th><th style={styles.th}>Transferencia manual</th>
             <th style={styles.th}>Ventas efectivo</th><th style={styles.th}>Ventas transferencia</th>
             <th style={styles.th}>Egresos</th><th style={styles.th}>Diferencia</th><th style={styles.th}>Observación</th><th style={styles.th}>Acciones</th>
           </tr></thead>
           <tbody>
-            {cargandoCierres ? <tr><td colSpan={11} style={styles.td}>Cargando cierres...</td></tr> : cierresCaja.length===0 ? <tr><td colSpan={11} style={styles.td}>No hay cierres registrados.</td></tr> : cierresCaja.map((c)=><tr key={c.id}>
+            {cargandoCierres ? <tr><td colSpan={12} style={styles.td}>Cargando cierres...</td></tr> : cierresCaja.length===0 ? <tr><td colSpan={12} style={styles.td}>No hay cierres registrados.</td></tr> : cierresCaja.map((c)=><tr key={c.id}>
               <td style={styles.td}>{c.usuario_nombre || c.usuario_correo || "Sistema"}</td>
+              <td style={{...styles.td,fontWeight:800}}>{c.punto_nombre || "HISTÓRICO"}</td>
               <td style={styles.td}>{formatearSoloFecha(c.fecha)}</td>
               <td style={styles.td}>{formatearMoneda(c.efectivo_contado)}</td>
               <td style={styles.td}>{formatearMoneda(c.recargas_efectivo)}</td>
@@ -7772,7 +7820,36 @@ if (!usuario) {
           <div style={{flex:"1 1 auto",minHeight:0,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",touchAction:"pan-y",overscrollBehaviorY:"contain",padding:"14px",boxSizing:"border-box"}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,220px),1fr))",gap:16,marginTop:18,width:"100%",minWidth:0}}>
             <div style={styles.filterField}><label style={styles.label}>Fecha de cierre</label><input type="date" style={styles.input} value={cierreForm.fecha} onChange={async(e)=>{const fecha=e.target.value;setCierreForm({...cierreForm,fecha});await cargarResumenCierre(fecha);}}/></div>
-            <div style={styles.filterField}><label style={styles.label}>Usuario</label><input style={styles.input} value={usuario?.nombre || usuario?.correo || "Usuario"} readOnly/></div>
+            <div style={styles.filterField}>
+              <label style={styles.label}>Operador</label>
+              <input
+                style={styles.input}
+                value={
+                  jornadaActiva?.usuario_nombre ||
+                  jornadaActiva?.usuario_correo ||
+                  usuario?.nombre ||
+                  usuario?.correo ||
+                  "Operador"
+                }
+                readOnly
+              />
+            </div>
+            <div style={styles.filterField}>
+              <label style={styles.label}>Ubicación</label>
+              <input
+                style={{...styles.input,fontWeight:900}}
+                value={jornadaActiva?.punto_nombre || "SIN UBICACIÓN"}
+                readOnly
+              />
+            </div>
+            <div style={styles.filterField}>
+              <label style={styles.label}>Jornada</label>
+              <input
+                style={styles.input}
+                value={jornadaActiva?.id ? `#${jornadaActiva.id}` : "Sin jornada"}
+                readOnly
+              />
+            </div>
             <div style={styles.filterFieldWide}><label style={styles.label}>Negocio</label><input style={styles.input} value={cierreForm.negocio} onChange={(e)=>setCierreForm({...cierreForm,negocio:e.target.value})}/></div>
           </div>
           <h3 style={{marginTop:24}}>Total de dinero: {formatearMoneda(totalEfectivoContado)}</h3>
@@ -7880,6 +7957,25 @@ if (!usuario) {
           {resumenCierreServidor && (
             <div style={{ ...styles.box, marginTop: 24 }}>
               <h3>Resumen esperado del sistema</h3>
+              <div style={{
+                display:"grid",
+                gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",
+                gap:10,
+                marginBottom:14
+              }}>
+                <div style={{padding:10,border:"1px solid #dbeafe",borderRadius:10}}>
+                  <strong>Ubicación</strong>
+                  <div>{resumenCierreServidor.punto_nombre || jornadaActiva?.punto_nombre || "-"}</div>
+                </div>
+                <div style={{padding:10,border:"1px solid #dbeafe",borderRadius:10}}>
+                  <strong>Operador</strong>
+                  <div>{resumenCierreServidor.operador_nombre || jornadaActiva?.usuario_nombre || jornadaActiva?.usuario_correo || "-"}</div>
+                </div>
+                <div style={{padding:10,border:"1px solid #dbeafe",borderRadius:10}}>
+                  <strong>Jornada</strong>
+                  <div>#{resumenCierreServidor.jornada_id || jornadaActiva?.id || "-"}</div>
+                </div>
+              </div>
               <div
                 style={{
                   padding: "10px 12px",
@@ -7925,6 +8021,100 @@ if (!usuario) {
       </div>
     ), document.body)}
 
+
+    {cierreConsolidado && createPortal((
+      <div style={{
+        position:"fixed", inset:0, zIndex:100001,
+        background:"rgba(15,23,42,.68)",
+        display:"flex", alignItems:"center", justifyContent:"center",
+        padding:12
+      }}>
+        <div style={{
+          width:"min(1000px,96vw)",
+          maxHeight:"94vh",
+          overflowY:"auto",
+          background:"#fff",
+          borderRadius:16,
+          padding:20
+        }}>
+          <div style={{
+            display:"flex",justifyContent:"space-between",
+            alignItems:"center",gap:12,flexWrap:"wrap"
+          }}>
+            <div>
+              <h2 style={{margin:0}}>Cierre total del local</h2>
+              <p style={{margin:"6px 0 0",color:"#64748b"}}>
+                {institucionActiva?.nombre || INSTITUCIONES.find(i=>Number(i.id)===Number(obtenerInstitucionActivaId()))?.nombre || "Institución"} · {formatearSoloFecha(cierreConsolidado.fecha)}
+              </p>
+            </div>
+            <button
+              type="button"
+              style={styles.outlineButton}
+              onClick={()=>setCierreConsolidado(null)}
+            >
+              Cerrar
+            </button>
+          </div>
+
+          <div style={{
+            display:"grid",
+            gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",
+            gap:10,
+            marginTop:18
+          }}>
+            <div style={styles.statCard}><span>Ventas efectivo</span><strong>{formatearMoneda(cierreConsolidado.ventas_efectivo)}</strong></div>
+            <div style={styles.statCard}><span>Ventas transferencia</span><strong>{formatearMoneda(cierreConsolidado.ventas_transferencia)}</strong></div>
+            <div style={styles.statCard}><span>Ventas tarjeta</span><strong>{formatearMoneda(cierreConsolidado.ventas_tarjeta)}</strong></div>
+            <div style={styles.statCard}><span>Recargas efectivo</span><strong>{formatearMoneda(cierreConsolidado.recargas_efectivo)}</strong></div>
+            <div style={styles.statCard}><span>Egresos</span><strong>{formatearMoneda(cierreConsolidado.egresos_total)}</strong></div>
+            <div style={styles.statCard}><span>Efectivo contado</span><strong>{formatearMoneda(cierreConsolidado.efectivo_contado)}</strong></div>
+            <div style={styles.statCard}><span>Diferencia general</span><strong>{formatearMoneda(cierreConsolidado.diferencia_general)}</strong></div>
+          </div>
+
+          <h3 style={{marginTop:24}}>Cierres por ubicación</h3>
+
+          <div style={styles.tableWrap}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Ubicación</th>
+                  <th style={styles.th}>Operador</th>
+                  <th style={styles.th}>Jornada</th>
+                  <th style={styles.th}>Ventas efectivo</th>
+                  <th style={styles.th}>Transferencias</th>
+                  <th style={styles.th}>Egresos</th>
+                  <th style={styles.th}>Efectivo contado</th>
+                  <th style={styles.th}>Diferencia</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(cierreConsolidado.puntos||[]).length===0 ? (
+                  <tr>
+                    <td colSpan={8} style={styles.td}>
+                      Todavía no existen cierres por punto para esta fecha.
+                    </td>
+                  </tr>
+                ) : (
+                  (cierreConsolidado.puntos||[]).map((c)=>(
+                    <tr key={c.id}>
+                      <td style={{...styles.td,fontWeight:900}}>{c.punto_nombre || "-"}</td>
+                      <td style={styles.td}>{c.usuario_nombre || c.usuario_correo || "-"}</td>
+                      <td style={styles.td}>{c.jornada_id ? `#${c.jornada_id}` : "-"}</td>
+                      <td style={styles.td}>{formatearMoneda(c.ventas_efectivo)}</td>
+                      <td style={styles.td}>{formatearMoneda(Number(c.ventas_transferencia||0)+Number(c.recargas_transferencia||0))}</td>
+                      <td style={styles.td}>{formatearMoneda(c.egresos_total)}</td>
+                      <td style={styles.td}>{formatearMoneda(c.efectivo_contado)}</td>
+                      <td style={styles.td}>{formatearMoneda(c.diferencia_general)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    ), document.body)}
+
     {cierreDetalle && createPortal((
       <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, width:"100vw", height:"100dvh", minHeight:"100vh", background:"rgba(15,23,42,.65)", zIndex:100000, padding:"8px", boxSizing:"border-box", overflow:"hidden", display:"flex", alignItems:"stretch", justifyContent:"center" }}>
         <div style={{width:"100%",maxWidth:900,minWidth:0,height:"calc(100dvh - 16px)",maxHeight:"calc(100dvh - 16px)",margin:"0 auto",background:"white",borderRadius:14,boxSizing:"border-box",overflow:"hidden",display:"flex",flexDirection:"column"}}>
@@ -7944,6 +8134,9 @@ if (!usuario) {
           >
             {[
               ["Fecha de cierre", formatearSoloFecha(cierreDetalle.fecha)],
+              ["Ubicación", cierreDetalle.punto_nombre || "HISTÓRICO"],
+              ["Operador", cierreDetalle.usuario_nombre || cierreDetalle.usuario_correo || "-"],
+              ["Jornada", cierreDetalle.jornada_id ? `#${cierreDetalle.jornada_id}` : "-"],
               ["Unidad educativa", institucionActiva?.nombre],
               ["Negocio", cierreDetalle.negocio],
               ["Usuario", cierreDetalle.usuario_nombre || cierreDetalle.usuario_correo],
