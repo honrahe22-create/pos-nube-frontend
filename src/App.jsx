@@ -378,7 +378,7 @@ const [existenciasInventario, setExistenciasInventario] = useState([]);
 const [puntosInventario, setPuntosInventario] = useState(["PRINCIPAL"]);
 const [puntoInventarioSeleccionado, setPuntoInventarioSeleccionado] = useState("PRINCIPAL");
 const [puntosOperacion,setPuntosOperacion]=useState([]);
-const [jornadaActiva,setJornadaActiva]=useState(()=>{try{return JSON.parse(localStorage.getItem("jornadaActiva")||"null")}catch{return null}});
+const [jornadaActiva,setJornadaActiva]=useState(null);
 const [mostrarSelectorJornada,setMostrarSelectorJornada]=useState(false);
 const [puntoJornadaSeleccionado,setPuntoJornadaSeleccionado]=useState("");
 const [operadorJornadaCorreo,setOperadorJornadaCorreo]=useState("");
@@ -2164,7 +2164,17 @@ const confirmarTransferenciaStock = async () => {
   }
 };
 
-useEffect(()=>{if(usuario&&institucionActivaId&&!esRolPortal)cargarContextoJornada()},[usuario?.id,institucionActivaId]);
+useEffect(()=>{
+  // Una jornada nunca se reanuda por confianza local.
+  // Al abrir/actualizar, se obliga a validar nuevamente al operador.
+  localStorage.removeItem("jornadaActiva");
+},[]);
+
+useEffect(()=>{
+  if(usuario&&institucionActivaId&&!esRolPortal){
+    cargarContextoJornada();
+  }
+},[usuario?.id,institucionActivaId]);
 
 useEffect(() => {
   if (!usuario || !institucionActivaId || esRolPortal) return;
@@ -2505,7 +2515,32 @@ const exportarVentasExcel = () => {
     try{
       const res=await fetch(`${API_URL}/api/jornadas/activa?institucion_id=${institucionId}&t=${Date.now()}`,{headers:{Authorization:`Bearer ${token}`},cache:"no-store"});
       const data=await res.json(); if(!res.ok)throw new Error(data.message||"Error consultando jornada");
-      if(data?.id){aplicarJornada(data);return}
+      if(data?.id){
+        // Existe una jornada abierta, pero al volver a abrir/actualizar POS NUBE
+        // NO entramos automáticamente. El operador debe autenticarse otra vez.
+        localStorage.removeItem("jornadaActiva");
+        setJornadaActiva(null);
+
+        const puntoExistente=puntos.find(
+          (p)=>Number(p.id)===Number(data.punto_id)
+        );
+
+        setPuntoJornadaSeleccionado(
+          puntoExistente?.id
+            ? String(puntoExistente.id)
+            : data.punto_id
+            ? String(data.punto_id)
+            : ""
+        );
+
+        setOperadorJornadaCorreo(
+          String(data.usuario_correo||u?.correo||"")
+        );
+        setOperadorJornadaPassword("");
+        setVerPasswordOperadorJornada(false);
+        setMostrarSelectorJornada(true);
+        return;
+      }
     }catch(e){console.error(e)}
     localStorage.removeItem("jornadaActiva");setJornadaActiva(null);
     setPuntoJornadaSeleccionado(puntos[0]?.id?String(puntos[0].id):"");
@@ -6785,6 +6820,22 @@ if (!usuario) {
             realmente trabajará en este punto</strong>. Debe ingresar su propio
             usuario/correo y contraseña.
           </p>
+
+          <div
+            style={{
+              marginTop:12,
+              padding:12,
+              borderRadius:10,
+              background:"#fff7ed",
+              color:"#9a3412",
+              fontSize:13,
+              lineHeight:1.5,
+            }}
+          >
+            Por seguridad, cada vez que POS NUBE se abre o se actualiza,
+            el operador debe volver a validar sus credenciales para continuar
+            la jornada del punto.
+          </div>
 
           <div style={{...styles.filterField,marginTop:18}}>
             <label style={styles.label}>Punto de trabajo *</label>
