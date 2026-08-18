@@ -1619,7 +1619,7 @@ const registrarMovimientoKardex = async ({
   }
 };
 
-const cargarExistenciasInventario = async () => {
+const cargarExistenciasInventario = async ({ reintento = true } = {}) => {
   try {
     const token = localStorage.getItem("token");
     const institucionId = obtenerInstitucionActivaId();
@@ -1627,40 +1627,95 @@ const cargarExistenciasInventario = async () => {
     if (!token || !institucionId) {
       setExistenciasInventario([]);
       setPuntosInventario(["PRINCIPAL"]);
-      return;
+      return false;
     }
 
-    const [resExistencias, resPuntos] = await Promise.all([
-      fetch(`${API_URL}/api/inventario/existencias?institucion_id=${institucionId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      }),
-      fetch(`${API_URL}/api/inventario/puntos?institucion_id=${institucionId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      }),
-    ]);
+    const controlador = new AbortController();
+    const timeout = window.setTimeout(() => controlador.abort(), 15000);
 
-    const dataExistencias = await resExistencias.json();
-    const dataPuntos = await resPuntos.json();
+    let res;
 
-    if (resExistencias.ok) {
-      setExistenciasInventario(
-        Array.isArray(dataExistencias) ? dataExistencias : []
+    try {
+      res = await fetch(
+        `${API_URL}/api/inventario/estado?institucion_id=${institucionId}&t=${Date.now()}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Cache-Control": "no-cache",
+          },
+          cache: "no-store",
+          signal: controlador.signal,
+        }
+      );
+    } finally {
+      window.clearTimeout(timeout);
+    }
+
+    let data = {};
+    try {
+      data = await res.json();
+    } catch {
+      data = {};
+    }
+
+    if (!res.ok) {
+      throw new Error(
+        data.message ||
+          data.error ||
+          `No se pudo cargar inventario. Código ${res.status}`
       );
     }
 
-    if (resPuntos.ok && Array.isArray(dataPuntos) && dataPuntos.length) {
-      const puntos = dataPuntos.map((p) => String(p || "").trim()).filter(Boolean);
-      if (!puntos.includes("PRINCIPAL")) puntos.unshift("PRINCIPAL");
-      setPuntosInventario([...new Set(puntos)]);
-      setPuntoInventarioSeleccionado((actual) =>
-        puntos.includes(actual) ? actual : "PRINCIPAL"
-      );
-      setLocalNuevaOrden((actual) =>
-        puntos.includes(actual) ? actual : "PRINCIPAL"
-      );
+    const listaProductos = Array.isArray(data.productos)
+      ? data.productos
+      : [];
+
+    const listaExistencias = Array.isArray(data.existencias)
+      ? data.existencias
+      : [];
+
+    const puntosRecibidos = Array.isArray(data.puntos)
+      ? data.puntos
+          .map((p) => String(p || "").trim().toUpperCase())
+          .filter(Boolean)
+      : [];
+
+    if (!puntosRecibidos.includes("PRINCIPAL")) {
+      puntosRecibidos.unshift("PRINCIPAL");
     }
+
+    const puntosUnicos = [...new Set(puntosRecibidos)];
+
+    // La pantalla Stock ya no depende de que otra petición de productos
+    // termine antes. Todo viene de la misma consulta a PostgreSQL/Render.
+    setProductos(listaProductos);
+    setExistenciasInventario(listaExistencias);
+    setPuntosInventario(puntosUnicos);
+
+    setPuntoInventarioSeleccionado((actual) =>
+      puntosUnicos.includes(String(actual || "").toUpperCase())
+        ? String(actual).toUpperCase()
+        : "PRINCIPAL"
+    );
+
+    setLocalNuevaOrden((actual) =>
+      puntosUnicos.includes(String(actual || "").toUpperCase())
+        ? String(actual).toUpperCase()
+        : "PRINCIPAL"
+    );
+
+    return true;
   } catch (error) {
-    console.error("Error cargando existencias por punto:", error);
+    console.error("Error cargando inventario completo:", error);
+
+    // Una iMin puede recuperar conexión unos instantes después de abrir la
+    // aplicación. Hacemos un único reintento automático.
+    if (reintento) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1200));
+      return cargarExistenciasInventario({ reintento: false });
+    }
+
+    return false;
   }
 };
 
@@ -1983,9 +2038,40 @@ const confirmarTransferenciaStock = async () => {
 };
 
 useEffect(() => {
-  if (!usuario || !institucionActivaId) return;
-  cargarExistenciasInventario();
-}, [institucionActivaId, vista]);
+  if (!usuario || !institucionActivaId || esRolPortal) return;
+
+  // Al iniciar sesión cargamos una vez el inventario compartido.
+  // Al entrar a Stock se vuelve a consultar directamente a PostgreSQL.
+  if (vista === "inventario" || vista === "ventas") {
+    cargarExistenciasInventario();
+  }
+}, [usuario, institucionActivaId, vista]);
+
+useEffect(() => {
+  if (!usuario || esRolPortal) return;
+
+  const refrescarAlVolver = () => {
+    if (document.visibilityState !== "visible") return;
+
+    if (vista === "inventario" || vista === "ventas") {
+      cargarExistenciasInventario();
+    }
+  };
+
+  const refrescarAlFoco = () => {
+    if (vista === "inventario" || vista === "ventas") {
+      cargarExistenciasInventario();
+    }
+  };
+
+  document.addEventListener("visibilitychange", refrescarAlVolver);
+  window.addEventListener("focus", refrescarAlFoco);
+
+  return () => {
+    document.removeEventListener("visibilitychange", refrescarAlVolver);
+    window.removeEventListener("focus", refrescarAlFoco);
+  };
+}, [usuario, vista]);
 
 const limpiarFormularioVenta = () => {
   setVentaForm({
@@ -5695,8 +5781,12 @@ Disponible: ${formatearMoneda(
  useEffect(() => {
   if (!usuario || esRolPortal) return;
 
-  if (vista === "productos" || vista === "inventario" || vista === "ventas") {
+  if (vista === "productos" || vista === "ventas") {
     cargarProductos();
+  }
+
+  if (vista === "inventario") {
+    cargarExistenciasInventario();
   }
 
   if (vista === "alumnos" || vista === "recargas" || vista === "ventas") {
@@ -10256,6 +10346,14 @@ onClick={() => eliminarEgreso(egreso)}
       <div>
         <h1 style={styles.dashboardTitle}>Existencias</h1>
       </div>
+
+      <button
+        type="button"
+        style={styles.refreshButton}
+        onClick={() => cargarExistenciasInventario()}
+      >
+        Refrescar stock
+      </button>
 
       <div style={styles.headerActions}>
         <button
