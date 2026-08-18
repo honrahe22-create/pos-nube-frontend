@@ -11959,7 +11959,7 @@ onClick={() => eliminarEgreso(egreso)}
         <button
           type="button"
           style={styles.outlineButton}
-          onClick={exportarStockCsv}
+          onClick={exportarStockExcel}
         >
           Exportar existencias
         </button>
