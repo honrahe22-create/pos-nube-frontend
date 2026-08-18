@@ -3613,6 +3613,49 @@ if (institucionIdLogin) {
     }
   };
 
+  const cambiarCreditoHabilitadoProfesor = async (habilitar) => {
+    if (!profesorDetalle?.id) return;
+
+    const accion = habilitar ? "habilitar" : "deshabilitar";
+    const confirmado = window.confirm(
+      `¿Deseas ${accion} el crédito para ${profesorDetalle.nombres || ""} ${profesorDetalle.apellidos || ""}?`
+    );
+    if (!confirmado) return;
+
+    try {
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+      const response = await fetch(
+        `${API_URL}/api/profesores/${profesorDetalle.id}/credito-habilitado`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            institucion_id: institucionId,
+            credito_habilitado: habilitar,
+          }),
+        }
+      );
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "No se pudo actualizar el crédito");
+
+      setProfesorDetalle(data.profesor);
+      setProfesores((prev) =>
+        prev.map((p) =>
+          Number(p.id) === Number(data.profesor.id) ? data.profesor : p
+        )
+      );
+      alert(data.message);
+    } catch (error) {
+      console.error("Error actualizando permiso de crédito:", error);
+      alert(error.message || "No se pudo actualizar el permiso de crédito");
+    }
+  };
+
   const registrarCreditoProfesor = async (e) => {
     e.preventDefault();
 
@@ -5989,6 +6032,11 @@ if (institucionIdLogin) {
     if (pagaConCreditoProfesor) {
       if (!ventaForm.profesor_id || !profesorVentaSeleccionado) {
         alert("Debes seleccionar un profesor.");
+        return;
+      }
+
+      if (profesorVentaSeleccionado.credito_habilitado !== true) {
+        alert("El crédito no está habilitado para este profesor. Debe autorizarlo un administrador.");
         return;
       }
 
@@ -10448,7 +10496,7 @@ onClick={() => eliminarEgreso(egreso)}
                 setVentaForm({
                   alumno_id: "",
                   profesor_id: String(profesorDetalle.id),
-                  metodo_pago: "CREDITO_PROFESOR",
+                  metodo_pago: profesorDetalle.credito_habilitado === true ? "CREDITO_PROFESOR" : "EFECTIVO",
                   observacion: "",
                 });
                 setBusquedaUsuarioNuevaOrden(
@@ -10492,7 +10540,26 @@ onClick={() => eliminarEgreso(egreso)}
               <div><strong>Institución:</strong> {institucionActiva?.nombre || "-"}</div>
               <div><strong>Código:</strong> {profesorDetalle.codigo || "-"}</div>
               <div><strong>Es profesor:</strong> {profesorDetalle.es_profesor !== false ? "Sí" : "No"}</div>
-              <div><strong>Crédito:</strong> {Number(profesorDetalle.credito || profesorDetalle.saldo || 0) > 0 ? "Sí" : "No"}</div>
+              <div>
+                <strong>Crédito:</strong>{" "}
+                <span style={{ fontWeight: 900, color: profesorDetalle.credito_habilitado === true ? "#166534" : "#991b1b" }}>
+                  {profesorDetalle.credito_habilitado === true ? "HABILITADO" : "INHABILITADO"}
+                </span>
+              </div>
+              {["ADMIN", "SUPER_ADMIN"].includes(rolActual) && (
+                <button
+                  type="button"
+                  style={{
+                    ...styles.outlineButton,
+                    marginTop: 12,
+                    borderColor: profesorDetalle.credito_habilitado === true ? "#dc2626" : "#16a34a",
+                    color: profesorDetalle.credito_habilitado === true ? "#dc2626" : "#16a34a",
+                  }}
+                  onClick={() => cambiarCreditoHabilitadoProfesor(profesorDetalle.credito_habilitado !== true)}
+                >
+                  {profesorDetalle.credito_habilitado === true ? "Deshabilitar crédito" : "Habilitar crédito"}
+                </button>
+              )}
             </div>
 
             <div
