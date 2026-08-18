@@ -390,8 +390,22 @@ const [cargandoJornada,setCargandoJornada]=useState(false);
 const [mostrarPuntosStock,setMostrarPuntosStock]=useState(false);
 const [nuevoPuntoForm,setNuevoPuntoForm]=useState({nombre:"",codigo:"",descripcion:""});
 const [mostrarNuevoProductoStock,setMostrarNuevoProductoStock]=useState(false);
-const [nuevoProductoStockForm,setNuevoProductoStockForm]=useState({nombre:"",codigo:"",precio:"",categoria:"",stock_minimo:"",cantidad_inicial:"",concepto_inicial:"COMPRA",observacion_inicial:""});
+const [nuevoProductoStockForm,setNuevoProductoStockForm]=useState({
+  nombre:"",
+  codigo:"",
+  precio:"",
+  categoria:"",
+  stock_minimo:"",
+  cantidad_inicial:"",
+  concepto_inicial:"COMPRA",
+  observacion_inicial:"",
+  ubicacion_inicial:"",
+});
 const [movimientoStock,setMovimientoStock]=useState(null);
+const [panelMovimientoStock,setPanelMovimientoStock]=useState(null);
+const [transferenciaLocales,setTransferenciaLocales]=useState(null);
+const [institucionesTransferencia,setInstitucionesTransferencia]=useState([]);
+const [puntosDestinoLocal,setPuntosDestinoLocal]=useState([]);
 const [filtroCategoriaStock,setFiltroCategoriaStock]=useState("");
 
 const [stockEditado, setStockEditado] = useState({});
@@ -1985,6 +1999,177 @@ const guardarEdicionPunto=async(e)=>{
   }
 };
 
+
+const cargarInstitucionesTransferencia=async()=>{
+  try{
+    const token=localStorage.getItem("token");
+    const res=await fetch(`${API_URL}/api/instituciones`,{
+      headers:{Authorization:`Bearer ${token}`},
+    });
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.message||"No se pudieron cargar las instituciones");
+    setInstitucionesTransferencia(Array.isArray(data)?data:[]);
+    return Array.isArray(data)?data:[];
+  }catch(error){
+    console.error(error);
+    setInstitucionesTransferencia([]);
+    return [];
+  }
+};
+
+const cargarPuntosDestinoLocal=async(institucionDestinoId)=>{
+  try{
+    if(!institucionDestinoId){
+      setPuntosDestinoLocal([]);
+      return;
+    }
+    const token=localStorage.getItem("token");
+    const res=await fetch(
+      `${API_URL}/api/puntos?institucion_id=${Number(institucionDestinoId)}`,
+      {headers:{Authorization:`Bearer ${token}`}}
+    );
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.message||"No se pudieron cargar los puntos destino");
+    setPuntosDestinoLocal(Array.isArray(data)?data.filter(p=>p.activo!==false):[]);
+  }catch(error){
+    console.error(error);
+    setPuntosDestinoLocal([]);
+    alert(error.message||"No se pudieron cargar los puntos destino.");
+  }
+};
+
+const abrirPanelMovimientoStock=async(producto)=>{
+  setPanelMovimientoStock(producto);
+  setMovimientoStock(null);
+  setStockTransferencia(null);
+  setBajaStock(null);
+  setTransferenciaLocales(null);
+};
+
+const seleccionarConceptoStock=async(tipo)=>{
+  if(!panelMovimientoStock)return;
+
+  if(tipo==="COMPRA"||tipo==="PRODUCCION"){
+    setMovimientoStock({
+      ...panelMovimientoStock,
+      concepto:tipo,
+      cantidad:"1",
+      observacion:"",
+    });
+    return;
+  }
+
+  if(tipo==="TRANSFERIR_UBICACIONES"){
+    setStockTransferencia({
+      ...panelMovimientoStock,
+      ubicacion_origen:jornadaActiva?.punto_nombre||"PRINCIPAL",
+      ubicacion_destino:"",
+      cantidad:"1",
+      observacion:"",
+    });
+    return;
+  }
+
+  if(tipo==="TRANSFERIR_LOCALES"){
+    await cargarInstitucionesTransferencia();
+    setPuntosDestinoLocal([]);
+    setTransferenciaLocales({
+      ...panelMovimientoStock,
+      institucion_destino_id:"",
+      punto_destino_id:"",
+      cantidad:"1",
+      observacion:"",
+    });
+    return;
+  }
+
+  if(tipo==="BAJA"){
+    setBajaStock({
+      ...panelMovimientoStock,
+      ubicacion:jornadaActiva?.punto_nombre||"PRINCIPAL",
+      cantidad:"1",
+      motivo_baja:"DAÑO",
+      observacion:"",
+    });
+  }
+};
+
+const confirmarTransferenciaLocales=async()=>{
+  if(!transferenciaLocales)return;
+
+  const institucionDestinoId=Number(
+    transferenciaLocales.institucion_destino_id
+  );
+  const puntoDestinoId=Number(
+    transferenciaLocales.punto_destino_id
+  );
+  const cantidad=Number(transferenciaLocales.cantidad||0);
+  const observacion=String(
+    transferenciaLocales.observacion||""
+  ).trim();
+
+  if(!institucionDestinoId||!puntoDestinoId){
+    alert("Selecciona el local y el punto destino.");
+    return;
+  }
+
+  if(!Number.isInteger(cantidad)||cantidad<=0){
+    alert("Ingresa una cantidad válida mayor a 0.");
+    return;
+  }
+
+  if(!observacion){
+    alert("La observación es obligatoria.");
+    return;
+  }
+
+  try{
+    const token=localStorage.getItem("token");
+    const institucionId=obtenerInstitucionActivaId();
+
+    const res=await fetch(
+      `${API_URL}/api/inventario/transferir-locales`,
+      {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          Authorization:`Bearer ${token}`,
+        },
+        body:JSON.stringify({
+          institucion_id:Number(institucionId),
+          jornada_id:Number(jornadaActiva?.id),
+          producto_id:Number(transferenciaLocales.id),
+          institucion_destino_id:institucionDestinoId,
+          punto_destino_id:puntoDestinoId,
+          cantidad,
+          observacion,
+        }),
+      }
+    );
+
+    const data=await res.json();
+
+    if(!res.ok){
+      throw new Error(
+        data.message||"No se pudo transferir entre locales"
+      );
+    }
+
+    setTransferenciaLocales(null);
+    setPanelMovimientoStock(null);
+    await cargarExistenciasInventario();
+
+    alert(
+      `Transferencia realizada.\nReferencia: ${data.referencia||"-"}`
+    );
+  }catch(error){
+    alert(
+      error.message||
+      "No se pudo realizar la transferencia entre locales."
+    );
+  }
+};
+
 const crearProductoDesdeStock=async(e)=>{
   e.preventDefault();if(!jornadaActiva?.id)return alert("Debes abrir una jornada.");
   const cantidad=Number(nuevoProductoStockForm.cantidad_inicial||0);
@@ -1996,11 +2181,31 @@ const crearProductoDesdeStock=async(e)=>{
       nombre:nuevoProductoStockForm.nombre.trim(),codigo:nuevoProductoStockForm.codigo.trim()||null,
       precio:Number(nuevoProductoStockForm.precio||0),stock:cantidad,stock_minimo:Number(nuevoProductoStockForm.stock_minimo||0),
       categoria:nuevoProductoStockForm.categoria.trim()||null,concepto_inicial:nuevoProductoStockForm.concepto_inicial,
-      observacion_inicial:nuevoProductoStockForm.observacion_inicial.trim()||"Ingreso inicial desde Stock"
+      observacion_inicial:nuevoProductoStockForm.observacion_inicial.trim()||"Ingreso inicial desde Stock",
+      ubicacion_inicial:
+        nuevoProductoStockForm.ubicacion_inicial ||
+        jornadaActiva?.punto_nombre ||
+        "PRINCIPAL"
     })});
     const data=await res.json();if(!res.ok)throw new Error(data.message||"Error creando producto");
-    setMostrarNuevoProductoStock(false);setNuevoProductoStockForm({nombre:"",codigo:"",precio:"",categoria:"",stock_minimo:"",cantidad_inicial:"",concepto_inicial:"COMPRA",observacion_inicial:""});
-    await cargarExistenciasInventario();alert(`Producto creado en ${jornadaActiva.punto_nombre}.`);
+    setMostrarNuevoProductoStock(false);setNuevoProductoStockForm({
+      nombre:"",
+      codigo:"",
+      precio:"",
+      categoria:"",
+      stock_minimo:"",
+      cantidad_inicial:"",
+      concepto_inicial:"COMPRA",
+      observacion_inicial:"",
+      ubicacion_inicial:"",
+    });
+    await cargarExistenciasInventario();alert(
+      `Producto creado en ${
+        nuevoProductoStockForm.ubicacion_inicial ||
+        jornadaActiva?.punto_nombre ||
+        "PRINCIPAL"
+      }.`
+    );
   }catch(e){alert(e.message||"No se pudo crear el producto")}
 };
 const abrirMovimientoStock=(producto)=>setMovimientoStock({...producto,concepto:"COMPRA",cantidad:"1",observacion:""});
@@ -10978,7 +11183,17 @@ onClick={() => eliminarEgreso(egreso)}
       </button>
 
       <div style={styles.headerActions}>
-        {puede("inventario.gestionar")&&<button type="button" style={styles.button} onClick={()=>setMostrarNuevoProductoStock(true)}>+ Nuevo producto</button>}
+        {puede("inventario.gestionar")&&<button type="button" style={styles.button} onClick={()=>{
+              setNuevoProductoStockForm((p)=>({
+                ...p,
+                ubicacion_inicial:
+                  p.ubicacion_inicial ||
+                  jornadaActiva?.punto_nombre ||
+                  puntosOperacion[0]?.nombre ||
+                  "PRINCIPAL",
+              }));
+              setMostrarNuevoProductoStock(true);
+            }}>+ Nuevo producto</button>}
         {["SUPER_ADMIN","ADMIN"].includes(rolActual)&&<button type="button" style={styles.outlineButton} onClick={()=>setMostrarPuntosStock(v=>!v)}>Puntos / ubicaciones</button>}
         <button
           type="button"
@@ -11132,14 +11347,129 @@ onClick={() => eliminarEgreso(egreso)}
         <div style={styles.filterField}><label style={styles.label}>Categoría</label><input style={styles.input} value={nuevoProductoStockForm.categoria} onChange={e=>setNuevoProductoStockForm(p=>({...p,categoria:e.target.value}))}/></div>
         <div style={styles.filterField}><label style={styles.label}>Cantidad inicial</label><input type="number" min="0" step="1" style={styles.input} value={nuevoProductoStockForm.cantidad_inicial} onChange={e=>setNuevoProductoStockForm(p=>({...p,cantidad_inicial:e.target.value}))}/></div>
         <div style={styles.filterField}><label style={styles.label}>Stock mínimo</label><input type="number" min="0" step="1" style={styles.input} value={nuevoProductoStockForm.stock_minimo} onChange={e=>setNuevoProductoStockForm(p=>({...p,stock_minimo:e.target.value}))}/></div>
+        <div style={styles.filterField}>
+          <label style={styles.label}>Ubicación inicial *</label>
+          <select
+            style={styles.input}
+            value={
+              nuevoProductoStockForm.ubicacion_inicial ||
+              jornadaActiva?.punto_nombre ||
+              ""
+            }
+            onChange={(e)=>
+              setNuevoProductoStockForm((p)=>({
+                ...p,
+                ubicacion_inicial:e.target.value,
+              }))
+            }
+          >
+            {puntosOperacion
+              .filter((p)=>p.activo!==false)
+              .map((punto)=>(
+                <option key={punto.id} value={punto.nombre}>
+                  {punto.nombre}
+                </option>
+              ))}
+          </select>
+        </div>
+
         <div style={styles.filterField}><label style={styles.label}>Concepto inicial</label><select style={styles.input} value={nuevoProductoStockForm.concepto_inicial} onChange={e=>setNuevoProductoStockForm(p=>({...p,concepto_inicial:e.target.value}))}><option value="COMPRA">Compra</option><option value="PRODUCCION">Producción</option></select></div>
         <div style={{...styles.filterField,gridColumn:"1 / -1"}}><label style={styles.label}>Observación</label><input style={styles.input} value={nuevoProductoStockForm.observacion_inicial} onChange={e=>setNuevoProductoStockForm(p=>({...p,observacion_inicial:e.target.value}))}/></div>
         <button type="submit" style={styles.button}>Crear producto</button>
       </form>
     </div>}
 
+
+    {panelMovimientoStock&&(
+      <div style={{...styles.box,marginBottom:20}}>
+        <div style={styles.pageHeaderSmall}>
+          <div>
+            <h2 style={{margin:0}}>Movimiento de stock</h2>
+            <p style={{color:"#64748b",margin:"6px 0 0"}}>
+              {panelMovimientoStock.nombre} · Punto actual:{" "}
+              {jornadaActiva?.punto_nombre||"SIN JORNADA"}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={()=>{
+              setPanelMovimientoStock(null);
+              setMovimientoStock(null);
+              setStockTransferencia(null);
+              setTransferenciaLocales(null);
+              setBajaStock(null);
+            }}
+          >
+            Cerrar
+          </button>
+        </div>
+
+        <div
+          style={{
+            display:"grid",
+            gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",
+            gap:12,
+            marginTop:18,
+          }}
+        >
+          <button
+            type="button"
+            style={styles.button}
+            onClick={()=>seleccionarConceptoStock("COMPRA")}
+          >
+            Compra
+          </button>
+
+          <button
+            type="button"
+            style={styles.button}
+            onClick={()=>seleccionarConceptoStock("PRODUCCION")}
+          >
+            Producción
+          </button>
+
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={()=>seleccionarConceptoStock("TRANSFERIR_UBICACIONES")}
+          >
+            Transferir entre ubicaciones
+          </button>
+
+          {["SUPER_ADMIN","ADMIN"].includes(rolActual)&&(
+            <button
+              type="button"
+              style={styles.outlineButton}
+              onClick={()=>seleccionarConceptoStock("TRANSFERIR_LOCALES")}
+            >
+              Transferir entre locales
+            </button>
+          )}
+
+          <button
+            type="button"
+            style={{
+              ...styles.outlineButton,
+              border:"1px solid #fecaca",
+              background:"#fff1f2",
+              color:"#be123c",
+            }}
+            onClick={()=>seleccionarConceptoStock("BAJA")}
+          >
+            Bajas
+          </button>
+        </div>
+      </div>
+    )}
+
     {movimientoStock&&<div style={{...styles.box,marginBottom:20}}>
-      <div style={styles.pageHeaderSmall}><div><h2 style={{margin:0}}>Ingreso de stock</h2><p style={{color:"#64748b"}}>{movimientoStock.nombre} · {jornadaActiva?.punto_nombre}</p></div><button type="button" style={styles.outlineButton} onClick={()=>setMovimientoStock(null)}>Cerrar</button></div>
+      <div style={styles.pageHeaderSmall}><div><h2 style={{margin:0}}>
+            {movimientoStock?.concepto==="PRODUCCION"
+              ?"Producción"
+              :"Compra / ingreso"}
+          </h2><p style={{color:"#64748b"}}>{movimientoStock.nombre} · {jornadaActiva?.punto_nombre}</p></div><button type="button" style={styles.outlineButton} onClick={()=>setMovimientoStock(null)}>Cerrar</button></div>
       <div style={styles.filtersGrid}>
         <div style={styles.filterField}><label style={styles.label}>Concepto</label><select style={styles.input} value={movimientoStock.concepto} onChange={e=>setMovimientoStock(p=>({...p,concepto:e.target.value}))}><option value="COMPRA">Compra</option><option value="PRODUCCION">Producción</option></select></div>
         <div style={styles.filterField}><label style={styles.label}>Cantidad</label><input type="number" min="1" step="1" style={styles.input} value={movimientoStock.cantidad} onChange={e=>setMovimientoStock(p=>({...p,cantidad:e.target.value}))}/></div>
@@ -11228,6 +11558,121 @@ onClick={() => eliminarEgreso(egreso)}
             />
           </div>
         </div>
+      </div>
+    )}
+
+
+    {transferenciaLocales&&(
+      <div style={{...styles.box,marginBottom:20}}>
+        <div style={styles.pageHeaderSmall}>
+          <div>
+            <h2 style={{margin:0}}>Transferir entre locales</h2>
+            <p style={{color:"#64748b",margin:"6px 0 0"}}>
+              {transferenciaLocales.nombre} · Origen:{" "}
+              {jornadaActiva?.punto_nombre}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={()=>setTransferenciaLocales(null)}
+          >
+            Cerrar
+          </button>
+        </div>
+
+        <div style={styles.filtersGrid}>
+          <div style={styles.filterField}>
+            <label style={styles.label}>Local / institución destino *</label>
+            <select
+              style={styles.input}
+              value={transferenciaLocales.institucion_destino_id||""}
+              onChange={async(e)=>{
+                const valor=e.target.value;
+                setTransferenciaLocales((p)=>({
+                  ...p,
+                  institucion_destino_id:valor,
+                  punto_destino_id:"",
+                }));
+                await cargarPuntosDestinoLocal(valor);
+              }}
+            >
+              <option value="">Seleccionar local</option>
+              {institucionesTransferencia
+                .filter(
+                  (i)=>
+                    Number(i.id)!==Number(obtenerInstitucionActivaId())
+                )
+                .map((i)=>(
+                  <option key={i.id} value={i.id}>
+                    {i.nombre}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Ubicación destino *</label>
+            <select
+              style={styles.input}
+              value={transferenciaLocales.punto_destino_id||""}
+              onChange={(e)=>
+                setTransferenciaLocales((p)=>({
+                  ...p,
+                  punto_destino_id:e.target.value,
+                }))
+              }
+            >
+              <option value="">Seleccionar ubicación</option>
+              {puntosDestinoLocal.map((p)=>(
+                <option key={p.id} value={p.id}>
+                  {p.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Cantidad *</label>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              style={styles.input}
+              value={transferenciaLocales.cantidad||"1"}
+              onChange={(e)=>
+                setTransferenciaLocales((p)=>({
+                  ...p,
+                  cantidad:e.target.value,
+                }))
+              }
+            />
+          </div>
+
+          <div style={{...styles.filterField,gridColumn:"1 / -1"}}>
+            <label style={styles.label}>Observación *</label>
+            <textarea
+              style={{...styles.input,minHeight:80}}
+              value={transferenciaLocales.observacion||""}
+              onChange={(e)=>
+                setTransferenciaLocales((p)=>({
+                  ...p,
+                  observacion:e.target.value,
+                }))
+              }
+              placeholder="Motivo / referencia de la transferencia"
+            />
+          </div>
+        </div>
+
+        <button
+          type="button"
+          style={styles.button}
+          onClick={confirmarTransferenciaLocales}
+        >
+          Confirmar transferencia entre locales
+        </button>
       </div>
     )}
 
@@ -11414,7 +11859,10 @@ onClick={() => eliminarEgreso(egreso)}
             />
           </div>
 
-          <div style={styles.filterField}><label style={styles.label}>Motivo de baja *</label><select style={styles.input} value={bajaStock.motivo_baja||"DAÑO"} onChange={e=>setBajaStock(p=>({...p,motivo_baja:e.target.value}))}><option value="DAÑO">Daño</option><option value="PERDIDA">Pérdida</option><option value="CORTESIA">Cortesía</option><option value="VENCIMIENTO">Vencimiento</option><option value="OTRO">Otro</option></select></div>
+          <div style={styles.filterField}><label style={styles.label}>Motivo de baja *</label><select style={styles.input} value={bajaStock.motivo_baja||"DAÑO"} onChange={e=>setBajaStock(p=>({...p,motivo_baja:e.target.value}))}><option value="DAÑO">Daño</option>
+              <option value="PERDIDA">Pérdida</option>
+              <option value="CORTESIA">Cortesía</option>
+              <option value="OTRO">Otro</option></select></div>
           <div style={{ ...styles.filterField, gridColumn: "1 / -1" }}>
             <label style={styles.label}>Observación / motivo de la baja *</label>
             <textarea
@@ -11530,7 +11978,16 @@ onClick={() => eliminarEgreso(egreso)}
                         💾
                       </button>
 
-                      {puede("inventario.gestionar")&&<button type="button" style={styles.viewIconButton} onClick={()=>abrirMovimientoStock(producto)} title="Compra / producción">+</button>}
+                      {puede("inventario.gestionar")&&(
+                        <button
+                          type="button"
+                          style={styles.viewIconButton}
+                          onClick={()=>abrirPanelMovimientoStock(producto)}
+                          title="Movimientos de stock"
+                        >
+                          ⇄
+                        </button>
+                      )}
                       <button
                         type="button"
                         style={styles.viewIconButton}
