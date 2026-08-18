@@ -381,6 +381,11 @@ const [puntosOperacion,setPuntosOperacion]=useState([]);
 const [jornadaActiva,setJornadaActiva]=useState(()=>{try{return JSON.parse(localStorage.getItem("jornadaActiva")||"null")}catch{return null}});
 const [mostrarSelectorJornada,setMostrarSelectorJornada]=useState(false);
 const [puntoJornadaSeleccionado,setPuntoJornadaSeleccionado]=useState("");
+const [operadorJornadaCorreo,setOperadorJornadaCorreo]=useState("");
+const [operadorJornadaPassword,setOperadorJornadaPassword]=useState("");
+const [verPasswordOperadorJornada,setVerPasswordOperadorJornada]=useState(false);
+const [mostrarEditarAccesoJornada,setMostrarEditarAccesoJornada]=useState(false);
+const [editarPuntoStock,setEditarPuntoStock]=useState(null);
 const [cargandoJornada,setCargandoJornada]=useState(false);
 const [mostrarPuntosStock,setMostrarPuntosStock]=useState(false);
 const [nuevoPuntoForm,setNuevoPuntoForm]=useState({nombre:"",codigo:"",descripcion:""});
@@ -1916,6 +1921,70 @@ const crearPuntoOperacion=async(e)=>{
     setNuevoPuntoForm({nombre:"",codigo:"",descripcion:""});await Promise.all([cargarPuntosOperacion(),cargarExistenciasInventario()]);alert(`Punto ${data.nombre} creado.`);
   }catch(e){alert(e.message||"No se pudo crear el punto")}
 };
+
+const comenzarEdicionPunto=(punto)=>{
+  setEditarPuntoStock({
+    id:punto.id,
+    nombre:punto.nombre||"",
+    codigo:punto.codigo||"",
+    descripcion:punto.descripcion||"",
+  });
+};
+
+const guardarEdicionPunto=async(e)=>{
+  e.preventDefault();
+
+  if(!editarPuntoStock?.id){
+    return;
+  }
+
+  const nombre=String(editarPuntoStock.nombre||"").trim();
+
+  if(!nombre){
+    alert("El nombre del punto es obligatorio.");
+    return;
+  }
+
+  try{
+    const token=localStorage.getItem("token");
+    const institucionId=obtenerInstitucionActivaId();
+
+    const res=await fetch(
+      `${API_URL}/api/puntos/${editarPuntoStock.id}`,
+      {
+        method:"PUT",
+        headers:{
+          "Content-Type":"application/json",
+          Authorization:`Bearer ${token}`,
+        },
+        body:JSON.stringify({
+          institucion_id:Number(institucionId),
+          nombre,
+          codigo:editarPuntoStock.codigo,
+          descripcion:editarPuntoStock.descripcion,
+        }),
+      }
+    );
+
+    const data=await res.json();
+
+    if(!res.ok){
+      throw new Error(data.message||"No se pudo editar el punto");
+    }
+
+    setEditarPuntoStock(null);
+
+    await Promise.all([
+      cargarPuntosOperacion(),
+      cargarExistenciasInventario(),
+    ]);
+
+    alert("Punto actualizado correctamente.");
+  }catch(error){
+    alert(error.message||"No se pudo editar el punto.");
+  }
+};
+
 const crearProductoDesdeStock=async(e)=>{
   e.preventDefault();if(!jornadaActiva?.id)return alert("Debes abrir una jornada.");
   const cantidad=Number(nuevoProductoStockForm.cantidad_inicial||0);
@@ -2439,16 +2508,93 @@ const exportarVentasExcel = () => {
       if(data?.id){aplicarJornada(data);return}
     }catch(e){console.error(e)}
     localStorage.removeItem("jornadaActiva");setJornadaActiva(null);
-    setPuntoJornadaSeleccionado(puntos[0]?.id?String(puntos[0].id):"");setMostrarSelectorJornada(true);
+    setPuntoJornadaSeleccionado(puntos[0]?.id?String(puntos[0].id):"");
+    setOperadorJornadaCorreo(String(u?.correo||""));
+    setOperadorJornadaPassword("");
+    setMostrarSelectorJornada(true);
   };
   const abrirJornada=async()=>{
-    if(!puntoJornadaSeleccionado)return alert("Selecciona el punto de trabajo.");
+    if(!puntoJornadaSeleccionado){
+      alert("Selecciona el punto de trabajo.");
+      return;
+    }
+
+    const operadorCorreo=String(operadorJornadaCorreo||"").trim();
+    const operadorPassword=String(operadorJornadaPassword||"");
+
+    if(!operadorCorreo||!operadorPassword){
+      alert("El usuario/correo y la contraseña del operador son obligatorios.");
+      return;
+    }
+
     try{
-      setCargandoJornada(true);const token=localStorage.getItem("token");const institucionId=obtenerInstitucionActivaId();
-      const res=await fetch(`${API_URL}/api/jornadas/abrir`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({institucion_id:Number(institucionId),punto_id:Number(puntoJornadaSeleccionado)})});
-      const data=await res.json();if(!res.ok)throw new Error(data.message||"Error abriendo jornada");aplicarJornada(data);
-    }catch(e){alert(e.message||"No se pudo abrir la jornada")}finally{setCargandoJornada(false)}
+      setCargandoJornada(true);
+
+      const tokenActual=localStorage.getItem("token");
+      const institucionId=obtenerInstitucionActivaId();
+
+      const res=await fetch(`${API_URL}/api/jornadas/abrir`,{
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          Authorization:`Bearer ${tokenActual}`,
+        },
+        body:JSON.stringify({
+          institucion_id:Number(institucionId),
+          punto_id:Number(puntoJornadaSeleccionado),
+          operador_correo:operadorCorreo,
+          operador_password:operadorPassword,
+        }),
+      });
+
+      const data=await res.json();
+
+      if(!res.ok){
+        throw new Error(data.message||"Error abriendo jornada");
+      }
+
+      if(!data.token||!data.usuario||!data.jornada){
+        throw new Error("El servidor no devolvió la sesión completa del operador.");
+      }
+
+      // A partir de aquí el sistema queda autenticado como el operador real.
+      localStorage.setItem("token",data.token);
+      localStorage.setItem("usuario",JSON.stringify(data.usuario));
+      localStorage.setItem(
+        "institucionSeleccionadaId",
+        String(data.usuario.institucion_id)
+      );
+
+      setUsuario(data.usuario);
+      setInstitucionSeleccionadaId(
+        normalizarInstitucionId(data.usuario.institucion_id)
+      );
+
+      aplicarVistaInicialRol(
+        data.usuario.rol,
+        setVista,
+        setVistaVentasInterna
+      );
+
+      setOperadorJornadaCorreo(data.usuario.correo||"");
+      setOperadorJornadaPassword("");
+      setVerPasswordOperadorJornada(false);
+
+      aplicarJornada(data.jornada);
+
+      await cargarPuntosOperacion({
+        tokenForzado:data.token,
+        institucionForzada:data.usuario.institucion_id,
+      });
+
+      await cargarExistenciasInventario();
+    }catch(e){
+      alert(e.message||"No se pudo abrir la jornada");
+    }finally{
+      setCargandoJornada(false);
+    }
   };
+
   const cerrarJornadaOperativa=async()=>{
     if(!jornadaActiva?.id)return;
     if(!window.confirm(`¿Cerrar tu jornada en ${jornadaActiva.punto_nombre}?`))return;
@@ -2456,7 +2602,11 @@ const exportarVentasExcel = () => {
       const token=localStorage.getItem("token"),institucionId=obtenerInstitucionActivaId();
       const res=await fetch(`${API_URL}/api/jornadas/${jornadaActiva.id}/cerrar`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({institucion_id:Number(institucionId)})});
       const data=await res.json();if(!res.ok)throw new Error(data.message||"Error cerrando jornada");
-      localStorage.removeItem("jornadaActiva");setJornadaActiva(null);setMostrarSelectorJornada(true);
+      localStorage.removeItem("jornadaActiva");
+      setJornadaActiva(null);
+      setOperadorJornadaPassword("");
+      setPuntoJornadaSeleccionado("");
+      setMostrarSelectorJornada(true);
     }catch(e){alert(e.message||"No se pudo cerrar la jornada")}
   };
 
@@ -6604,19 +6754,309 @@ if (!usuario) {
 
   return (
     <div style={styles.appShell}>
-      {mostrarSelectorJornada&&<div style={{position:"fixed",inset:0,zIndex:200000,background:"rgba(15,23,42,.72)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-        <div style={{width:"min(560px,96vw)",background:"#fff",borderRadius:18,padding:28,boxShadow:"0 25px 70px rgba(0,0,0,.35)"}}>
+      {mostrarSelectorJornada&&<div
+        style={{
+          position:"fixed",
+          inset:0,
+          zIndex:200000,
+          background:"rgba(15,23,42,.72)",
+          display:"flex",
+          alignItems:"center",
+          justifyContent:"center",
+          padding:20,
+          overflowY:"auto",
+        }}
+      >
+        <div
+          style={{
+            width:"min(600px,96vw)",
+            background:"#fff",
+            borderRadius:18,
+            padding:28,
+            boxShadow:"0 25px 70px rgba(0,0,0,.35)",
+            maxHeight:"94vh",
+            overflowY:"auto",
+          }}
+        >
           <h2 style={{margin:0,fontSize:28}}>Iniciar jornada</h2>
-          <p style={{color:"#64748b",lineHeight:1.5}}>{usuario?.nombre||usuario?.correo}, selecciona el punto donde vas a trabajar. Todo quedará identificado con tu usuario.</p>
-          <label style={styles.label}>Punto de trabajo *</label>
-          <select style={{...styles.input,marginTop:8}} value={puntoJornadaSeleccionado} onChange={e=>setPuntoJornadaSeleccionado(e.target.value)}>
-            <option value="">Seleccionar punto</option>
-            {puntosOperacion.filter(p=>p.activo!==false).map(p=><option key={p.id} value={p.id}>{p.nombre}</option>)}
-          </select>
-          <button type="button" style={{...styles.button,width:"100%",marginTop:20}} onClick={abrirJornada} disabled={cargandoJornada||!puntoJornadaSeleccionado}>{cargandoJornada?"Abriendo jornada...":"Comenzar jornada"}</button>
-          {["SUPER_ADMIN","ADMIN"].includes(rolActual)&&<p style={{marginTop:14,fontSize:13,color:"#64748b"}}>Para crear BAR PRINCIPAL o KIOSKO, inicia en PRINCIPAL y luego ve a Stock → Puntos / ubicaciones.</p>}
+
+          <p style={{color:"#64748b",lineHeight:1.5}}>
+            Selecciona la ubicación e identifica al <strong>operador que
+            realmente trabajará en este punto</strong>. Debe ingresar su propio
+            usuario/correo y contraseña.
+          </p>
+
+          <div style={{...styles.filterField,marginTop:18}}>
+            <label style={styles.label}>Punto de trabajo *</label>
+            <select
+              style={{...styles.input,marginTop:8}}
+              value={puntoJornadaSeleccionado}
+              onChange={(e)=>setPuntoJornadaSeleccionado(e.target.value)}
+            >
+              <option value="">Seleccionar punto</option>
+              {puntosOperacion
+                .filter((p)=>p.activo!==false)
+                .map((p)=>(
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          <div style={{...styles.filterField,marginTop:14}}>
+            <label style={styles.label}>Usuario / correo del operador *</label>
+            <input
+              type="email"
+              style={styles.input}
+              value={operadorJornadaCorreo}
+              onChange={(e)=>setOperadorJornadaCorreo(e.target.value)}
+              placeholder="operador@institucion.com"
+              autoComplete="username"
+            />
+          </div>
+
+          <div style={{...styles.filterField,marginTop:14}}>
+            <label style={styles.label}>Contraseña del operador *</label>
+
+            <div style={styles.passwordWrap}>
+              <input
+                type={verPasswordOperadorJornada?"text":"password"}
+                style={styles.inputPassword}
+                value={operadorJornadaPassword}
+                onChange={(e)=>setOperadorJornadaPassword(e.target.value)}
+                placeholder="Contraseña"
+                autoComplete="current-password"
+                onKeyDown={(e)=>{
+                  if(e.key==="Enter"){
+                    e.preventDefault();
+                    abrirJornada();
+                  }
+                }}
+              />
+
+              <button
+                type="button"
+                style={styles.eyeButton}
+                onClick={()=>setVerPasswordOperadorJornada((v)=>!v)}
+              >
+                {verPasswordOperadorJornada?"Ocultar":"Ver"}
+              </button>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display:"flex",
+              gap:10,
+              marginTop:12,
+              flexWrap:"wrap",
+            }}
+          >
+            <button
+              type="button"
+              style={styles.linkButton}
+              onClick={()=>{
+                setOperadorJornadaCorreo("");
+                setOperadorJornadaPassword("");
+              }}
+            >
+              Cambiar operador
+            </button>
+
+            <button
+              type="button"
+              style={styles.linkButton}
+              onClick={()=>{
+                setCambiarAccesoForm({
+                  institucion_id:String(obtenerInstitucionActivaId()||""),
+                  correo_actual:operadorJornadaCorreo||"",
+                  password_actual:"",
+                  nuevo_correo:operadorJornadaCorreo||"",
+                  nueva_password:"",
+                  confirmar_password:"",
+                });
+                setMostrarEditarAccesoJornada((v)=>!v);
+              }}
+            >
+              Cambiar usuario / contraseña
+            </button>
+
+            {["SUPER_ADMIN","ADMIN"].includes(rolActual)&&(
+              <button
+                type="button"
+                style={styles.linkButton}
+                onClick={()=>{
+                  setMostrarSelectorJornada(false);
+                  setVista("configuracion");
+                }}
+              >
+                Administrar usuarios
+              </button>
+            )}
+          </div>
+
+          {mostrarEditarAccesoJornada&&(
+            <form
+              onSubmit={async(e)=>{
+                await handleCambiarAcceso(e);
+              }}
+              style={{
+                marginTop:18,
+                padding:16,
+                border:"1px solid #dbeafe",
+                borderRadius:12,
+                background:"#f8fbff",
+              }}
+            >
+              <h3 style={{margin:"0 0 12px"}}>Cambiar acceso del operador</h3>
+
+              <input
+                type="hidden"
+                value={cambiarAccesoForm.institucion_id}
+                readOnly
+              />
+
+              <div style={styles.filterField}>
+                <label style={styles.label}>Correo actual</label>
+                <input
+                  type="email"
+                  style={styles.input}
+                  value={cambiarAccesoForm.correo_actual}
+                  onChange={(e)=>
+                    setCambiarAccesoForm((p)=>({
+                      ...p,
+                      correo_actual:e.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div style={{...styles.filterField,marginTop:10}}>
+                <label style={styles.label}>Contraseña actual</label>
+                <input
+                  type="password"
+                  style={styles.input}
+                  value={cambiarAccesoForm.password_actual}
+                  onChange={(e)=>
+                    setCambiarAccesoForm((p)=>({
+                      ...p,
+                      password_actual:e.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div style={{...styles.filterField,marginTop:10}}>
+                <label style={styles.label}>Nuevo correo</label>
+                <input
+                  type="email"
+                  style={styles.input}
+                  value={cambiarAccesoForm.nuevo_correo}
+                  onChange={(e)=>
+                    setCambiarAccesoForm((p)=>({
+                      ...p,
+                      nuevo_correo:e.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div style={{...styles.filterField,marginTop:10}}>
+                <label style={styles.label}>Nueva contraseña</label>
+                <input
+                  type="password"
+                  style={styles.input}
+                  value={cambiarAccesoForm.nueva_password}
+                  onChange={(e)=>
+                    setCambiarAccesoForm((p)=>({
+                      ...p,
+                      nueva_password:e.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div style={{...styles.filterField,marginTop:10}}>
+                <label style={styles.label}>Confirmar nueva contraseña</label>
+                <input
+                  type="password"
+                  style={styles.input}
+                  value={cambiarAccesoForm.confirmar_password}
+                  onChange={(e)=>
+                    setCambiarAccesoForm((p)=>({
+                      ...p,
+                      confirmar_password:e.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              {mensajeCambiarAcceso&&(
+                <div style={{marginTop:10,color:"#334155"}}>
+                  {mensajeCambiarAcceso}
+                </div>
+              )}
+
+              <div style={{display:"flex",gap:10,marginTop:14}}>
+                <button
+                  type="submit"
+                  style={styles.button}
+                  disabled={cargandoCambiarAcceso}
+                >
+                  {cargandoCambiarAcceso?"Guardando...":"Guardar nuevo acceso"}
+                </button>
+
+                <button
+                  type="button"
+                  style={styles.outlineButton}
+                  onClick={()=>setMostrarEditarAccesoJornada(false)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          )}
+
+          <button
+            type="button"
+            style={{
+              ...styles.button,
+              width:"100%",
+              marginTop:20,
+            }}
+            onClick={abrirJornada}
+            disabled={
+              cargandoJornada||
+              !puntoJornadaSeleccionado||
+              !String(operadorJornadaCorreo||"").trim()||
+              !operadorJornadaPassword
+            }
+          >
+            {cargandoJornada
+              ?"Validando operador..."
+              :"Validar operador e iniciar jornada"}
+          </button>
+
+          <div
+            style={{
+              marginTop:16,
+              padding:12,
+              borderRadius:10,
+              background:"#f1f5f9",
+              color:"#475569",
+              fontSize:13,
+              lineHeight:1.5,
+            }}
+          >
+            <strong>Importante:</strong> al validar las credenciales, POS NUBE
+            cambia la sesión activa al operador indicado. Desde ese instante,
+            sus ventas y movimientos quedan registrados con su usuario,
+            ubicación y jornada.
+          </div>
         </div>
       </div>}
+
       <aside style={styles.sidebar}>
         <div>
           <h2 style={styles.logo}>POS NUBE</h2>
@@ -10531,7 +10971,105 @@ onClick={() => eliminarEgreso(egreso)}
         <div style={{...styles.filterField,gridColumn:"1 / -1"}}><label style={styles.label}>Descripción</label><input style={styles.input} value={nuevoPuntoForm.descripcion} onChange={e=>setNuevoPuntoForm(p=>({...p,descripcion:e.target.value}))}/></div>
         <button type="submit" style={styles.button}>Crear punto</button>
       </form>
-      <div style={{marginTop:15,display:"flex",gap:8,flexWrap:"wrap"}}>{puntosOperacion.map(p=><span key={p.id} style={{padding:"7px 11px",borderRadius:999,background:"#dcfce7",fontWeight:800}}>{p.nombre}</span>)}</div>
+      <div style={{marginTop:18,display:"grid",gap:10}}>
+        {puntosOperacion.map((p)=>(
+          <div
+            key={p.id}
+            style={{
+              border:"1px solid #e2e8f0",
+              borderRadius:12,
+              padding:"12px 14px",
+              display:"flex",
+              alignItems:"center",
+              justifyContent:"space-between",
+              gap:12,
+              flexWrap:"wrap",
+              background:"#fff",
+            }}
+          >
+            <div>
+              <div style={{fontWeight:900}}>{p.nombre}</div>
+              <div style={{fontSize:13,color:"#64748b",marginTop:3}}>
+                Código: {p.codigo||"-"}
+                {p.descripcion?` · ${p.descripcion}`:""}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              style={styles.outlineButton}
+              onClick={()=>comenzarEdicionPunto(p)}
+            >
+              Editar
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {editarPuntoStock&&(
+        <form
+          onSubmit={guardarEdicionPunto}
+          style={{
+            ...styles.filtersGrid,
+            marginTop:20,
+            paddingTop:18,
+            borderTop:"1px solid #e2e8f0",
+          }}
+        >
+          <div style={{gridColumn:"1 / -1"}}>
+            <h3 style={{margin:"0 0 8px"}}>Editar ubicación</h3>
+            <p style={{margin:0,color:"#64748b"}}>
+              El stock existente se conservará al cambiar el nombre.
+            </p>
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Nombre *</label>
+            <input
+              style={styles.input}
+              value={editarPuntoStock.nombre}
+              onChange={(e)=>
+                setEditarPuntoStock((p)=>({...p,nombre:e.target.value}))
+              }
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Código</label>
+            <input
+              style={styles.input}
+              value={editarPuntoStock.codigo}
+              onChange={(e)=>
+                setEditarPuntoStock((p)=>({...p,codigo:e.target.value}))
+              }
+            />
+          </div>
+
+          <div style={{...styles.filterField,gridColumn:"1 / -1"}}>
+            <label style={styles.label}>Descripción</label>
+            <input
+              style={styles.input}
+              value={editarPuntoStock.descripcion}
+              onChange={(e)=>
+                setEditarPuntoStock((p)=>({...p,descripcion:e.target.value}))
+              }
+            />
+          </div>
+
+          <div style={{display:"flex",gap:10}}>
+            <button type="submit" style={styles.button}>
+              Guardar cambios
+            </button>
+            <button
+              type="button"
+              style={styles.outlineButton}
+              onClick={()=>setEditarPuntoStock(null)}
+            >
+              Cancelar
+            </button>
+          </div>
+        </form>
+      )}
     </div>}
 
     {mostrarNuevoProductoStock&&<div style={{...styles.box,marginBottom:20}}>
