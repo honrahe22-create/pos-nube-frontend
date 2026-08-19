@@ -580,8 +580,10 @@ export default function AlumnosModulo({
           },
           body: JSON.stringify({
             institucion_id: Number(institucionId),
-            credito_habilitado:
-              creditoConfiguracionForm.credito_habilitado,
+            credito_habilitado: !(
+              creditoAlumno?.credito_habilitado === true ||
+              alumnoDetalle?.credito_habilitado === true
+            ),
             limite_credito: limite,
             admin_password: creditoAdminPassword,
           }),
@@ -1333,43 +1335,17 @@ export default function AlumnosModulo({
                         marginTop: 5,
                         fontWeight: 800,
                         color:
-                          creditoConfiguracionForm.credito_habilitado
+                          creditoAlumno?.credito_habilitado === true ||
+                          alumnoDetalle?.credito_habilitado === true
                             ? "#166534"
                             : "#991b1b",
                       }}
                     >
-                      {creditoConfiguracionForm.credito_habilitado
+                      {creditoAlumno?.credito_habilitado === true ||
+                      alumnoDetalle?.credito_habilitado === true
                         ? "HABILITADO"
                         : "INHABILITADO"}
                     </div>
-
-                    <label
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        marginTop: 8,
-                        cursor: "pointer",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={
-                          creditoConfiguracionForm.credito_habilitado
-                        }
-                        onChange={(e) =>
-                          setCreditoConfiguracionForm({
-                            ...creditoConfiguracionForm,
-                            credito_habilitado: e.target.checked,
-                          })
-                        }
-                      />
-                      <span>
-                        {creditoConfiguracionForm.credito_habilitado
-                          ? "Crédito habilitado"
-                          : "Habilitar crédito"}
-                      </span>
-                    </label>
                   </div>
 
                   <input
@@ -1429,9 +1405,10 @@ export default function AlumnosModulo({
                   >
                     {guardandoCreditoAlumno
                       ? "Validando..."
-                      : creditoConfiguracionForm.credito_habilitado
-                      ? "Autorizar y habilitar crédito"
-                      : "Autorizar y deshabilitar crédito"}
+                      : creditoAlumno?.credito_habilitado === true ||
+                        alumnoDetalle?.credito_habilitado === true
+                      ? "Autorizar y deshabilitar crédito"
+                      : "Autorizar y habilitar crédito"}
                   </button>
                 </form>
               )}
