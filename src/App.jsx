@@ -12007,7 +12007,7 @@ onClick={() => eliminarEgreso(egreso)}
                       </h3>
 
                       <p style={{ margin: "6px 0 0", color: "#64748b" }}>
-                        Crédito actual:{" "}
+                        Saldo/Crédito actual:{" "}
                         <strong>
                           {formatearMoneda(
                             profesorDetalle.saldo ||
@@ -12027,6 +12027,134 @@ onClick={() => eliminarEgreso(egreso)}
                     >
                       Actualizar
                     </button>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(auto-fit, minmax(210px, 1fr))",
+                      gap: 14,
+                      marginBottom: 20,
+                    }}
+                  >
+                    <div
+                      style={{
+                        background: "#ffffff",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 14,
+                        minHeight: 130,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        boxShadow: "0 8px 24px rgba(15,23,42,.06)",
+                      }}
+                    >
+                      <div style={{ textAlign: "center" }}>
+                        <div
+                          style={{
+                            fontSize: 16,
+                            color: "#0f172a",
+                            marginBottom: 10,
+                          }}
+                        >
+                          Límite de crédito
+                        </div>
+                        <strong
+                          style={{
+                            fontSize: 38,
+                            lineHeight: 1,
+                            color: "#003b66",
+                          }}
+                        >
+                          {formatearMoneda(
+                            profesorDetalle.limite_credito || 0
+                          )}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        background: "#ffffff",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 14,
+                        minHeight: 130,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        boxShadow: "0 8px 24px rgba(15,23,42,.06)",
+                      }}
+                    >
+                      <div style={{ textAlign: "center" }}>
+                        <div
+                          style={{
+                            fontSize: 16,
+                            color: "#0f172a",
+                            marginBottom: 10,
+                          }}
+                        >
+                          Crédito utilizado
+                        </div>
+                        <strong
+                          style={{
+                            fontSize: 38,
+                            lineHeight: 1,
+                            color: "#28c58b",
+                          }}
+                        >
+                          {formatearMoneda(
+                            profesorDetalle.credito_utilizado || 0
+                          )}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        background: "#ffffff",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 14,
+                        minHeight: 130,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        boxShadow: "0 8px 24px rgba(15,23,42,.06)",
+                      }}
+                    >
+                      <div style={{ textAlign: "center" }}>
+                        <div
+                          style={{
+                            fontSize: 16,
+                            color: "#0f172a",
+                            marginBottom: 10,
+                          }}
+                        >
+                          Crédito disponible
+                        </div>
+                        <strong
+                          style={{
+                            fontSize: 38,
+                            lineHeight: 1,
+                            color: "#003b66",
+                          }}
+                        >
+                          {formatearMoneda(
+                            profesorDetalle.credito_disponible ??
+                              Math.max(
+                                0,
+                                Number(
+                                  profesorDetalle.limite_credito || 0
+                                ) -
+                                  Number(
+                                    profesorDetalle.credito_utilizado ||
+                                      0
+                                  )
+                              )
+                          )}
+                        </strong>
+                      </div>
+                    </div>
                   </div>
 
                   {["ADMIN", "SUPER_ADMIN"].includes(rolActual) && (
