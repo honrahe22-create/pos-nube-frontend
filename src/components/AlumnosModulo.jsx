@@ -80,6 +80,12 @@ export default function AlumnosModulo({
     observacion: "",
   });
 
+  const creditoAlumnoHabilitado =
+    creditoAlumno && creditoAlumno.credito_habilitado !== undefined
+      ? creditoAlumno.credito_habilitado === true
+      : alumnoDetalle?.credito_habilitado === true;
+
+
   const normalizarEncabezado = (valor) =>
     String(valor || "")
       .normalize("NFD")
@@ -554,8 +560,11 @@ export default function AlumnosModulo({
       creditoConfiguracionForm.limite_credito
     );
 
-    if (!Number.isFinite(limite) || limite < 0) {
-      alert("Ingresa un límite de crédito válido.");
+    if (
+      !creditoAlumnoHabilitado &&
+      (!Number.isFinite(limite) || limite <= 0)
+    ) {
+      alert("Ingresa un límite de crédito mayor a 0 para habilitarlo.");
       return;
     }
 
@@ -580,11 +589,10 @@ export default function AlumnosModulo({
           },
           body: JSON.stringify({
             institucion_id: Number(institucionId),
-            credito_habilitado: !(
-              creditoAlumno?.credito_habilitado === true ||
-              alumnoDetalle?.credito_habilitado === true
-            ),
-            limite_credito: limite,
+            credito_habilitado: !creditoAlumnoHabilitado,
+            limite_credito: creditoAlumnoHabilitado
+              ? Number(creditoAlumno?.limite_credito || alumnoDetalle?.limite_credito || 0)
+              : limite,
             admin_password: creditoAdminPassword,
           }),
         }
@@ -1334,15 +1342,12 @@ export default function AlumnosModulo({
                       style={{
                         marginTop: 5,
                         fontWeight: 800,
-                        color:
-                          creditoAlumno?.credito_habilitado === true ||
-                          alumnoDetalle?.credito_habilitado === true
-                            ? "#166534"
-                            : "#991b1b",
+                        color: creditoAlumnoHabilitado
+                          ? "#166534"
+                          : "#991b1b",
                       }}
                     >
-                      {creditoAlumno?.credito_habilitado === true ||
-                      alumnoDetalle?.credito_habilitado === true
+                      {creditoAlumnoHabilitado
                         ? "HABILITADO"
                         : "INHABILITADO"}
                     </div>
@@ -1363,7 +1368,8 @@ export default function AlumnosModulo({
                       })
                     }
                     style={paymon.modalInput}
-                    required
+                    required={!creditoAlumnoHabilitado}
+                    disabled={creditoAlumnoHabilitado}
                   />
 
                   <div style={{ display: "flex", gap: 8 }}>
@@ -1405,8 +1411,7 @@ export default function AlumnosModulo({
                   >
                     {guardandoCreditoAlumno
                       ? "Validando..."
-                      : creditoAlumno?.credito_habilitado === true ||
-                        alumnoDetalle?.credito_habilitado === true
+                      : creditoAlumnoHabilitado
                       ? "Autorizar y deshabilitar crédito"
                       : "Autorizar y habilitar crédito"}
                   </button>
