@@ -15250,23 +15250,10 @@ onClick={() => eliminarEgreso(egreso)}
                               String(producto.id)
                           );
 
-                          const nuevaCantidad =
-                            Number(itemExistente.cantidad || 0) + 1;
-
-                          if (
-                            nuevaCantidad > Number(producto.stock || 0)
-                          ) {
-                            alert(
-                              `No puedes superar el stock disponible: ${producto.stock}`
-                            );
-                            return;
+                          if (indice >= 0) {
+                            eliminarItemVenta(indice);
                           }
 
-                          actualizarItemVenta(
-                            indice,
-                            "cantidad",
-                            String(nuevaCantidad)
-                          );
                           return;
                         }
 
@@ -15274,7 +15261,7 @@ onClick={() => eliminarEgreso(egreso)}
                           ...(Array.isArray(prev) ? prev : []),
                           {
                             producto_id: String(producto.id),
-                            cantidad: "1",
+                            cantidad: "",
                           },
                         ]);
                       }}
@@ -15284,13 +15271,25 @@ onClick={() => eliminarEgreso(egreso)}
                         border: "none",
                         borderRadius: 8,
                         padding: "12px 10px",
-                        background: sinStock ? "#cbd5e1" : "#bcd0ff",
-                        color: sinStock ? "#64748b" : "#1726a4",
+                        background: sinStock
+                          ? "#cbd5e1"
+                          : itemExistente
+                          ? "#fee2e2"
+                          : "#bcd0ff",
+                        color: sinStock
+                          ? "#64748b"
+                          : itemExistente
+                          ? "#b91c1c"
+                          : "#1726a4",
                         fontWeight: 900,
                         cursor: sinStock ? "not-allowed" : "pointer",
                       }}
                     >
-                      {sinStock ? "Sin stock" : "Agregar producto"}
+                      {sinStock
+                        ? "Sin stock"
+                        : itemExistente
+                        ? "Quitar producto"
+                        : "Agregar producto"}
                     </button>
 
                     {itemExistente && (
@@ -15326,7 +15325,7 @@ onClick={() => eliminarEgreso(egreso)}
                             )
                           )}
                           step="1"
-                          value={String(itemExistente.cantidad || "1")}
+                          value={String(itemExistente.cantidad ?? "")}
                           onChange={(e) => {
                             const indice = ventaItems.findIndex(
                               (item) =>
@@ -15362,7 +15361,7 @@ onClick={() => eliminarEgreso(egreso)}
                               actualizarItemVenta(
                                 indice,
                                 "cantidad",
-                                "1"
+                                ""
                               );
                               return;
                             }
@@ -15401,7 +15400,7 @@ onClick={() => eliminarEgreso(egreso)}
                               actualizarItemVenta(
                                 indice,
                                 "cantidad",
-                                "1"
+                                ""
                               );
                             }
                           }}
@@ -15417,7 +15416,7 @@ onClick={() => eliminarEgreso(egreso)}
                             textAlign: "center",
                             background: "#ffffff",
                           }}
-                          placeholder="1"
+                          placeholder="0"
                         />
                       </div>
                     )}
@@ -15433,171 +15432,11 @@ onClick={() => eliminarEgreso(egreso)}
               borderTop: "1px solid #e5e7eb",
               paddingTop: 20,
               display: "grid",
-              gridTemplateColumns: "minmax(0, 1fr) minmax(280px, 360px)",
+              gridTemplateColumns: "minmax(280px, 480px)",
+              justifyContent: "end",
               gap: 20,
             }}
           >
-            <div>
-              <h3 style={{ marginTop: 0 }}>Productos agregados</h3>
-
-              {(Array.isArray(ventaItemsCalculados)
-                ? ventaItemsCalculados
-                : []
-              ).length === 0 ? (
-                <div
-                  style={{
-                    border: "1px dashed #cbd5e1",
-                    borderRadius: 10,
-                    padding: 24,
-                    color: "#64748b",
-                    textAlign: "center",
-                  }}
-                >
-                  Todavía no has agregado productos.
-                </div>
-              ) : (
-                <div style={{ display: "grid", gap: 10 }}>
-                  {ventaItemsCalculados.map((item, index) => (
-                    <div
-                      key={`${item.producto_id}-${index}`}
-                      style={{
-                        border: "1px solid #e5e7eb",
-                        borderRadius: 10,
-                        padding: 12,
-                        display: "grid",
-                        gridTemplateColumns: "1fr auto auto",
-                        alignItems: "center",
-                        gap: 12,
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 800 }}>
-                          {item.producto?.nombre || "Producto"}
-                        </div>
-                        <div style={{ fontSize: 13, color: "#64748b" }}>
-                          {formatearMoneda(item.precio)} cada uno ·{" "}
-                          {formatearMoneda(item.total)}
-                        </div>
-                      </div>
-
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 12,
-                            fontWeight: 800,
-                            color: "#64748b",
-                          }}
-                        >
-                          Cant.
-                        </span>
-
-                        <input
-                          type="number"
-                          min="1"
-                          max={Math.max(
-                            1,
-                            Number(
-                              stockProductoEnPunto(
-                                item.producto_id,
-                                localNuevaOrden
-                              ) || 0
-                            )
-                          )}
-                          step="1"
-                          value={String(item.cantidad || "")}
-                          onChange={(e) => {
-                            const disponible = Number(
-                              stockProductoEnPunto(
-                                item.producto_id,
-                                localNuevaOrden
-                              ) || 0
-                            );
-
-                            const texto = String(e.target.value || "")
-                              .replace(/[^0-9]/g, "")
-                              .slice(0, 4);
-
-                            if (!texto) {
-                              actualizarItemVenta(
-                                index,
-                                "cantidad",
-                                ""
-                              );
-                              return;
-                            }
-
-                            const cantidad = Number(texto);
-
-                            if (cantidad > disponible) {
-                              alert(
-                                `No puedes superar el stock disponible: ${disponible}`
-                              );
-                              actualizarItemVenta(
-                                index,
-                                "cantidad",
-                                String(disponible)
-                              );
-                              return;
-                            }
-
-                            actualizarItemVenta(
-                              index,
-                              "cantidad",
-                              String(Math.max(1, cantidad))
-                            );
-                          }}
-                          onBlur={(e) => {
-                            const cantidad = Number(e.target.value || 0);
-
-                            if (!Number.isInteger(cantidad) || cantidad <= 0) {
-                              actualizarItemVenta(
-                                index,
-                                "cantidad",
-                                "1"
-                              );
-                            }
-                          }}
-                          style={{
-                            width: 72,
-                            minWidth: 72,
-                            borderRadius: 8,
-                            border: "1px solid #cbd5e1",
-                            background: "#ffffff",
-                            padding: "8px 6px",
-                            textAlign: "center",
-                            fontWeight: 900,
-                            fontSize: 15,
-                          }}
-                        />
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => eliminarItemVenta(index)}
-                        style={{
-                          border: "none",
-                          background: "#fee2e2",
-                          color: "#b91c1c",
-                          borderRadius: 8,
-                          padding: "9px 11px",
-                          cursor: "pointer",
-                          fontWeight: 800,
-                        }}
-                      >
-                        Quitar
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
             <div
               style={{
                 border: "1px solid #dbe3f0",
@@ -15777,7 +15616,15 @@ onClick={() => eliminarEgreso(egreso)}
                   (Array.isArray(ventaItemsCalculados)
                     ? ventaItemsCalculados
                     : []
-                  ).length === 0
+                  ).length === 0 ||
+                  (Array.isArray(ventaItemsCalculados)
+                    ? ventaItemsCalculados
+                    : []
+                  ).some(
+                    (item) =>
+                      !Number.isFinite(Number(item.cantidad)) ||
+                      Number(item.cantidad) <= 0
+                  )
                 }
                 style={{
                   width: "100%",
@@ -15789,7 +15636,15 @@ onClick={() => eliminarEgreso(egreso)}
                     (Array.isArray(ventaItemsCalculados)
                       ? ventaItemsCalculados
                       : []
-                    ).length === 0
+                    ).length === 0 ||
+                    (Array.isArray(ventaItemsCalculados)
+                      ? ventaItemsCalculados
+                      : []
+                    ).some(
+                      (item) =>
+                        !Number.isFinite(Number(item.cantidad)) ||
+                        Number(item.cantidad) <= 0
+                    )
                       ? "#94a3b8"
                       : "#ff8748",
                   color: "#ffffff",
@@ -15798,7 +15653,15 @@ onClick={() => eliminarEgreso(egreso)}
                     (Array.isArray(ventaItemsCalculados)
                       ? ventaItemsCalculados
                       : []
-                    ).length === 0
+                    ).length === 0 ||
+                    (Array.isArray(ventaItemsCalculados)
+                      ? ventaItemsCalculados
+                      : []
+                    ).some(
+                      (item) =>
+                        !Number.isFinite(Number(item.cantidad)) ||
+                        Number(item.cantidad) <= 0
+                    )
                       ? "not-allowed"
                       : "pointer",
                 }}
