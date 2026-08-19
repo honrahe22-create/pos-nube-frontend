@@ -1316,30 +1316,61 @@ export default function AlumnosModulo({
                   style={{
                     display: "grid",
                     gridTemplateColumns:
-                      "repeat(auto-fit, minmax(190px, 1fr))",
+                      "minmax(190px, .7fr) minmax(180px, .7fr) minmax(320px, 1fr) minmax(300px, 1fr)",
                     gap: 12,
                     padding: 16,
                     border: "1px solid #e5e7eb",
                     borderRadius: 12,
                     background: "#f8fafc",
                     marginBottom: 18,
+                    alignItems: "center",
                   }}
                 >
-                  <label style={paymon.transferToggleRow}>
-                    <span>Habilitar crédito</span>
-                    <input
-                      type="checkbox"
-                      checked={
-                        creditoConfiguracionForm.credito_habilitado
-                      }
-                      onChange={(e) =>
-                        setCreditoConfiguracionForm({
-                          ...creditoConfiguracionForm,
-                          credito_habilitado: e.target.checked,
-                        })
-                      }
-                    />
-                  </label>
+                  <div>
+                    <strong>Habilitar crédito</strong>
+                    <div
+                      style={{
+                        marginTop: 5,
+                        fontWeight: 800,
+                        color:
+                          creditoConfiguracionForm.credito_habilitado
+                            ? "#166534"
+                            : "#991b1b",
+                      }}
+                    >
+                      {creditoConfiguracionForm.credito_habilitado
+                        ? "HABILITADO"
+                        : "INHABILITADO"}
+                    </div>
+
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        marginTop: 8,
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={
+                          creditoConfiguracionForm.credito_habilitado
+                        }
+                        onChange={(e) =>
+                          setCreditoConfiguracionForm({
+                            ...creditoConfiguracionForm,
+                            credito_habilitado: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>
+                        {creditoConfiguracionForm.credito_habilitado
+                          ? "Crédito habilitado"
+                          : "Habilitar crédito"}
+                      </span>
+                    </label>
+                  </div>
 
                   <input
                     type="number"
@@ -1399,7 +1430,7 @@ export default function AlumnosModulo({
                     {guardandoCreditoAlumno
                       ? "Validando..."
                       : creditoConfiguracionForm.credito_habilitado
-                      ? "Autorizar y guardar crédito"
+                      ? "Autorizar y habilitar crédito"
                       : "Autorizar y deshabilitar crédito"}
                   </button>
                 </form>

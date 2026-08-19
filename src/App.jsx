@@ -10284,6 +10284,7 @@ onClick={() => eliminarEgreso(egreso)}
     cuentasBancarias={cuentasBancarias}
     cargarCuentasBancarias={cargarCuentasBancarias}
     cargarRecargas={cargarRecargas}
+    rolActual={rolActual}
     descargarPlantillaAlumnos={descargarPlantillaAlumnos}
     importarAlumnosArchivo={importarAlumnosArchivo}
     inputImportarAlumnosRef={inputImportarAlumnosRef}
