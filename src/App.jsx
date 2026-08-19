@@ -432,6 +432,7 @@ const [familiasCatalogoStock,setFamiliasCatalogoStock]=useState([]);
 const [importandoProveedoresStock,setImportandoProveedoresStock]=useState(false);
 const [importandoFamiliasStock,setImportandoFamiliasStock]=useState(false);
 const [stockConfirmacion,setStockConfirmacion]=useState(null);
+const [stockResultado,setStockResultado]=useState(null);
 const [guardandoStockOperacion,setGuardandoStockOperacion]=useState(false);
 
 
@@ -2544,6 +2545,8 @@ const importarFamiliasStockExcel=async(event)=>{
 
 
 const limpiarOperacionStock=()=>{
+  setGuardandoStockOperacion(false);
+  setStockConfirmacion(null);
   setStockItemsOperacion({});
   setStockBusquedaOperacion("");
   setStockFamiliaOperacion("TODAS");
@@ -2635,46 +2638,9 @@ const itemsValidosOperacionStock=()=>{
     );
 };
 
-const esAppImin=()=>{
-  try{
-    return /POSNUBEPrinter/i.test(
-      String(navigator.userAgent||"")
-    );
-  }catch(_error){
-    return false;
-  }
-};
-
 const abrirConfirmacionStock=(confirmacion)=>{
   if(!confirmacion)return;
-
-  // En el WebView antiguo del iMin evitamos depender del modal React.
-  // El botón abre una confirmación nativa y, si el usuario acepta,
-  // ejecuta directamente el guardado.
-  if(esAppImin()){
-    const tipo=String(confirmacion.tipo||"")
-      .split("_")
-      .join(" ");
-
-    const totalProductos=Array.isArray(confirmacion.items)
-      ?confirmacion.items.length
-      :0;
-
-    const aceptar=window.confirm(
-      `Confirmar movimiento de Stock\n\n`+
-      `Tipo: ${tipo}\n`+
-      `Productos: ${totalProductos}\n`+
-      `Punto: ${jornadaActiva?.punto_nombre||"-"}\n\n`+
-      `¿Deseas guardar este movimiento?`
-    );
-
-    if(aceptar){
-      confirmarOperacionStockNueva(confirmacion);
-    }
-
-    return;
-  }
-
+  setGuardandoStockOperacion(false);
   setStockConfirmacion(confirmacion);
 };
 
@@ -2773,6 +2739,28 @@ const prepararConfirmacionOperacionStock=()=>{
   }
 };
 
+const fetchStockConTimeout=async(url,opciones={},timeoutMs=20000)=>{
+  const controller=new AbortController();
+  const timeoutId=setTimeout(()=>controller.abort(),timeoutMs);
+
+  try{
+    return await fetch(url,{
+      ...opciones,
+      signal:controller.signal,
+    });
+  }catch(error){
+    if(error?.name==="AbortError"){
+      throw new Error(
+        "El servidor tardó demasiado en responder. Verifica la conexión y vuelve a intentar."
+      );
+    }
+
+    throw error;
+  }finally{
+    clearTimeout(timeoutId);
+  }
+};
+
 const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
   const confirmacionActual=confirmacionForzada||stockConfirmacion;
 
@@ -2791,7 +2779,7 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
           confirmacionActual.tipo
         )
       ){
-        const res=await fetch(
+        const res=await fetchStockConTimeout(
           `${API_URL}/api/inventario/ingresos/masivo`,
           {
             method:"POST",
@@ -2835,7 +2823,7 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
         }
       }else if(confirmacionActual.tipo==="TRANSFERENCIA_UBICACIONES"){
         for(const item of items){
-          const res=await fetch(
+          const res=await fetchStockConTimeout(
             `${API_URL}/api/inventario/transferir`,
             {
               method:"POST",
@@ -2869,7 +2857,7 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
         }
       }else if(confirmacionActual.tipo==="TRANSFERENCIA_LOCALES"){
         for(const item of items){
-          const res=await fetch(
+          const res=await fetchStockConTimeout(
             `${API_URL}/api/inventario/transferir-locales`,
             {
               method:"POST",
@@ -2906,7 +2894,7 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
         }
       }
     }else{
-      const res=await fetch(
+      const res=await fetchStockConTimeout(
         `${API_URL}/api/inventario/egresos/masivo`,
         {
           method:"POST",
@@ -2943,15 +2931,64 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
       }
     }
 
-    setStockConfirmacion(null);
-    limpiarOperacionStock();
+    const resultadoItems=(items||[]).map((item)=>{
+      const producto=productos.find(
+        (p)=>Number(p.id)===Number(item.producto_id)
+      );
 
-    await Promise.all([
+      const esTransferencia=[
+        "TRANSFERENCIA_UBICACIONES",
+        "TRANSFERENCIA_LOCALES",
+      ].includes(confirmacionActual.tipo);
+
+      const signo=
+        confirmacionActual.grupo==="EGRESOS"||esTransferencia
+          ? "-"
+          : "+";
+
+      return{
+        producto_id:Number(item.producto_id),
+        nombre:
+          producto?.nombre||
+          `Producto #${item.producto_id}`,
+        codigo:producto?.codigo||"-",
+        familia:producto?.categoria||"-",
+        cantidad:Number(item.cantidad||0),
+        cantidad_texto:
+          `${signo}${Number(item.cantidad||0)}`,
+      };
+    });
+
+    setStockConfirmacion(null);
+
+    setStockResultado({
+      grupo:confirmacionActual.grupo,
+      tipo:confirmacionActual.tipo,
+      ubicacion:jornadaActiva?.punto_nombre||"-",
+      operador:
+        jornadaActiva?.usuario_nombre||
+        jornadaActiva?.usuario_correo||
+        usuario?.nombre||
+        usuario?.correo||
+        "-",
+      jornada_id:jornadaActiva?.id||null,
+      items:resultadoItems,
+      total_productos:resultadoItems.length,
+      fecha:new Date().toISOString(),
+    });
+
+    limpiarOperacionStock();
+    setGuardandoStockOperacion(false);
+
+    Promise.all([
       cargarProductos(),
       cargarExistenciasInventario(),
-    ]);
-
-    alert("OK. Movimiento de Stock registrado correctamente.");
+    ]).catch((error)=>{
+      console.error(
+        "Error refrescando Stock después de guardar:",
+        error
+      );
+    });
   }catch(error){
     console.error("Error confirmando operación Stock:",error);
     alert(
@@ -13322,9 +13359,9 @@ onClick={() => eliminarEgreso(egreso)}
           borderRadius:18,
           padding:24
         }}>
-          <h2 style={{marginTop:0}}>Confirmar movimiento</h2>
-          <p>
-            Revisa la información antes de afectar las existencias.
+          <h2 style={{marginTop:0}}>Confirmar movimiento de Stock</h2>
+          <p style={{color:"#64748b",marginTop:6}}>
+            Revisa el detalle antes de afectar las existencias.
           </p>
 
           <div style={{
@@ -13337,14 +13374,35 @@ onClick={() => eliminarEgreso(egreso)}
               <span>Movimiento</span>
               <strong>{stockConfirmacion.grupo}</strong>
             </div>
+
             <div style={styles.statCard}>
               <span>Tipo</span>
-              <strong>{String(stockConfirmacion.tipo).split("_").join(" ")}</strong>
+              <strong>
+                {String(stockConfirmacion.tipo).split("_").join(" ")}
+              </strong>
             </div>
+
             <div style={styles.statCard}>
-              <span>Punto</span>
+              <span>Ubicación</span>
               <strong>{jornadaActiva?.punto_nombre||"-"}</strong>
             </div>
+
+            <div style={styles.statCard}>
+              <span>Operador</span>
+              <strong>
+                {jornadaActiva?.usuario_nombre||
+                 jornadaActiva?.usuario_correo||
+                 usuario?.nombre||
+                 usuario?.correo||
+                 "-"}
+              </strong>
+            </div>
+
+            <div style={styles.statCard}>
+              <span>Jornada</span>
+              <strong>#{jornadaActiva?.id||"-"}</strong>
+            </div>
+
             <div style={styles.statCard}>
               <span>Productos</span>
               <strong>{stockConfirmacion.items?.length||0}</strong>
@@ -13371,11 +13429,32 @@ onClick={() => eliminarEgreso(egreso)}
             </div>
           )}
 
+          {String(
+            stockConfirmacion.tipo==="COMPRA"
+              ? stockCompraForm.observacion||""
+              : stockOperacionForm.observacion||""
+          ).trim()&&(
+            <div style={{
+              marginBottom:16,
+              padding:12,
+              border:"1px solid #e2e8f0",
+              borderRadius:10,
+              background:"#f8fafc"
+            }}>
+              <strong>Observación:</strong>{" "}
+              {stockConfirmacion.tipo==="COMPRA"
+                ? stockCompraForm.observacion
+                : stockOperacionForm.observacion}
+            </div>
+          )}
+
           <div style={styles.tableWrap}>
             <table style={styles.table}>
               <thead>
                 <tr>
                   <th style={styles.th}>Producto</th>
+                  <th style={styles.th}>Código</th>
+                  <th style={styles.th}>Familia</th>
                   <th style={styles.th}>Cantidad</th>
                 </tr>
               </thead>
@@ -13388,6 +13467,12 @@ onClick={() => eliminarEgreso(egreso)}
                     <tr key={item.producto_id}>
                       <td style={styles.td}>
                         {producto?.nombre||`Producto #${item.producto_id}`}
+                      </td>
+                      <td style={styles.td}>
+                        {producto?.codigo||"-"}
+                      </td>
+                      <td style={styles.td}>
+                        {producto?.categoria||"-"}
                       </td>
                       <td style={{...styles.td,fontWeight:900}}>
                         {item.cantidad}
@@ -13409,19 +13494,174 @@ onClick={() => eliminarEgreso(egreso)}
               type="button"
               style={styles.outlineButton}
               disabled={guardandoStockOperacion}
-              onClick={()=>setStockConfirmacion(null)}
+              onClick={()=>{
+                setGuardandoStockOperacion(false);
+                setStockConfirmacion(null);
+              }}
             >
               Volver
             </button>
+
             <button
               type="button"
-              style={styles.button}
+              style={{
+                ...styles.button,
+                background:"#2563eb",
+                minWidth:190
+              }}
               disabled={guardandoStockOperacion}
-              onClick={confirmarOperacionStockNueva}
+              onClick={()=>confirmarOperacionStockNueva()}
             >
               {guardandoStockOperacion
                 ?"Guardando..."
-                :"Confirmar"}
+                :"Confirmar movimiento"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {stockResultado&&(
+      <div style={{
+        position:"fixed",
+        inset:0,
+        zIndex:100006,
+        background:"rgba(15,23,42,.68)",
+        display:"flex",
+        alignItems:"center",
+        justifyContent:"center",
+        padding:16
+      }}>
+        <div style={{
+          width:"min(900px,96vw)",
+          maxHeight:"90vh",
+          overflowY:"auto",
+          background:"#fff",
+          borderRadius:18,
+          padding:24
+        }}>
+          <div style={{
+            display:"flex",
+            justifyContent:"space-between",
+            alignItems:"flex-start",
+            gap:12,
+            marginBottom:12
+          }}>
+            <div>
+              <h2 style={{margin:"0 0 6px"}}>
+                Stock actualizado correctamente
+              </h2>
+              <p style={{margin:0,color:"#64748b"}}>
+                Estos son los productos que fueron actualizados.
+              </p>
+            </div>
+
+            <div style={{
+              padding:"8px 12px",
+              borderRadius:999,
+              background:"#dcfce7",
+              color:"#166534",
+              fontWeight:900,
+              whiteSpace:"nowrap"
+            }}>
+              ✓ GUARDADO
+            </div>
+          </div>
+
+          <div style={{
+            display:"grid",
+            gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",
+            gap:10,
+            margin:"18px 0"
+          }}>
+            <div style={styles.statCard}>
+              <span>Tipo</span>
+              <strong>
+                {String(stockResultado.tipo||"")
+                  .split("_")
+                  .join(" ")}
+              </strong>
+            </div>
+
+            <div style={styles.statCard}>
+              <span>Ubicación</span>
+              <strong>{stockResultado.ubicacion||"-"}</strong>
+            </div>
+
+            <div style={styles.statCard}>
+              <span>Operador</span>
+              <strong>{stockResultado.operador||"-"}</strong>
+            </div>
+
+            <div style={styles.statCard}>
+              <span>Productos actualizados</span>
+              <strong>
+                {Number(stockResultado.total_productos||0)}
+              </strong>
+            </div>
+          </div>
+
+          <div style={styles.tableWrap}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Producto</th>
+                  <th style={styles.th}>Código</th>
+                  <th style={styles.th}>Familia</th>
+                  <th style={styles.th}>
+                    Cantidad actualizada
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {(stockResultado.items||[]).map(
+                  (item,index)=>(
+                    <tr key={`${item.producto_id}-${index}`}>
+                      <td style={{
+                        ...styles.td,
+                        fontWeight:800
+                      }}>
+                        {item.nombre}
+                      </td>
+
+                      <td style={styles.td}>
+                        {item.codigo||"-"}
+                      </td>
+
+                      <td style={styles.td}>
+                        {item.familia||"-"}
+                      </td>
+
+                      <td style={{
+                        ...styles.td,
+                        fontWeight:900,
+                        fontSize:18
+                      }}>
+                        {item.cantidad_texto}
+                      </td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{
+            marginTop:18,
+            display:"flex",
+            justifyContent:"flex-end"
+          }}>
+            <button
+              type="button"
+              style={{
+                ...styles.button,
+                background:"#2563eb",
+                minWidth:180
+              }}
+              onClick={()=>setStockResultado(null)}
+            >
+              Aceptar
             </button>
           </div>
         </div>
