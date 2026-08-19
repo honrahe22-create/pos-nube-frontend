@@ -2961,6 +2961,22 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
           ? "-"
           : "+";
 
+      const stockAnterior=Number(
+        stockProductoEnPunto(
+          item.producto_id,
+          jornadaActiva?.punto_nombre||"PRINCIPAL"
+        )||0
+      );
+
+      const cantidadMovimiento=Number(item.cantidad||0);
+
+      const stockFinal=Math.max(
+        0,
+        signo==="-"
+          ? stockAnterior-cantidadMovimiento
+          : stockAnterior+cantidadMovimiento
+      );
+
       return{
         producto_id:Number(item.producto_id),
         nombre:
@@ -2968,9 +2984,11 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
           `Producto #${item.producto_id}`,
         codigo:producto?.codigo||"-",
         familia:producto?.categoria||"-",
-        cantidad:Number(item.cantidad||0),
+        cantidad:cantidadMovimiento,
         cantidad_texto:
-          `${signo}${Number(item.cantidad||0)}`,
+          `${signo}${cantidadMovimiento}`,
+        stock_anterior:stockAnterior,
+        stock_final:stockFinal,
       };
     });
 
@@ -13288,16 +13306,47 @@ onClick={() => eliminarEgreso(egreso)}
           </div>
         </div>
 
-        <div style={{...styles.tableWrap,marginTop:16,maxHeight:520,overflowY:"auto"}}>
-          <table style={styles.table}>
+        <div style={{
+          ...styles.tableWrap,
+          marginTop:16,
+          maxHeight:520,
+          overflowY:"auto",
+          overflowX:"hidden"
+        }}>
+          <table style={{
+            ...styles.table,
+            width:"100%",
+            tableLayout:"fixed",
+            minWidth:0
+          }}>
             <thead>
               <tr>
-                <th style={styles.th}>Seleccionar</th>
-                <th style={styles.th}>Producto</th>
-                <th style={styles.th}>Código</th>
-                <th style={styles.th}>Familia</th>
-                <th style={styles.th}>Stock en {jornadaActiva?.punto_nombre||"punto"}</th>
-                <th style={styles.th}>Cantidad</th>
+                <th style={{...styles.th,width:56,textAlign:"center"}}>
+                  Sel.
+                </th>
+                <th style={{...styles.th,width:"28%"}}>
+                  Producto
+                </th>
+                <th style={{...styles.th,width:82}}>
+                  Código
+                </th>
+                <th style={{...styles.th,width:90}}>
+                  Familia
+                </th>
+                <th style={{
+                  ...styles.th,
+                  width:94,
+                  whiteSpace:"normal",
+                  lineHeight:1.15
+                }}>
+                  <div>Stock</div>
+                  <div style={{fontSize:10,fontWeight:700}}>
+                    {jornadaActiva?.punto_nombre||"punto"}
+                  </div>
+                </th>
+                <th style={{...styles.th,width:82}}>
+                  Cant.
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -13316,38 +13365,84 @@ onClick={() => eliminarEgreso(egreso)}
 
                   return (
                     <tr key={producto.id}>
-                      <td style={styles.td}>
+                      <td style={{
+                        ...styles.td,
+                        width:56,
+                        textAlign:"center",
+                        padding:"8px 4px"
+                      }}>
                         <input
                           type="checkbox"
                           checked={seleccionado}
                           onChange={()=>toggleProductoOperacionStock(producto)}
                         />
                       </td>
-                      <td style={{...styles.td,fontWeight:800}}>
+                      <td style={{
+                        ...styles.td,
+                        fontWeight:800,
+                        padding:"8px 6px",
+                        overflow:"hidden",
+                        textOverflow:"ellipsis"
+                      }}>
                         {producto.nombre}
                       </td>
-                      <td style={styles.td}>{producto.codigo||"-"}</td>
-                      <td style={styles.td}>{producto.categoria||"Sin familia"}</td>
-                      <td style={styles.td}>
+                      <td style={{
+                        ...styles.td,
+                        padding:"8px 5px",
+                        overflow:"hidden",
+                        textOverflow:"ellipsis"
+                      }}>
+                        {producto.codigo||"-"}
+                      </td>
+                      <td style={{
+                        ...styles.td,
+                        padding:"8px 5px",
+                        overflow:"hidden",
+                        textOverflow:"ellipsis"
+                      }}>
+                        {producto.categoria||"Sin familia"}
+                      </td>
+                      <td style={{
+                        ...styles.td,
+                        padding:"8px 5px",
+                        textAlign:"center",
+                        fontWeight:800
+                      }}>
                         {stockProductoEnPunto(
                           producto.id,
                           jornadaActiva?.punto_nombre||"PRINCIPAL"
                         )}
                       </td>
-                      <td style={styles.td}>
+                      <td style={{
+                        ...styles.td,
+                        width:82,
+                        padding:"8px 4px",
+                        textAlign:"center"
+                      }}>
                         <input
                           type="number"
                           min="0"
+                          max="9999"
                           step="1"
                           disabled={!seleccionado}
                           value={seleccionado?stockItemsOperacion[id]:""}
-                          onChange={(e)=>cambiarCantidadOperacionStock(
-                            producto.id,
-                            e.target.value
-                          )}
+                          onChange={(e)=>{
+                            const valor=String(e.target.value||"")
+                              .replace(/[^0-9]/g,"")
+                              .slice(0,4);
+
+                            cambiarCantidadOperacionStock(
+                              producto.id,
+                              valor
+                            );
+                          }}
                           style={{
                             ...styles.input,
-                            minWidth:120,
+                            width:68,
+                            minWidth:68,
+                            maxWidth:68,
+                            padding:"8px 6px",
+                            textAlign:"center",
                             opacity:seleccionado?1:.5
                           }}
                           placeholder="0"
@@ -13711,6 +13806,9 @@ onClick={() => eliminarEgreso(egreso)}
                   <th style={styles.th}>
                     Cantidad actualizada
                   </th>
+                  <th style={styles.th}>
+                    Stock final
+                  </th>
                 </tr>
               </thead>
 
@@ -13739,6 +13837,15 @@ onClick={() => eliminarEgreso(egreso)}
                         fontSize:18
                       }}>
                         {item.cantidad_texto}
+                      </td>
+
+                      <td style={{
+                        ...styles.td,
+                        fontWeight:900,
+                        fontSize:18,
+                        color:"#166534"
+                      }}>
+                        {Number(item.stock_final||0)}
                       </td>
                     </tr>
                   )
