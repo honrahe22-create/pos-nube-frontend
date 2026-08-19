@@ -535,6 +535,9 @@ const [creditoProfesorForm, setCreditoProfesorForm] = useState({
   comercio: "POS NUBE",
   observacion: "",
 });
+const [creditoProfesorAdminPassword, setCreditoProfesorAdminPassword] = useState("");
+const [verCreditoProfesorAdminPassword, setVerCreditoProfesorAdminPassword] = useState(false);
+const [guardandoAutorizacionCreditoProfesor, setGuardandoAutorizacionCreditoProfesor] = useState(false);
 const [recargaProfesorForm, setRecargaProfesorForm] = useState({
   monto: "",
   metodo_pago: "EFECTIVO",
@@ -4335,15 +4338,22 @@ if (institucionIdLogin) {
   const cambiarCreditoHabilitadoProfesor = async (habilitar) => {
     if (!profesorDetalle?.id) return;
 
-    const accion = habilitar ? "habilitar" : "deshabilitar";
-    const confirmado = window.confirm(
-      `¿Deseas ${accion} el crédito para ${profesorDetalle.nombres || ""} ${profesorDetalle.apellidos || ""}?`
-    );
-    if (!confirmado) return;
+    if (!["ADMIN", "SUPER_ADMIN"].includes(rolActual)) {
+      alert("Solo un administrador puede autorizar cambios de crédito.");
+      return;
+    }
+
+    if (!creditoProfesorAdminPassword) {
+      alert("Ingresa la contraseña del administrador.");
+      return;
+    }
 
     try {
+      setGuardandoAutorizacionCreditoProfesor(true);
+
       const token = localStorage.getItem("token");
       const institucionId = obtenerInstitucionActivaId();
+
       const response = await fetch(
         `${API_URL}/api/profesores/${profesorDetalle.id}/credito-habilitado`,
         {
@@ -4353,25 +4363,44 @@ if (institucionIdLogin) {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            institucion_id: institucionId,
+            institucion_id: Number(institucionId),
             credito_habilitado: habilitar,
+            admin_password: creditoProfesorAdminPassword,
           }),
         }
       );
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "No se pudo actualizar el crédito");
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+          "No se pudo actualizar la autorización de crédito"
+        );
+      }
 
       setProfesorDetalle(data.profesor);
       setProfesores((prev) =>
         prev.map((p) =>
-          Number(p.id) === Number(data.profesor.id) ? data.profesor : p
+          Number(p.id) === Number(data.profesor.id)
+            ? data.profesor
+            : p
         )
       );
+
+      setCreditoProfesorAdminPassword("");
       alert(data.message);
     } catch (error) {
-      console.error("Error actualizando permiso de crédito:", error);
-      alert(error.message || "No se pudo actualizar el permiso de crédito");
+      console.error(
+        "Error actualizando permiso de crédito:",
+        error
+      );
+      alert(
+        error.message ||
+        "No se pudo actualizar el permiso de crédito"
+      );
+    } finally {
+      setGuardandoAutorizacionCreditoProfesor(false);
     }
   };
 
@@ -4380,6 +4409,13 @@ if (institucionIdLogin) {
 
     if (!profesorDetalle?.id) {
       alert("Selecciona un profesor.");
+      return;
+    }
+
+    if (profesorDetalle.credito_habilitado !== true) {
+      alert(
+        "El crédito del profesor está inhabilitado. Un administrador debe autorizarlo con su contraseña."
+      );
       return;
     }
 
@@ -11265,20 +11301,6 @@ onClick={() => eliminarEgreso(egreso)}
                   {profesorDetalle.credito_habilitado === true ? "HABILITADO" : "INHABILITADO"}
                 </span>
               </div>
-              {["ADMIN", "SUPER_ADMIN"].includes(rolActual) && (
-                <button
-                  type="button"
-                  style={{
-                    ...styles.outlineButton,
-                    marginTop: 12,
-                    borderColor: profesorDetalle.credito_habilitado === true ? "#dc2626" : "#16a34a",
-                    color: profesorDetalle.credito_habilitado === true ? "#dc2626" : "#16a34a",
-                  }}
-                  onClick={() => cambiarCreditoHabilitadoProfesor(profesorDetalle.credito_habilitado !== true)}
-                >
-                  {profesorDetalle.credito_habilitado === true ? "Deshabilitar crédito" : "Habilitar crédito"}
-                </button>
-              )}
             </div>
 
             <div
@@ -11767,6 +11789,103 @@ onClick={() => eliminarEgreso(egreso)}
                       Actualizar
                     </button>
                   </div>
+
+                  {["ADMIN", "SUPER_ADMIN"].includes(rolActual) && (
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns:
+                          "repeat(auto-fit, minmax(200px, 1fr))",
+                        gap: 12,
+                        padding: 16,
+                        marginBottom: 18,
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 12,
+                        background: "#f8fafc",
+                        alignItems: "center",
+                      }}
+                    >
+                      <div>
+                        <strong>Habilitar crédito</strong>
+                        <div
+                          style={{
+                            marginTop: 5,
+                            fontWeight: 800,
+                            color:
+                              profesorDetalle.credito_habilitado === true
+                                ? "#166534"
+                                : "#991b1b",
+                          }}
+                        >
+                          {profesorDetalle.credito_habilitado === true
+                            ? "HABILITADO"
+                            : "INHABILITADO"}
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <input
+                          type={
+                            verCreditoProfesorAdminPassword
+                              ? "text"
+                              : "password"
+                          }
+                          placeholder="Contraseña del administrador"
+                          value={creditoProfesorAdminPassword}
+                          onChange={(e) =>
+                            setCreditoProfesorAdminPassword(
+                              e.target.value
+                            )
+                          }
+                          style={{
+                            ...styles.input,
+                            flex: 1,
+                          }}
+                          autoComplete="current-password"
+                        />
+                        <button
+                          type="button"
+                          style={styles.outlineButton}
+                          onClick={() =>
+                            setVerCreditoProfesorAdminPassword(
+                              (actual) => !actual
+                            )
+                          }
+                        >
+                          {verCreditoProfesorAdminPassword
+                            ? "Ocultar"
+                            : "Ver"}
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        style={
+                          profesorDetalle.credito_habilitado === true
+                            ? {
+                                ...styles.outlineButton,
+                                borderColor: "#dc2626",
+                                color: "#dc2626",
+                              }
+                            : styles.button
+                        }
+                        disabled={
+                          guardandoAutorizacionCreditoProfesor
+                        }
+                        onClick={() =>
+                          cambiarCreditoHabilitadoProfesor(
+                            profesorDetalle.credito_habilitado !== true
+                          )
+                        }
+                      >
+                        {guardandoAutorizacionCreditoProfesor
+                          ? "Validando..."
+                          : profesorDetalle.credito_habilitado === true
+                          ? "Autorizar y deshabilitar crédito"
+                          : "Autorizar y habilitar crédito"}
+                      </button>
+                    </div>
+                  )}
 
                   <form
                     onSubmit={registrarCreditoProfesor}

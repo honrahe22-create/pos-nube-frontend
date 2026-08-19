@@ -44,7 +44,8 @@ export default function AlumnosModulo({
   setHistorialConsumoAlumno,
   cuentasBancarias = [],
   cargarCuentasBancarias,
-  cargarRecargas
+  cargarRecargas,
+  rolActual
 }) {
   const [busquedaHistorial, setBusquedaHistorial] = useState("");
   const [mostrarFiltroAlumnos, setMostrarFiltroAlumnos] = useState(false);
@@ -72,6 +73,8 @@ export default function AlumnosModulo({
     credito_habilitado: false,
     limite_credito: "",
   });
+  const [creditoAdminPassword, setCreditoAdminPassword] = useState("");
+  const [verCreditoAdminPassword, setVerCreditoAdminPassword] = useState(false);
   const [abonoCreditoForm, setAbonoCreditoForm] = useState({
     monto: "",
     observacion: "",
@@ -556,6 +559,11 @@ export default function AlumnosModulo({
       return;
     }
 
+    if (!creditoAdminPassword) {
+      alert("Ingresa la contraseña del administrador para autorizar el crédito.");
+      return;
+    }
+
     try {
       setGuardandoCreditoAlumno(true);
 
@@ -575,6 +583,7 @@ export default function AlumnosModulo({
             credito_habilitado:
               creditoConfiguracionForm.credito_habilitado,
             limite_credito: limite,
+            admin_password: creditoAdminPassword,
           }),
         }
       );
@@ -593,8 +602,9 @@ export default function AlumnosModulo({
         ...data.alumno,
       }));
 
+      setCreditoAdminPassword("");
       await cargarAlumnos();
-      alert("Límite de crédito actualizado correctamente.");
+      alert(data.message || "Configuración de crédito actualizada correctamente.");
     } catch (error) {
       console.error("Error guardando límite:", error);
       alert(error.message || "No se pudo guardar el límite.");
@@ -1298,64 +1308,102 @@ export default function AlumnosModulo({
                 </div>
               </div>
 
-              <form
-                onSubmit={guardarLimiteCreditoAlumno}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns:
-                    "repeat(auto-fit, minmax(190px, 1fr))",
-                  gap: 12,
-                  padding: 16,
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 12,
-                  background: "#f8fafc",
-                  marginBottom: 18,
-                }}
-              >
-                <label style={paymon.transferToggleRow}>
-                  <span>Habilitar crédito</span>
+              {["ADMIN", "SUPER_ADMIN"].includes(
+                String(rolActual || "").toUpperCase()
+              ) && (
+                <form
+                  onSubmit={guardarLimiteCreditoAlumno}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns:
+                      "repeat(auto-fit, minmax(190px, 1fr))",
+                    gap: 12,
+                    padding: 16,
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 12,
+                    background: "#f8fafc",
+                    marginBottom: 18,
+                  }}
+                >
+                  <label style={paymon.transferToggleRow}>
+                    <span>Habilitar crédito</span>
+                    <input
+                      type="checkbox"
+                      checked={
+                        creditoConfiguracionForm.credito_habilitado
+                      }
+                      onChange={(e) =>
+                        setCreditoConfiguracionForm({
+                          ...creditoConfiguracionForm,
+                          credito_habilitado: e.target.checked,
+                        })
+                      }
+                    />
+                  </label>
+
                   <input
-                    type="checkbox"
-                    checked={
-                      creditoConfiguracionForm.credito_habilitado
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Límite de crédito"
+                    value={
+                      creditoConfiguracionForm.limite_credito
                     }
                     onChange={(e) =>
                       setCreditoConfiguracionForm({
                         ...creditoConfiguracionForm,
-                        credito_habilitado: e.target.checked,
+                        limite_credito: e.target.value,
                       })
                     }
+                    style={paymon.modalInput}
+                    required
                   />
-                </label>
 
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="Límite de crédito"
-                  value={
-                    creditoConfiguracionForm.limite_credito
-                  }
-                  onChange={(e) =>
-                    setCreditoConfiguracionForm({
-                      ...creditoConfiguracionForm,
-                      limite_credito: e.target.value,
-                    })
-                  }
-                  style={paymon.modalInput}
-                  required
-                />
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input
+                      type={
+                        verCreditoAdminPassword
+                          ? "text"
+                          : "password"
+                      }
+                      placeholder="Contraseña del administrador"
+                      value={creditoAdminPassword}
+                      onChange={(e) =>
+                        setCreditoAdminPassword(e.target.value)
+                      }
+                      style={{
+                        ...paymon.modalInput,
+                        flex: 1,
+                      }}
+                      autoComplete="current-password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      style={paymon.smallButton}
+                      onClick={() =>
+                        setVerCreditoAdminPassword(
+                          (actual) => !actual
+                        )
+                      }
+                    >
+                      {verCreditoAdminPassword ? "Ocultar" : "Ver"}
+                    </button>
+                  </div>
 
-                <button
-                  type="submit"
-                  style={paymon.orangeButton}
-                  disabled={guardandoCreditoAlumno}
-                >
-                  {guardandoCreditoAlumno
-                    ? "Guardando..."
-                    : "Guardar límite"}
-                </button>
-              </form>
+                  <button
+                    type="submit"
+                    style={paymon.orangeButton}
+                    disabled={guardandoCreditoAlumno}
+                  >
+                    {guardandoCreditoAlumno
+                      ? "Validando..."
+                      : creditoConfiguracionForm.credito_habilitado
+                      ? "Autorizar y guardar crédito"
+                      : "Autorizar y deshabilitar crédito"}
+                  </button>
+                </form>
+              )}
 
               <form
                 onSubmit={registrarAbonoCreditoAlumno}
