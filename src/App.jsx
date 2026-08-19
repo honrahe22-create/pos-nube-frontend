@@ -4361,15 +4361,13 @@ if (institucionIdLogin) {
       return;
     }
 
-    const habilitar = accion !== "DESHABILITAR";
-    const limite = Number(creditoProfesorLimite);
+    if (accion === "GUARDAR_LIMITE") {
+      const limite = Number(creditoProfesorLimite);
 
-    if (
-      habilitar &&
-      (!Number.isFinite(limite) || limite <= 0)
-    ) {
-      alert("Ingresa un límite de crédito mayor a 0.");
-      return;
+      if (!Number.isFinite(limite) || limite <= 0) {
+        alert("Ingresa un límite de crédito mayor a 0.");
+        return;
+      }
     }
 
     try {
@@ -4388,11 +4386,13 @@ if (institucionIdLogin) {
           },
           body: JSON.stringify({
             institucion_id: Number(institucionId),
-            credito_habilitado: habilitar,
+            accion_credito: accion,
+            credito_habilitado:
+              accion !== "DESHABILITAR",
             limite_credito:
-              accion === "DESHABILITAR"
-                ? Number(profesorDetalle?.limite_credito || 0)
-                : limite,
+              accion === "GUARDAR_LIMITE"
+                ? Number(creditoProfesorLimite)
+                : Number(profesorDetalle?.limite_credito || 0),
             admin_password: creditoProfesorAdminPassword,
           }),
         }
@@ -4408,6 +4408,7 @@ if (institucionIdLogin) {
       }
 
       setProfesorDetalle(data.profesor);
+
       setProfesores((prev) =>
         prev.map((p) =>
           Number(p.id) === Number(data.profesor.id)
@@ -4420,6 +4421,7 @@ if (institucionIdLogin) {
         String(Number(data.profesor?.limite_credito || 0))
       );
       setCreditoProfesorAdminPassword("");
+
       alert(data.message);
     } catch (error) {
       console.error(
@@ -13292,7 +13294,7 @@ onClick={() => eliminarEgreso(egreso)}
             </div>
             <div style={styles.statCard}>
               <span>Tipo</span>
-              <strong>{String(stockConfirmacion.tipo).replaceAll("_"," ")}</strong>
+              <strong>{String(stockConfirmacion.tipo).split("_").join(" ")}</strong>
             </div>
             <div style={styles.statCard}>
               <span>Punto</span>

@@ -827,7 +827,7 @@ export default function ConfiguracionModulo({
                 ([nombre, cantidad]) => (
                   <div key={nombre} style={ui.countItem}>
                     <span style={ui.countName}>
-                      {nombre.replaceAll("_", " ")}
+                      {String(nombre).split("_").join(" ")}
                     </span>
                     <strong style={ui.countValue}>
                       {Number(cantidad || 0)}
