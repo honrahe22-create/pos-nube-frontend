@@ -2640,8 +2640,23 @@ const itemsValidosOperacionStock=()=>{
 
 const abrirConfirmacionStock=(confirmacion)=>{
   if(!confirmacion)return;
+
   setGuardandoStockOperacion(false);
+  setStockResultado(null);
   setStockConfirmacion(confirmacion);
+
+  setTimeout(()=>{
+    const panel=document.getElementById(
+      "stock-confirmacion-panel"
+    );
+
+    if(panel&&typeof panel.scrollIntoView==="function"){
+      panel.scrollIntoView({
+        behavior:"auto",
+        block:"start",
+      });
+    }
+  },120);
 };
 
 const prepararConfirmacionOperacionStock=()=>{
@@ -2977,8 +2992,38 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
       fecha:new Date().toISOString(),
     });
 
-    limpiarOperacionStock();
+    // Limpiamos los campos de captura, pero NO el resultado que acabamos de mostrar.
+    setStockItemsOperacion({});
+    setStockBusquedaOperacion("");
+    setStockFamiliaOperacion("TODAS");
+    setStockCompraForm({
+      proveedor_id:"",
+      proveedor_nuevo:"",
+      numero_factura:"",
+      observacion:"",
+    });
+    setStockOperacionForm({
+      observacion:"",
+      ubicacion_destino:"",
+      institucion_destino_id:"",
+      punto_destino_id:"",
+      destinatario_cortesia:"",
+    });
+
     setGuardandoStockOperacion(false);
+
+    setTimeout(()=>{
+      const panel=document.getElementById(
+        "stock-resultado-panel"
+      );
+
+      if(panel&&typeof panel.scrollIntoView==="function"){
+        panel.scrollIntoView({
+          behavior:"smooth",
+          block:"center",
+        });
+      }
+    },120);
 
     Promise.all([
       cargarProductos(),
@@ -13341,28 +13386,48 @@ onClick={() => eliminarEgreso(egreso)}
     )}
 
     {stockConfirmacion&&(
-      <div style={{
-        position:"fixed",
-        inset:0,
-        zIndex:100005,
-        background:"rgba(15,23,42,.68)",
-        display:"flex",
-        alignItems:"center",
-        justifyContent:"center",
-        padding:16
-      }}>
+      <div
+        id="stock-confirmacion-panel"
+        style={{
+          position:"absolute",
+          top:0,
+          left:0,
+          width:"100%",
+          minHeight:"100%",
+          zIndex:100005,
+          background:"rgba(15,23,42,.68)",
+          display:"flex",
+          alignItems:"flex-start",
+          justifyContent:"center",
+          padding:"28px 16px",
+          boxSizing:"border-box"
+        }}
+      >
         <div style={{
-          width:"min(760px,96vw)",
-          maxHeight:"90vh",
+          width:"min(950px,96vw)",
+          maxHeight:"88vh",
           overflowY:"auto",
           background:"#fff",
           borderRadius:18,
-          padding:24
+          padding:24,
+          boxShadow:"0 22px 60px rgba(15,23,42,.30)"
         }}>
-          <h2 style={{marginTop:0}}>Confirmar movimiento de Stock</h2>
-          <p style={{color:"#64748b",marginTop:6}}>
-            Revisa el detalle antes de afectar las existencias.
-          </p>
+          <div style={{
+            display:"flex",
+            justifyContent:"space-between",
+            alignItems:"flex-start",
+            gap:12,
+            flexWrap:"wrap"
+          }}>
+            <div>
+              <h2 style={{margin:"0 0 6px"}}>
+                Confirmar movimiento de Stock
+              </h2>
+              <p style={{color:"#64748b",margin:0}}>
+                Revisa el detalle antes de afectar las existencias.
+              </p>
+            </div>
+          </div>
 
           <div style={{
             display:"grid",
@@ -13378,7 +13443,9 @@ onClick={() => eliminarEgreso(egreso)}
             <div style={styles.statCard}>
               <span>Tipo</span>
               <strong>
-                {String(stockConfirmacion.tipo).split("_").join(" ")}
+                {String(stockConfirmacion.tipo)
+                  .split("_")
+                  .join(" ")}
               </strong>
             </div>
 
@@ -13410,8 +13477,14 @@ onClick={() => eliminarEgreso(egreso)}
           </div>
 
           {stockConfirmacion.tipo==="COMPRA"&&(
-            <div style={{marginBottom:16}}>
-              <strong>Factura:</strong> {stockCompraForm.numero_factura||"-"}
+            <div style={{
+              marginBottom:16,
+              padding:12,
+              background:"#f8fafc",
+              borderRadius:10
+            }}>
+              <strong>Factura:</strong>{" "}
+              {stockCompraForm.numero_factura||"-"}
               <br/>
               <strong>Proveedor:</strong>{" "}
               {proveedoresStock.find(
@@ -13423,9 +13496,14 @@ onClick={() => eliminarEgreso(egreso)}
           )}
 
           {stockConfirmacion.tipo==="CORTESIA"&&(
-            <div style={{marginBottom:16}}>
-              <strong>Destinatario de cortesía:</strong>{" "}
-              {stockOperacionForm.destinatario_cortesia}
+            <div style={{
+              marginBottom:16,
+              padding:12,
+              background:"#fff7ed",
+              borderRadius:10
+            }}>
+              <strong>Destinatario:</strong>{" "}
+              {stockOperacionForm.destinatario_cortesia||"-"}
             </div>
           )}
 
@@ -13458,23 +13536,36 @@ onClick={() => eliminarEgreso(egreso)}
                   <th style={styles.th}>Cantidad</th>
                 </tr>
               </thead>
+
               <tbody>
                 {(stockConfirmacion.items||[]).map((item)=>{
                   const producto=productos.find(
                     (p)=>Number(p.id)===Number(item.producto_id)
                   );
-                  return (
+
+                  return(
                     <tr key={item.producto_id}>
-                      <td style={styles.td}>
-                        {producto?.nombre||`Producto #${item.producto_id}`}
+                      <td style={{
+                        ...styles.td,
+                        fontWeight:800
+                      }}>
+                        {producto?.nombre||
+                          `Producto #${item.producto_id}`}
                       </td>
+
                       <td style={styles.td}>
                         {producto?.codigo||"-"}
                       </td>
+
                       <td style={styles.td}>
                         {producto?.categoria||"-"}
                       </td>
-                      <td style={{...styles.td,fontWeight:900}}>
+
+                      <td style={{
+                        ...styles.td,
+                        fontWeight:900,
+                        fontSize:18
+                      }}>
                         {item.cantidad}
                       </td>
                     </tr>
@@ -13488,7 +13579,8 @@ onClick={() => eliminarEgreso(egreso)}
             display:"flex",
             justifyContent:"flex-end",
             gap:12,
-            marginTop:20
+            marginTop:20,
+            flexWrap:"wrap"
           }}>
             <button
               type="button"
@@ -13507,7 +13599,7 @@ onClick={() => eliminarEgreso(egreso)}
               style={{
                 ...styles.button,
                 background:"#2563eb",
-                minWidth:190
+                minWidth:210
               }}
               disabled={guardandoStockOperacion}
               onClick={()=>confirmarOperacionStockNueva()}
@@ -13522,29 +13614,38 @@ onClick={() => eliminarEgreso(egreso)}
     )}
 
     {stockResultado&&(
-      <div style={{
-        position:"fixed",
-        inset:0,
-        zIndex:100006,
-        background:"rgba(15,23,42,.68)",
-        display:"flex",
-        alignItems:"center",
-        justifyContent:"center",
-        padding:16
-      }}>
+      <div
+        id="stock-resultado-panel"
+        style={{
+          position:"absolute",
+          top:0,
+          left:0,
+          width:"100%",
+          minHeight:"100%",
+          zIndex:100006,
+          background:"rgba(15,23,42,.68)",
+          display:"flex",
+          alignItems:"flex-start",
+          justifyContent:"center",
+          padding:"28px 16px",
+          boxSizing:"border-box"
+        }}
+      >
         <div style={{
-          width:"min(900px,96vw)",
+          width:"min(1050px,96vw)",
           maxHeight:"90vh",
           overflowY:"auto",
           background:"#fff",
           borderRadius:18,
-          padding:24
+          padding:24,
+          boxShadow:"0 22px 60px rgba(15,23,42,.30)"
         }}>
           <div style={{
             display:"flex",
             justifyContent:"space-between",
             alignItems:"flex-start",
             gap:12,
+            flexWrap:"wrap",
             marginBottom:12
           }}>
             <div>
@@ -13561,8 +13662,7 @@ onClick={() => eliminarEgreso(egreso)}
               borderRadius:999,
               background:"#dcfce7",
               color:"#166534",
-              fontWeight:900,
-              whiteSpace:"nowrap"
+              fontWeight:900
             }}>
               ✓ GUARDADO
             </div>
