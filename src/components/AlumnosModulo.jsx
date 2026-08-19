@@ -60,8 +60,7 @@ export default function AlumnosModulo({
   const [recargaAlumnoForm, setRecargaAlumnoForm] = useState({
     monto: "",
     metodo_pago: "EFECTIVO",
-    cuenta_bancaria_id: "",
-    banco: "",
+    fecha_transferencia: "",
     numero_comprobante: "",
     observacion: "",
   });
@@ -400,8 +399,7 @@ export default function AlumnosModulo({
     setRecargaAlumnoForm({
       monto: "",
       metodo_pago: "EFECTIVO",
-      cuenta_bancaria_id: "",
-      banco: "",
+      fecha_transferencia: "",
       numero_comprobante: "",
       observacion: "",
     });
@@ -418,10 +416,11 @@ export default function AlumnosModulo({
     }
 
     if (recargaAlumnoForm.metodo_pago === "TRANSFERENCIA") {
-      if (!recargaAlumnoForm.cuenta_bancaria_id || !recargaAlumnoForm.banco) {
-        alert("Selecciona la cuenta bancaria receptora.");
+      if (!String(recargaAlumnoForm.fecha_transferencia || "").trim()) {
+        alert("Selecciona la fecha en que se realizó la transferencia.");
         return;
       }
+
       if (!String(recargaAlumnoForm.numero_comprobante || "").trim()) {
         alert("Ingresa el número de comprobante de la transferencia.");
         return;
@@ -443,13 +442,9 @@ export default function AlumnosModulo({
           alumno_id: Number(alumnoDetalle.id),
           monto,
           metodo_pago: recargaAlumnoForm.metodo_pago,
-          cuenta_bancaria_id:
+          fecha_transferencia:
             recargaAlumnoForm.metodo_pago === "TRANSFERENCIA"
-              ? Number(recargaAlumnoForm.cuenta_bancaria_id)
-              : null,
-          banco:
-            recargaAlumnoForm.metodo_pago === "TRANSFERENCIA"
-              ? recargaAlumnoForm.banco
+              ? String(recargaAlumnoForm.fecha_transferencia).trim()
               : null,
           numero_comprobante:
             recargaAlumnoForm.metodo_pago === "TRANSFERENCIA"
@@ -783,8 +778,7 @@ export default function AlumnosModulo({
                 onChange={(e) => setRecargaAlumnoForm({
                   ...recargaAlumnoForm,
                   metodo_pago: e.target.checked ? "TRANSFERENCIA" : "EFECTIVO",
-                  cuenta_bancaria_id: "",
-                  banco: "",
+                  fecha_transferencia: "",
                   numero_comprobante: "",
                 })}
               />
@@ -792,33 +786,21 @@ export default function AlumnosModulo({
 
             {recargaAlumnoForm.metodo_pago === "TRANSFERENCIA" && (
               <>
-                <label style={paymon.modalLabel}>Banco donde realizó la transferencia *</label>
-                <select
-                  value={recargaAlumnoForm.cuenta_bancaria_id}
-                  onChange={(e) => {
-                    const cuenta = cuentasBancarias.find((c) => String(c.id) === String(e.target.value));
+                <label style={paymon.modalLabel}>
+                  Fecha en que realizó la transferencia *
+                </label>
+                <input
+                  type="date"
+                  value={recargaAlumnoForm.fecha_transferencia}
+                  onChange={(e) =>
                     setRecargaAlumnoForm({
                       ...recargaAlumnoForm,
-                      cuenta_bancaria_id: e.target.value,
-                      banco: cuenta ? cuenta.banco : "",
-                    });
-                  }}
+                      fecha_transferencia: e.target.value,
+                    })
+                  }
                   style={paymon.modalInput}
                   required
-                >
-                  <option value="">Seleccionar banco</option>
-                  {cuentasBancarias.filter((c) => c.activo !== false).map((cuenta) => (
-                    <option key={cuenta.id} value={cuenta.id}>
-                      {cuenta.banco}
-                    </option>
-                  ))}
-                </select>
-
-                {!cuentasBancarias.length && (
-                  <div style={paymon.modalWarning}>
-                    No hay bancos configurados. Regístralos en Configuración → Bancos.
-                  </div>
-                )}
+                />
 
                 <label style={paymon.modalLabel}>Número de comprobante *</label>
                 <input
