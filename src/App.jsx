@@ -428,19 +428,28 @@ const [stockOperacionForm,setStockOperacionForm]=useState({
   destinatario_cortesia:"",
 });
 const [proveedoresStock,setProveedoresStock]=useState([]);
+const [familiasCatalogoStock,setFamiliasCatalogoStock]=useState([]);
+const [importandoProveedoresStock,setImportandoProveedoresStock]=useState(false);
+const [importandoFamiliasStock,setImportandoFamiliasStock]=useState(false);
 const [stockConfirmacion,setStockConfirmacion]=useState(null);
 const [guardandoStockOperacion,setGuardandoStockOperacion]=useState(false);
 
 
 
 const familiasOperacionStock = useMemo(() => {
-  const valores = productos
+  const valoresProductos = productos
     .filter((p) => p?.activo !== false)
     .map((p) => String(p?.categoria || "").trim())
     .filter(Boolean);
 
-  return [...new Set(valores)].sort((a,b)=>a.localeCompare(b));
-}, [productos]);
+  const valoresCatalogo = (familiasCatalogoStock || [])
+    .filter((f) => f?.activo !== false)
+    .map((f) => String(f?.nombre || "").trim())
+    .filter(Boolean);
+
+  return [...new Set([...valoresProductos, ...valoresCatalogo])]
+    .sort((a,b)=>a.localeCompare(b));
+}, [productos, familiasCatalogoStock]);
 
 const productosOperacionStock = useMemo(() => {
   const texto = String(stockBusquedaOperacion || "").trim().toLowerCase();
@@ -2284,6 +2293,244 @@ const cargarProveedoresStock=async()=>{
   }
 };
 
+
+const cargarFamiliasStock=async()=>{
+  try{
+    const token=localStorage.getItem("token");
+    const institucionId=obtenerInstitucionActivaId();
+
+    if(!token||!institucionId){
+      setFamiliasCatalogoStock([]);
+      return [];
+    }
+
+    const res=await fetch(
+      `${API_URL}/api/inventario/familias?institucion_id=${Number(institucionId)}&t=${Date.now()}`,
+      {
+        headers:{Authorization:`Bearer ${token}`},
+        cache:"no-store",
+      }
+    );
+
+    const data=await res.json();
+
+    if(!res.ok){
+      throw new Error(data.message||"No se pudieron cargar las familias");
+    }
+
+    const lista=Array.isArray(data)?data:[];
+    setFamiliasCatalogoStock(lista);
+    return lista;
+  }catch(error){
+    console.error("Error cargando familias de Stock:",error);
+    setFamiliasCatalogoStock([]);
+    return [];
+  }
+};
+
+const normalizarEncabezadoStockExcel=(valor)=>
+  String(valor||"")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g,"_");
+
+const leerExcelStockCatalogo=(archivo)=>
+  new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+
+    reader.onload=(evento)=>{
+      try{
+        const workbook=XLSX.read(evento.target.result,{type:"array"});
+        const hoja=workbook.SheetNames[0];
+
+        if(!hoja){
+          throw new Error("El archivo Excel no contiene hojas.");
+        }
+
+        const filas=XLSX.utils.sheet_to_json(
+          workbook.Sheets[hoja],
+          {defval:"",raw:false}
+        );
+
+        resolve(Array.isArray(filas)?filas:[]);
+      }catch(error){
+        reject(error);
+      }
+    };
+
+    reader.onerror=()=>reject(new Error("No se pudo leer el archivo Excel."));
+    reader.readAsArrayBuffer(archivo);
+  });
+
+const descargarPlantillaProveedoresStock=()=>{
+  const worksheet=XLSX.utils.aoa_to_sheet([
+    ["NOMBRE","RUC_CEDULA"],
+    ["Distribuidora ABC","1790012345001"],
+  ]);
+  const workbook=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook,worksheet,"Proveedores");
+  XLSX.writeFile(workbook,"plantilla_proveedores.xlsx");
+};
+
+const descargarPlantillaFamiliasStock=()=>{
+  const worksheet=XLSX.utils.aoa_to_sheet([
+    ["NOMBRE","CODIGO","MATERIA_PRIMA","ESTADO"],
+    ["Bebidas","BEB","NO","ACTIVO"],
+    ["Carnes","CAR","SI","ACTIVO"],
+  ]);
+  const workbook=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook,worksheet,"Familias");
+  XLSX.writeFile(workbook,"plantilla_familias.xlsx");
+};
+
+const importarProveedoresStockExcel=async(event)=>{
+  const archivo=event.target.files?.[0];
+  event.target.value="";
+
+  if(!archivo)return;
+
+  try{
+    setImportandoProveedoresStock(true);
+
+    const filas=await leerExcelStockCatalogo(archivo);
+    const proveedores=filas
+      .map((fila)=>{
+        const normalizada={};
+        Object.entries(fila||{}).forEach(([clave,valor])=>{
+          normalizada[normalizarEncabezadoStockExcel(clave)]=valor;
+        });
+
+        return {
+          nombre:String(normalizada.NOMBRE||"").trim(),
+          ruc_cedula:String(
+            normalizada.RUC_CEDULA||
+            normalizada.RUC||
+            normalizada.CEDULA||
+            ""
+          ).trim(),
+        };
+      })
+      .filter((p)=>p.nombre&&p.ruc_cedula);
+
+    if(!proveedores.length){
+      alert("No se encontraron filas válidas. Usa las columnas NOMBRE y RUC_CEDULA.");
+      return;
+    }
+
+    const token=localStorage.getItem("token");
+    const institucionId=obtenerInstitucionActivaId();
+
+    const res=await fetch(`${API_URL}/api/inventario/proveedores/importar`,{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        Authorization:`Bearer ${token}`,
+      },
+      body:JSON.stringify({
+        institucion_id:Number(institucionId),
+        proveedores,
+      }),
+    });
+
+    const data=await res.json();
+
+    if(!res.ok){
+      throw new Error(data.message||data.error||"No se pudieron importar los proveedores.");
+    }
+
+    await cargarProveedoresStock();
+
+    alert(
+      `Proveedores importados.\n`+
+      `Procesados: ${Number(data.procesados||0)}\n`+
+      `Nuevos: ${Number(data.nuevos||0)}\n`+
+      `Actualizados: ${Number(data.actualizados||0)}`
+    );
+  }catch(error){
+    console.error("Error importando proveedores:",error);
+    alert(error.message||"No se pudo importar el Excel de proveedores.");
+  }finally{
+    setImportandoProveedoresStock(false);
+  }
+};
+
+const importarFamiliasStockExcel=async(event)=>{
+  const archivo=event.target.files?.[0];
+  event.target.value="";
+
+  if(!archivo)return;
+
+  try{
+    setImportandoFamiliasStock(true);
+
+    const filas=await leerExcelStockCatalogo(archivo);
+    const familias=filas
+      .map((fila)=>{
+        const normalizada={};
+        Object.entries(fila||{}).forEach(([clave,valor])=>{
+          normalizada[normalizarEncabezadoStockExcel(clave)]=valor;
+        });
+
+        return {
+          nombre:String(normalizada.NOMBRE||"").trim(),
+          codigo:String(normalizada.CODIGO||"").trim(),
+          materia_prima:String(normalizada.MATERIA_PRIMA||"NO")
+            .trim()
+            .toUpperCase(),
+          estado:String(normalizada.ESTADO||"ACTIVO")
+            .trim()
+            .toUpperCase(),
+        };
+      })
+      .filter((f)=>f.nombre);
+
+    if(!familias.length){
+      alert(
+        "No se encontraron filas válidas. Usa NOMBRE, CODIGO, MATERIA_PRIMA y ESTADO."
+      );
+      return;
+    }
+
+    const token=localStorage.getItem("token");
+    const institucionId=obtenerInstitucionActivaId();
+
+    const res=await fetch(`${API_URL}/api/inventario/familias/importar`,{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        Authorization:`Bearer ${token}`,
+      },
+      body:JSON.stringify({
+        institucion_id:Number(institucionId),
+        familias,
+      }),
+    });
+
+    const data=await res.json();
+
+    if(!res.ok){
+      throw new Error(data.message||data.error||"No se pudieron importar las familias.");
+    }
+
+    await cargarFamiliasStock();
+
+    alert(
+      `Familias importadas.\n`+
+      `Procesadas: ${Number(data.procesadas||0)}\n`+
+      `Nuevas: ${Number(data.nuevas||0)}\n`+
+      `Actualizadas: ${Number(data.actualizadas||0)}`
+    );
+  }catch(error){
+    console.error("Error importando familias:",error);
+    alert(error.message||"No se pudo importar el Excel de familias.");
+  }finally{
+    setImportandoFamiliasStock(false);
+  }
+};
+
+
 const limpiarOperacionStock=()=>{
   setStockItemsOperacion({});
   setStockBusquedaOperacion("");
@@ -2317,7 +2564,10 @@ const cambiarTipoIngresoStock=async(valor)=>{
   limpiarOperacionStock();
 
   if(valor==="COMPRA"){
-    await cargarProveedoresStock();
+    await Promise.all([
+      cargarProveedoresStock(),
+      cargarFamiliasStock(),
+    ]);
   }
 
   if(valor==="TRANSFERENCIA_LOCALES"){
@@ -2336,10 +2586,11 @@ const toggleProductoOperacionStock=(producto)=>{
     const copia={...prev};
     const id=String(producto.id);
 
-    if(copia[id]){
+    if(Object.prototype.hasOwnProperty.call(copia,id)){
       delete copia[id];
     }else{
-      copia[id]=1;
+      // Se deja vacío para que el usuario escriba la cantidad sin un 0 inicial.
+      copia[id]="";
     }
 
     return copia;
@@ -2347,11 +2598,14 @@ const toggleProductoOperacionStock=(producto)=>{
 };
 
 const cambiarCantidadOperacionStock=(productoId,valor)=>{
-  const cantidad=Math.max(0,Math.trunc(Number(valor||0)));
+  const texto=String(valor??"").trim();
 
   setStockItemsOperacion((prev)=>({
     ...prev,
-    [String(productoId)]:cantidad,
+    [String(productoId)]:
+      texto===""
+        ?""
+        :String(Math.max(0,Math.trunc(Number(texto)||0))),
   }));
 };
 
@@ -12383,27 +12637,48 @@ onClick={() => eliminarEgreso(egreso)}
               onChange={(e)=>setStockCompraForm((p)=>({
                 ...p,
                 proveedor_id:e.target.value,
-                proveedor_nuevo:e.target.value ? "" : p.proveedor_nuevo
+                proveedor_nuevo:""
               }))}
             >
-              <option value="">Nuevo proveedor / escribir abajo</option>
+              <option value="">Seleccionar proveedor</option>
               {proveedoresStock.map((prov)=>(
-                <option key={prov.id} value={prov.id}>{prov.nombre}</option>
+                <option key={prov.id} value={prov.id}>
+                  {prov.nombre}{prov.ruc?` - ${prov.ruc}`:""}
+                </option>
               ))}
             </select>
-          </div>
 
-          {!stockCompraForm.proveedor_id&&(
-            <div style={styles.filterField}>
-              <label style={styles.label}>Nombre nuevo proveedor *</label>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
+              <button
+                type="button"
+                style={styles.outlineButton}
+                onClick={()=>document.getElementById("importar-proveedores-stock")?.click()}
+                disabled={importandoProveedoresStock}
+              >
+                {importandoProveedoresStock?"Importando...":"Importar Excel proveedores"}
+              </button>
+
+              <button
+                type="button"
+                style={styles.outlineButton}
+                onClick={descargarPlantillaProveedoresStock}
+              >
+                Descargar plantilla
+              </button>
+
               <input
-                style={styles.input}
-                value={stockCompraForm.proveedor_nuevo}
-                onChange={(e)=>setStockCompraForm((p)=>({...p,proveedor_nuevo:e.target.value}))}
-                placeholder="Nombre del proveedor"
+                id="importar-proveedores-stock"
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={importarProveedoresStockExcel}
+                style={{display:"none"}}
               />
             </div>
-          )}
+
+            <div style={{fontSize:12,color:"#64748b",marginTop:6}}>
+              Excel: NOMBRE | RUC_CEDULA
+            </div>
+          </div>
 
           <div style={{...styles.filterField,gridColumn:"1 / -1"}}>
             <label style={styles.label}>Observación</label>
@@ -12642,6 +12917,41 @@ onClick={() => eliminarEgreso(egreso)}
                 <option key={familia} value={familia}>{familia}</option>
               ))}
             </select>
+
+            {stockSeccion==="INGRESOS"&&stockTipoIngreso==="COMPRA"&&(
+              <>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
+                  <button
+                    type="button"
+                    style={styles.outlineButton}
+                    onClick={()=>document.getElementById("importar-familias-stock")?.click()}
+                    disabled={importandoFamiliasStock}
+                  >
+                    {importandoFamiliasStock?"Importando...":"Importar Excel familias"}
+                  </button>
+
+                  <button
+                    type="button"
+                    style={styles.outlineButton}
+                    onClick={descargarPlantillaFamiliasStock}
+                  >
+                    Descargar plantilla
+                  </button>
+
+                  <input
+                    id="importar-familias-stock"
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={importarFamiliasStockExcel}
+                    style={{display:"none"}}
+                  />
+                </div>
+
+                <div style={{fontSize:12,color:"#64748b",marginTop:6}}>
+                  Excel: NOMBRE | CODIGO | MATERIA_PRIMA (SI/NO) | ESTADO
+                </div>
+              </>
+            )}
           </div>
         </div>
 
