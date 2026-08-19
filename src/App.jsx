@@ -2635,6 +2635,49 @@ const itemsValidosOperacionStock=()=>{
     );
 };
 
+const esAppImin=()=>{
+  try{
+    return /POSNUBEPrinter/i.test(
+      String(navigator.userAgent||"")
+    );
+  }catch(_error){
+    return false;
+  }
+};
+
+const abrirConfirmacionStock=(confirmacion)=>{
+  if(!confirmacion)return;
+
+  // En el WebView antiguo del iMin evitamos depender del modal React.
+  // El botón abre una confirmación nativa y, si el usuario acepta,
+  // ejecuta directamente el guardado.
+  if(esAppImin()){
+    const tipo=String(confirmacion.tipo||"")
+      .split("_")
+      .join(" ");
+
+    const totalProductos=Array.isArray(confirmacion.items)
+      ?confirmacion.items.length
+      :0;
+
+    const aceptar=window.confirm(
+      `Confirmar movimiento de Stock\n\n`+
+      `Tipo: ${tipo}\n`+
+      `Productos: ${totalProductos}\n`+
+      `Punto: ${jornadaActiva?.punto_nombre||"-"}\n\n`+
+      `¿Deseas guardar este movimiento?`
+    );
+
+    if(aceptar){
+      confirmarOperacionStockNueva(confirmacion);
+    }
+
+    return;
+  }
+
+  setStockConfirmacion(confirmacion);
+};
+
 const prepararConfirmacionOperacionStock=()=>{
   if(!jornadaActiva?.id){
     alert("Debes iniciar una jornada antes de operar Stock.");
@@ -2695,7 +2738,7 @@ const prepararConfirmacionOperacionStock=()=>{
       return;
     }
 
-    setStockConfirmacion({
+    abrirConfirmacionStock({
       grupo:"INGRESOS",
       tipo:stockTipoIngreso,
       items,
@@ -2722,7 +2765,7 @@ const prepararConfirmacionOperacionStock=()=>{
       return;
     }
 
-    setStockConfirmacion({
+    abrirConfirmacionStock({
       grupo:"EGRESOS",
       tipo:stockTipoEgreso,
       items,
@@ -2730,20 +2773,22 @@ const prepararConfirmacionOperacionStock=()=>{
   }
 };
 
-const confirmarOperacionStockNueva=async()=>{
-  if(!stockConfirmacion||guardandoStockOperacion)return;
+const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
+  const confirmacionActual=confirmacionForzada||stockConfirmacion;
+
+  if(!confirmacionActual||guardandoStockOperacion)return;
 
   try{
     setGuardandoStockOperacion(true);
 
     const token=localStorage.getItem("token");
     const institucionId=obtenerInstitucionActivaId();
-    const items=stockConfirmacion.items||[];
+    const items=confirmacionActual.items||[];
 
-    if(stockConfirmacion.grupo==="INGRESOS"){
+    if(confirmacionActual.grupo==="INGRESOS"){
       if(
         ["COMPRA","PRODUCCION_COCINA","OTROS"].includes(
-          stockConfirmacion.tipo
+          confirmacionActual.tipo
         )
       ){
         const res=await fetch(
@@ -2757,21 +2802,21 @@ const confirmarOperacionStockNueva=async()=>{
             body:JSON.stringify({
               institucion_id:Number(institucionId),
               jornada_id:Number(jornadaActiva?.id),
-              tipo_ingreso:stockConfirmacion.tipo,
+              tipo_ingreso:confirmacionActual.tipo,
               proveedor_id:
-                stockConfirmacion.tipo==="COMPRA"
+                confirmacionActual.tipo==="COMPRA"
                   ? Number(stockCompraForm.proveedor_id||0)||null
                   : null,
               proveedor_nombre:
-                stockConfirmacion.tipo==="COMPRA"
+                confirmacionActual.tipo==="COMPRA"
                   ? String(stockCompraForm.proveedor_nuevo||"").trim()||null
                   : null,
               numero_factura:
-                stockConfirmacion.tipo==="COMPRA"
+                confirmacionActual.tipo==="COMPRA"
                   ? String(stockCompraForm.numero_factura||"").trim()
                   : null,
               observacion:
-                stockConfirmacion.tipo==="COMPRA"
+                confirmacionActual.tipo==="COMPRA"
                   ? String(stockCompraForm.observacion||"").trim()
                   : String(stockOperacionForm.observacion||"").trim(),
               items,
@@ -2788,7 +2833,7 @@ const confirmarOperacionStockNueva=async()=>{
             "No se pudo registrar el ingreso"
           );
         }
-      }else if(stockConfirmacion.tipo==="TRANSFERENCIA_UBICACIONES"){
+      }else if(confirmacionActual.tipo==="TRANSFERENCIA_UBICACIONES"){
         for(const item of items){
           const res=await fetch(
             `${API_URL}/api/inventario/transferir`,
@@ -2822,7 +2867,7 @@ const confirmarOperacionStockNueva=async()=>{
             );
           }
         }
-      }else if(stockConfirmacion.tipo==="TRANSFERENCIA_LOCALES"){
+      }else if(confirmacionActual.tipo==="TRANSFERENCIA_LOCALES"){
         for(const item of items){
           const res=await fetch(
             `${API_URL}/api/inventario/transferir-locales`,
@@ -2872,9 +2917,9 @@ const confirmarOperacionStockNueva=async()=>{
           body:JSON.stringify({
             institucion_id:Number(institucionId),
             jornada_id:Number(jornadaActiva?.id),
-            tipo_egreso:stockConfirmacion.tipo,
+            tipo_egreso:confirmacionActual.tipo,
             destinatario_cortesia:
-              stockConfirmacion.tipo==="CORTESIA"
+              confirmacionActual.tipo==="CORTESIA"
                 ? String(
                     stockOperacionForm.destinatario_cortesia||""
                   ).trim()
