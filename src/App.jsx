@@ -15155,6 +15155,50 @@ onClick={() => eliminarEgreso(egreso)}
                 return (
                   <article
                     key={producto.id}
+                    role="button"
+                    tabIndex={sinStock ? -1 : 0}
+                    onClick={(e) => {
+                      if (sinStock || itemExistente) return;
+
+                      const tag = String(
+                        e?.target?.tagName || ""
+                      ).toUpperCase();
+
+                      if (
+                        ["INPUT", "BUTTON", "SELECT", "TEXTAREA", "LABEL"].includes(
+                          tag
+                        )
+                      ) {
+                        return;
+                      }
+
+                      setVentaItems((prev) => [
+                        ...(Array.isArray(prev) ? prev : []),
+                        {
+                          producto_id: String(producto.id),
+                          cantidad: "1",
+                        },
+                      ]);
+                    }}
+                    onKeyDown={(e) => {
+                      if (
+                        sinStock ||
+                        itemExistente ||
+                        !["Enter", " "].includes(e.key)
+                      ) {
+                        return;
+                      }
+
+                      e.preventDefault();
+
+                      setVentaItems((prev) => [
+                        ...(Array.isArray(prev) ? prev : []),
+                        {
+                          producto_id: String(producto.id),
+                          cantidad: "1",
+                        },
+                      ]);
+                    }}
                     style={{
                       border: itemExistente
                         ? "2px solid #2536db"
@@ -15163,6 +15207,14 @@ onClick={() => eliminarEgreso(egreso)}
                       background: "#ffffff",
                       padding: 14,
                       boxShadow: "0 8px 18px rgba(15,23,42,0.08)",
+                      cursor: sinStock
+                        ? "not-allowed"
+                        : itemExistente
+                        ? "default"
+                        : "pointer",
+                      userSelect: "none",
+                      WebkitTapHighlightColor: "transparent",
+                      touchAction: "manipulation",
                     }}
                   >
                     <div
@@ -15261,7 +15313,7 @@ onClick={() => eliminarEgreso(egreso)}
                           ...(Array.isArray(prev) ? prev : []),
                           {
                             producto_id: String(producto.id),
-                            cantidad: "",
+                            cantidad: "1",
                           },
                         ]);
                       }}
@@ -15315,6 +15367,8 @@ onClick={() => eliminarEgreso(egreso)}
                         <input
                           type="number"
                           min="1"
+                          onClick={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
                           max={Math.max(
                             1,
                             Number(
