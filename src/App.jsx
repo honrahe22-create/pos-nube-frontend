@@ -3623,11 +3623,34 @@ const exportarVentasExcel = () => {
           (p)=>Number(p.id)===Number(data.punto_id)
         );
 
+        const puntosInicio=(()=>{
+          const activos=(Array.isArray(puntos)?puntos:[])
+            .filter((p)=>p?.activo!==false);
+
+          const puntosReales=activos.filter(
+            (p)=>String(p?.nombre||"")
+              .trim()
+              .toUpperCase()!=="PRINCIPAL"
+          );
+
+          return puntosReales.length>0
+            ? puntosReales
+            : activos;
+        })();
+
+        const puntoExistentePermitido=
+          puntoExistente&&
+          puntosInicio.some(
+            (p)=>Number(p.id)===Number(puntoExistente.id)
+          )
+            ? puntoExistente
+            : null;
+
         setPuntoJornadaSeleccionado(
-          puntoExistente?.id
-            ? String(puntoExistente.id)
-            : data.punto_id
-            ? String(data.punto_id)
+          puntoExistentePermitido?.id
+            ? String(puntoExistentePermitido.id)
+            : puntosInicio[0]?.id
+            ? String(puntosInicio[0].id)
             : ""
         );
 
@@ -3641,11 +3664,49 @@ const exportarVentasExcel = () => {
       }
     }catch(e){console.error(e)}
     localStorage.removeItem("jornadaActiva");setJornadaActiva(null);
-    setPuntoJornadaSeleccionado(puntos[0]?.id?String(puntos[0].id):"");
+
+    const puntosInicio=(()=>{
+      const activos=(Array.isArray(puntos)?puntos:[])
+        .filter((p)=>p?.activo!==false);
+
+      const puntosReales=activos.filter(
+        (p)=>String(p?.nombre||"")
+          .trim()
+          .toUpperCase()!=="PRINCIPAL"
+      );
+
+      return puntosReales.length>0
+        ? puntosReales
+        : activos;
+    })();
+
+    setPuntoJornadaSeleccionado(
+      puntosInicio[0]?.id
+        ? String(puntosInicio[0].id)
+        : ""
+    );
     setOperadorJornadaCorreo(String(u?.correo||""));
     setOperadorJornadaPassword("");
     setMostrarSelectorJornada(true);
   };
+  const obtenerPuntosJornadaDisponibles=(lista=puntosOperacion)=>{
+    const activos=(Array.isArray(lista)?lista:[])
+      .filter((p)=>p?.activo!==false);
+
+    const puntosReales=activos.filter(
+      (p)=>String(p?.nombre||"")
+        .trim()
+        .toUpperCase()!=="PRINCIPAL"
+    );
+
+    // Si la institución ya tiene puntos reales (ej. BAR PRINCIPAL / KIOSKO),
+    // PRINCIPAL deja de mostrarse para iniciar jornada.
+    // Si una institución solo tiene PRINCIPAL, se conserva como respaldo.
+    return puntosReales.length>0
+      ? puntosReales
+      : activos;
+  };
+
   const abrirJornada=async()=>{
     if(!puntoJornadaSeleccionado){
       alert("Selecciona el punto de trabajo.");
@@ -8082,8 +8143,7 @@ if (!usuario) {
               onChange={(e)=>setPuntoJornadaSeleccionado(e.target.value)}
             >
               <option value="">Seleccionar punto</option>
-              {puntosOperacion
-                .filter((p)=>p.activo!==false)
+              {obtenerPuntosJornadaDisponibles()
                 .map((p)=>(
                   <option key={p.id} value={p.id}>
                     {p.nombre}
