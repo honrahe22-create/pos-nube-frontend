@@ -563,7 +563,7 @@ export default function AlumnosModulo({
     const habilitar = accion !== "DESHABILITAR";
 
     if (
-      habilitar &&
+      accion === "GUARDAR_LIMITE" &&
       (!Number.isFinite(limiteActual) || limiteActual <= 0)
     ) {
       alert("Ingresa un límite de crédito mayor a 0.");
@@ -593,11 +593,16 @@ export default function AlumnosModulo({
           },
           body: JSON.stringify({
             institucion_id: Number(institucionId),
+            accion_credito: accion,
             credito_habilitado: habilitar,
             limite_credito:
-              accion === "DESHABILITAR"
-                ? Number(creditoAlumno?.limite_credito || 0)
-                : limiteActual,
+              accion === "GUARDAR_LIMITE"
+                ? limiteActual
+                : Number(
+                    creditoAlumno?.limite_credito ||
+                    alumnoDetalle?.limite_credito ||
+                    0
+                  ),
             admin_password: creditoAdminPassword,
           }),
         }
@@ -1363,6 +1368,18 @@ export default function AlumnosModulo({
                         ? "HABILITADO"
                         : "INHABILITADO"}
                     </div>
+                    <div
+                      style={{
+                        marginTop: 4,
+                        fontSize: 12,
+                        color: "#64748b",
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      {creditoAlumnoHabilitado
+                        ? "Ahora puedes definir o modificar el límite. Para guardar o deshabilitar vuelve a ingresar la contraseña del administrador."
+                        : "Primero valida la contraseña del administrador. El límite se configura después de habilitar."}
+                    </div>
                   </div>
 
                   <input
@@ -1371,8 +1388,8 @@ export default function AlumnosModulo({
                     step="0.01"
                     placeholder={
                       creditoAlumnoHabilitado
-                        ? "Límite de crédito"
-                        : "Habilita primero el crédito"
+                        ? "Ingresa el límite de crédito"
+                        : "Se habilita después de validar la contraseña"
                     }
                     value={
                       creditoConfiguracionForm.limite_credito

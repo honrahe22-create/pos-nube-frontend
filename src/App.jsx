@@ -12060,6 +12060,18 @@ onClick={() => eliminarEgreso(egreso)}
                             ? "HABILITADO"
                             : "INHABILITADO"}
                         </div>
+                        <div
+                          style={{
+                            marginTop: 4,
+                            fontSize: 12,
+                            color: "#64748b",
+                            lineHeight: 1.35,
+                          }}
+                        >
+                          {profesorDetalle.credito_habilitado === true
+                            ? "Ahora puedes definir o modificar el límite. Para guardar o deshabilitar vuelve a ingresar la contraseña del administrador."
+                            : "Primero valida la contraseña del administrador. El límite se configura después de habilitar."}
+                        </div>
                       </div>
 
                       <input
@@ -12068,8 +12080,8 @@ onClick={() => eliminarEgreso(egreso)}
                         step="0.01"
                         placeholder={
                           profesorDetalle.credito_habilitado === true
-                            ? "Límite de crédito"
-                            : "Habilita primero el crédito"
+                            ? "Ingresa el límite de crédito"
+                            : "Se habilita después de validar la contraseña"
                         }
                         value={creditoProfesorLimite}
                         onChange={(e) =>
