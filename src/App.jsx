@@ -539,6 +539,14 @@ const [creditoProfesorAdminPassword, setCreditoProfesorAdminPassword] = useState
 const [creditoProfesorLimite, setCreditoProfesorLimite] = useState("");
 const [verCreditoProfesorAdminPassword, setVerCreditoProfesorAdminPassword] = useState(false);
 const [guardandoAutorizacionCreditoProfesor, setGuardandoAutorizacionCreditoProfesor] = useState(false);
+
+useEffect(() => {
+  if (profesorDetalle?.id) {
+    setCreditoProfesorLimite(
+      String(Number(profesorDetalle.limite_credito || 0))
+    );
+  }
+}, [profesorDetalle?.id, profesorDetalle?.limite_credito]);
 const [recargaProfesorForm, setRecargaProfesorForm] = useState({
   monto: "",
   metodo_pago: "EFECTIVO",
@@ -4336,11 +4344,15 @@ if (institucionIdLogin) {
     }
   };
 
-  const cambiarCreditoHabilitadoProfesor = async (habilitar) => {
+  const actualizarCreditoProfesor = async (
+    accion = "HABILITAR"
+  ) => {
     if (!profesorDetalle?.id) return;
 
     if (!["ADMIN", "SUPER_ADMIN"].includes(rolActual)) {
-      alert("Solo un administrador puede autorizar cambios de crédito.");
+      alert(
+        "Solo un administrador puede autorizar cambios de crédito."
+      );
       return;
     }
 
@@ -4349,10 +4361,12 @@ if (institucionIdLogin) {
       return;
     }
 
+    const habilitar = accion !== "DESHABILITAR";
+    const limite = Number(creditoProfesorLimite);
+
     if (
       habilitar &&
-      (!Number.isFinite(Number(creditoProfesorLimite)) ||
-        Number(creditoProfesorLimite) <= 0)
+      (!Number.isFinite(limite) || limite <= 0)
     ) {
       alert("Ingresa un límite de crédito mayor a 0.");
       return;
@@ -4375,9 +4389,10 @@ if (institucionIdLogin) {
           body: JSON.stringify({
             institucion_id: Number(institucionId),
             credito_habilitado: habilitar,
-            limite_credito: habilitar
-              ? Number(creditoProfesorLimite)
-              : Number(profesorDetalle?.limite_credito || 0),
+            limite_credito:
+              accion === "DESHABILITAR"
+                ? Number(profesorDetalle?.limite_credito || 0)
+                : limite,
             admin_password: creditoProfesorAdminPassword,
           }),
         }
@@ -4401,10 +4416,10 @@ if (institucionIdLogin) {
         )
       );
 
-      setCreditoProfesorAdminPassword("");
       setCreditoProfesorLimite(
         String(Number(data.profesor?.limite_credito || 0))
       );
+      setCreditoProfesorAdminPassword("");
       alert(data.message);
     } catch (error) {
       console.error(
@@ -11812,7 +11827,7 @@ onClick={() => eliminarEgreso(egreso)}
                       style={{
                         display: "grid",
                         gridTemplateColumns:
-                          "repeat(auto-fit, minmax(190px, 1fr))",
+                          "minmax(180px,.7fr) minmax(180px,.8fr) minmax(280px,1fr) minmax(260px,1fr)",
                         gap: 12,
                         padding: 16,
                         marginBottom: 18,
@@ -11844,18 +11859,18 @@ onClick={() => eliminarEgreso(egreso)}
                         type="number"
                         min="0"
                         step="0.01"
-                        placeholder="Límite de crédito"
-                        value={
+                        placeholder={
                           profesorDetalle.credito_habilitado === true
-                            ? String(Number(profesorDetalle.limite_credito || 0))
-                            : creditoProfesorLimite
+                            ? "Límite de crédito"
+                            : "Habilita primero el crédito"
                         }
+                        value={creditoProfesorLimite}
                         onChange={(e) =>
                           setCreditoProfesorLimite(e.target.value)
                         }
                         style={styles.input}
                         disabled={
-                          profesorDetalle.credito_habilitado === true
+                          profesorDetalle.credito_habilitado !== true
                         }
                       />
 
@@ -11894,32 +11909,66 @@ onClick={() => eliminarEgreso(egreso)}
                         </button>
                       </div>
 
-                      <button
-                        type="button"
-                        style={
-                          profesorDetalle.credito_habilitado === true
-                            ? {
-                                ...styles.outlineButton,
-                                borderColor: "#dc2626",
-                                color: "#dc2626",
-                              }
-                            : styles.button
-                        }
-                        disabled={
-                          guardandoAutorizacionCreditoProfesor
-                        }
-                        onClick={() =>
-                          cambiarCreditoHabilitadoProfesor(
-                            profesorDetalle.credito_habilitado !== true
-                          )
-                        }
-                      >
-                        {guardandoAutorizacionCreditoProfesor
-                          ? "Validando..."
-                          : profesorDetalle.credito_habilitado === true
-                          ? "Autorizar y deshabilitar crédito"
-                          : "Autorizar y habilitar crédito"}
-                      </button>
+                      {profesorDetalle.credito_habilitado !== true ? (
+                        <button
+                          type="button"
+                          style={styles.button}
+                          disabled={
+                            guardandoAutorizacionCreditoProfesor
+                          }
+                          onClick={() =>
+                            actualizarCreditoProfesor("HABILITAR")
+                          }
+                        >
+                          {guardandoAutorizacionCreditoProfesor
+                            ? "Validando..."
+                            : "Autorizar y habilitar crédito"}
+                        </button>
+                      ) : (
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 8,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <button
+                            type="button"
+                            style={styles.button}
+                            disabled={
+                              guardandoAutorizacionCreditoProfesor
+                            }
+                            onClick={() =>
+                              actualizarCreditoProfesor(
+                                "GUARDAR_LIMITE"
+                              )
+                            }
+                          >
+                            {guardandoAutorizacionCreditoProfesor
+                              ? "Validando..."
+                              : "Guardar límite"}
+                          </button>
+
+                          <button
+                            type="button"
+                            style={{
+                              ...styles.outlineButton,
+                              borderColor: "#dc2626",
+                              color: "#dc2626",
+                            }}
+                            disabled={
+                              guardandoAutorizacionCreditoProfesor
+                            }
+                            onClick={() =>
+                              actualizarCreditoProfesor(
+                                "DESHABILITAR"
+                              )
+                            }
+                          >
+                            Deshabilitar crédito
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
 

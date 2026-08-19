@@ -548,25 +548,32 @@ export default function AlumnosModulo({
     }
   };
 
-  const guardarLimiteCreditoAlumno = async (evento) => {
-    evento.preventDefault();
+  const guardarLimiteCreditoAlumno = async (
+    evento,
+    accion = "HABILITAR"
+  ) => {
+    evento?.preventDefault?.();
 
     if (!alumnoDetalle?.id) return;
 
-    const limite = Number(
+    const limiteActual = Number(
       creditoConfiguracionForm.limite_credito
     );
 
+    const habilitar = accion !== "DESHABILITAR";
+
     if (
-      !creditoAlumnoHabilitado &&
-      (!Number.isFinite(limite) || limite <= 0)
+      habilitar &&
+      (!Number.isFinite(limiteActual) || limiteActual <= 0)
     ) {
-      alert("Ingresa un límite de crédito mayor a 0 para habilitarlo.");
+      alert("Ingresa un límite de crédito mayor a 0.");
       return;
     }
 
     if (!creditoAdminPassword) {
-      alert("Ingresa la contraseña del administrador para autorizar el crédito.");
+      alert(
+        "Ingresa la contraseña del administrador para autorizar esta acción."
+      );
       return;
     }
 
@@ -586,10 +593,11 @@ export default function AlumnosModulo({
           },
           body: JSON.stringify({
             institucion_id: Number(institucionId),
-            credito_habilitado: !creditoAlumnoHabilitado,
-            limite_credito: creditoAlumnoHabilitado
-              ? Number(creditoAlumno?.limite_credito || 0)
-              : limite,
+            credito_habilitado: habilitar,
+            limite_credito:
+              accion === "DESHABILITAR"
+                ? Number(creditoAlumno?.limite_credito || 0)
+                : limiteActual,
             admin_password: creditoAdminPassword,
           }),
         }
@@ -609,12 +617,20 @@ export default function AlumnosModulo({
         ...data.alumno,
       }));
 
+      setCreditoConfiguracionForm((actual) => ({
+        ...actual,
+        limite_credito: String(
+          Number(data.alumno?.limite_credito || 0)
+        ),
+      }));
+
       setCreditoAdminPassword("");
       await cargarAlumnos();
-      alert(data.message || "Configuración de crédito actualizada correctamente.");
+
+      alert(data.message || "Crédito actualizado correctamente.");
     } catch (error) {
-      console.error("Error guardando límite:", error);
-      alert(error.message || "No se pudo guardar el límite.");
+      console.error("Error actualizando crédito:", error);
+      alert(error.message || "No se pudo actualizar el crédito.");
     } finally {
       setGuardandoCreditoAlumno(false);
     }
@@ -1318,12 +1334,11 @@ export default function AlumnosModulo({
               {["ADMIN", "SUPER_ADMIN"].includes(
                 String(rolActual || "").toUpperCase()
               ) && (
-                <form
-                  onSubmit={guardarLimiteCreditoAlumno}
+                <div
                   style={{
                     display: "grid",
                     gridTemplateColumns:
-                      "minmax(190px, .7fr) minmax(180px, .7fr) minmax(320px, 1fr) minmax(300px, 1fr)",
+                      "minmax(180px,.7fr) minmax(180px,.8fr) minmax(280px,1fr) minmax(260px,1fr)",
                     gap: 12,
                     padding: 16,
                     border: "1px solid #e5e7eb",
@@ -1354,7 +1369,11 @@ export default function AlumnosModulo({
                     type="number"
                     min="0"
                     step="0.01"
-                    placeholder="Límite de crédito"
+                    placeholder={
+                      creditoAlumnoHabilitado
+                        ? "Límite de crédito"
+                        : "Habilita primero el crédito"
+                    }
                     value={
                       creditoConfiguracionForm.limite_credito
                     }
@@ -1365,8 +1384,7 @@ export default function AlumnosModulo({
                       })
                     }
                     style={paymon.modalInput}
-                    required={!creditoAlumnoHabilitado}
-                    disabled={creditoAlumnoHabilitado}
+                    disabled={!creditoAlumnoHabilitado}
                   />
 
                   <div style={{ display: "flex", gap: 8 }}>
@@ -1386,7 +1404,6 @@ export default function AlumnosModulo({
                         flex: 1,
                       }}
                       autoComplete="current-password"
-                      required
                     />
                     <button
                       type="button"
@@ -1401,18 +1418,63 @@ export default function AlumnosModulo({
                     </button>
                   </div>
 
-                  <button
-                    type="submit"
-                    style={paymon.orangeButton}
-                    disabled={guardandoCreditoAlumno}
-                  >
-                    {guardandoCreditoAlumno
-                      ? "Validando..."
-                      : creditoAlumnoHabilitado
-                      ? "Autorizar y deshabilitar crédito"
-                      : "Autorizar y habilitar crédito"}
-                  </button>
-                </form>
+                  {!creditoAlumnoHabilitado ? (
+                    <button
+                      type="button"
+                      style={paymon.orangeButton}
+                      disabled={guardandoCreditoAlumno}
+                      onClick={(e) =>
+                        guardarLimiteCreditoAlumno(e, "HABILITAR")
+                      }
+                    >
+                      {guardandoCreditoAlumno
+                        ? "Validando..."
+                        : "Autorizar y habilitar crédito"}
+                    </button>
+                  ) : (
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        style={paymon.orangeButton}
+                        disabled={guardandoCreditoAlumno}
+                        onClick={(e) =>
+                          guardarLimiteCreditoAlumno(
+                            e,
+                            "GUARDAR_LIMITE"
+                          )
+                        }
+                      >
+                        {guardandoCreditoAlumno
+                          ? "Validando..."
+                          : "Guardar límite"}
+                      </button>
+
+                      <button
+                        type="button"
+                        style={{
+                          ...paymon.smallButton,
+                          borderColor: "#dc2626",
+                          color: "#dc2626",
+                        }}
+                        disabled={guardandoCreditoAlumno}
+                        onClick={(e) =>
+                          guardarLimiteCreditoAlumno(
+                            e,
+                            "DESHABILITAR"
+                          )
+                        }
+                      >
+                        Deshabilitar crédito
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
 
               <form
