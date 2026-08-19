@@ -536,6 +536,7 @@ const [creditoProfesorForm, setCreditoProfesorForm] = useState({
   observacion: "",
 });
 const [creditoProfesorAdminPassword, setCreditoProfesorAdminPassword] = useState("");
+const [creditoProfesorLimite, setCreditoProfesorLimite] = useState("");
 const [verCreditoProfesorAdminPassword, setVerCreditoProfesorAdminPassword] = useState(false);
 const [guardandoAutorizacionCreditoProfesor, setGuardandoAutorizacionCreditoProfesor] = useState(false);
 const [recargaProfesorForm, setRecargaProfesorForm] = useState({
@@ -4348,6 +4349,15 @@ if (institucionIdLogin) {
       return;
     }
 
+    if (
+      habilitar &&
+      (!Number.isFinite(Number(creditoProfesorLimite)) ||
+        Number(creditoProfesorLimite) <= 0)
+    ) {
+      alert("Ingresa un límite de crédito mayor a 0.");
+      return;
+    }
+
     try {
       setGuardandoAutorizacionCreditoProfesor(true);
 
@@ -4365,6 +4375,9 @@ if (institucionIdLogin) {
           body: JSON.stringify({
             institucion_id: Number(institucionId),
             credito_habilitado: habilitar,
+            limite_credito: habilitar
+              ? Number(creditoProfesorLimite)
+              : Number(profesorDetalle?.limite_credito || 0),
             admin_password: creditoProfesorAdminPassword,
           }),
         }
@@ -4389,6 +4402,9 @@ if (institucionIdLogin) {
       );
 
       setCreditoProfesorAdminPassword("");
+      setCreditoProfesorLimite(
+        String(Number(data.profesor?.limite_credito || 0))
+      );
       alert(data.message);
     } catch (error) {
       console.error(
@@ -11796,7 +11812,7 @@ onClick={() => eliminarEgreso(egreso)}
                       style={{
                         display: "grid",
                         gridTemplateColumns:
-                          "repeat(auto-fit, minmax(200px, 1fr))",
+                          "repeat(auto-fit, minmax(190px, 1fr))",
                         gap: 12,
                         padding: 16,
                         marginBottom: 18,
@@ -11823,6 +11839,25 @@ onClick={() => eliminarEgreso(egreso)}
                             : "INHABILITADO"}
                         </div>
                       </div>
+
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Límite de crédito"
+                        value={
+                          profesorDetalle.credito_habilitado === true
+                            ? String(Number(profesorDetalle.limite_credito || 0))
+                            : creditoProfesorLimite
+                        }
+                        onChange={(e) =>
+                          setCreditoProfesorLimite(e.target.value)
+                        }
+                        style={styles.input}
+                        disabled={
+                          profesorDetalle.credito_habilitado === true
+                        }
+                      />
 
                       <div style={{ display: "flex", gap: 8 }}>
                         <input

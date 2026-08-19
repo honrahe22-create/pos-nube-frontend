@@ -81,9 +81,7 @@ export default function AlumnosModulo({
   });
 
   const creditoAlumnoHabilitado =
-    creditoAlumno && creditoAlumno.credito_habilitado !== undefined
-      ? creditoAlumno.credito_habilitado === true
-      : alumnoDetalle?.credito_habilitado === true;
+    creditoAlumno?.credito_habilitado === true;
 
 
   const normalizarEncabezado = (valor) =>
@@ -527,13 +525,12 @@ export default function AlumnosModulo({
       setMovimientosCreditoAlumno(
         Array.isArray(data.movimientos) ? data.movimientos : []
       );
-      setCreditoConfiguracionForm({
-        credito_habilitado:
-          datosAlumno.credito_habilitado === true,
+      setCreditoConfiguracionForm((actual) => ({
+        ...actual,
         limite_credito: String(
           Number(datosAlumno.limite_credito || 0)
         ),
-      });
+      }));
 
       setAlumnoDetalle((actual) =>
         actual
@@ -591,7 +588,7 @@ export default function AlumnosModulo({
             institucion_id: Number(institucionId),
             credito_habilitado: !creditoAlumnoHabilitado,
             limite_credito: creditoAlumnoHabilitado
-              ? Number(creditoAlumno?.limite_credito || alumnoDetalle?.limite_credito || 0)
+              ? Number(creditoAlumno?.limite_credito || 0)
               : limite,
             admin_password: creditoAdminPassword,
           }),
