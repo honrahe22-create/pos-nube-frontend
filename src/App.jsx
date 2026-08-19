@@ -15292,6 +15292,135 @@ onClick={() => eliminarEgreso(egreso)}
                     >
                       {sinStock ? "Sin stock" : "Agregar producto"}
                     </button>
+
+                    {itemExistente && (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          display: "grid",
+                          gridTemplateColumns: "90px minmax(0, 1fr)",
+                          gap: 8,
+                          alignItems: "center",
+                        }}
+                      >
+                        <label
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 800,
+                            color: "#334155",
+                          }}
+                        >
+                          Cantidad
+                        </label>
+
+                        <input
+                          type="number"
+                          min="1"
+                          max={Math.max(
+                            1,
+                            Number(
+                              stockProductoEnPunto(
+                                producto.id,
+                                localNuevaOrden
+                              ) || 0
+                            )
+                          )}
+                          step="1"
+                          value={String(itemExistente.cantidad || "1")}
+                          onChange={(e) => {
+                            const indice = ventaItems.findIndex(
+                              (item) =>
+                                String(item.producto_id) ===
+                                String(producto.id)
+                            );
+
+                            if (indice < 0) return;
+
+                            const disponible = Number(
+                              stockProductoEnPunto(
+                                producto.id,
+                                localNuevaOrden
+                              ) || 0
+                            );
+
+                            const texto = String(e.target.value || "")
+                              .replace(/[^0-9]/g, "")
+                              .slice(0, 4);
+
+                            if (!texto) {
+                              actualizarItemVenta(
+                                indice,
+                                "cantidad",
+                                ""
+                              );
+                              return;
+                            }
+
+                            const cantidad = Number(texto);
+
+                            if (cantidad <= 0) {
+                              actualizarItemVenta(
+                                indice,
+                                "cantidad",
+                                "1"
+                              );
+                              return;
+                            }
+
+                            if (cantidad > disponible) {
+                              alert(
+                                `No puedes superar el stock disponible: ${disponible}`
+                              );
+
+                              actualizarItemVenta(
+                                indice,
+                                "cantidad",
+                                String(disponible)
+                              );
+                              return;
+                            }
+
+                            actualizarItemVenta(
+                              indice,
+                              "cantidad",
+                              String(cantidad)
+                            );
+                          }}
+                          onBlur={(e) => {
+                            const indice = ventaItems.findIndex(
+                              (item) =>
+                                String(item.producto_id) ===
+                                String(producto.id)
+                            );
+
+                            if (indice < 0) return;
+
+                            const cantidad = Number(e.target.value || 0);
+
+                            if (!Number.isInteger(cantidad) || cantidad <= 0) {
+                              actualizarItemVenta(
+                                indice,
+                                "cantidad",
+                                "1"
+                              );
+                            }
+                          }}
+                          style={{
+                            width: "100%",
+                            minWidth: 0,
+                            boxSizing: "border-box",
+                            border: "1px solid #94a3b8",
+                            borderRadius: 8,
+                            padding: "10px 12px",
+                            fontSize: 16,
+                            fontWeight: 900,
+                            textAlign: "center",
+                            background: "#ffffff",
+                          }}
+                          placeholder="1"
+                        />
+                      </div>
+                    )}
                   </article>
                 );
               })}
@@ -15358,50 +15487,61 @@ onClick={() => eliminarEgreso(egreso)}
                           gap: 8,
                         }}
                       >
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const cantidad =
-                              Number(item.cantidad || 0) - 1;
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 800,
+                            color: "#64748b",
+                          }}
+                        >
+                          Cant.
+                        </span>
 
-                            if (cantidad <= 0) {
-                              eliminarItemVenta(index);
+                        <input
+                          type="number"
+                          min="1"
+                          max={Math.max(
+                            1,
+                            Number(
+                              stockProductoEnPunto(
+                                item.producto_id,
+                                localNuevaOrden
+                              ) || 0
+                            )
+                          )}
+                          step="1"
+                          value={String(item.cantidad || "")}
+                          onChange={(e) => {
+                            const disponible = Number(
+                              stockProductoEnPunto(
+                                item.producto_id,
+                                localNuevaOrden
+                              ) || 0
+                            );
+
+                            const texto = String(e.target.value || "")
+                              .replace(/[^0-9]/g, "")
+                              .slice(0, 4);
+
+                            if (!texto) {
+                              actualizarItemVenta(
+                                index,
+                                "cantidad",
+                                ""
+                              );
                               return;
                             }
 
-                            actualizarItemVenta(
-                              index,
-                              "cantidad",
-                              String(cantidad)
-                            );
-                          }}
-                          style={{
-                            width: 34,
-                            height: 34,
-                            borderRadius: 8,
-                            border: "1px solid #cbd5e1",
-                            background: "#ffffff",
-                            cursor: "pointer",
-                            fontWeight: 900,
-                          }}
-                        >
-                          −
-                        </button>
-
-                        <strong>{Number(item.cantidad || 0)}</strong>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const disponible = Number(
-                              item.producto?.stock || 0
-                            );
-                            const cantidad =
-                              Number(item.cantidad || 0) + 1;
+                            const cantidad = Number(texto);
 
                             if (cantidad > disponible) {
                               alert(
                                 `No puedes superar el stock disponible: ${disponible}`
+                              );
+                              actualizarItemVenta(
+                                index,
+                                "cantidad",
+                                String(disponible)
                               );
                               return;
                             }
@@ -15409,21 +15549,32 @@ onClick={() => eliminarEgreso(egreso)}
                             actualizarItemVenta(
                               index,
                               "cantidad",
-                              String(cantidad)
+                              String(Math.max(1, cantidad))
                             );
                           }}
+                          onBlur={(e) => {
+                            const cantidad = Number(e.target.value || 0);
+
+                            if (!Number.isInteger(cantidad) || cantidad <= 0) {
+                              actualizarItemVenta(
+                                index,
+                                "cantidad",
+                                "1"
+                              );
+                            }
+                          }}
                           style={{
-                            width: 34,
-                            height: 34,
+                            width: 72,
+                            minWidth: 72,
                             borderRadius: 8,
                             border: "1px solid #cbd5e1",
                             background: "#ffffff",
-                            cursor: "pointer",
+                            padding: "8px 6px",
+                            textAlign: "center",
                             fontWeight: 900,
+                            fontSize: 15,
                           }}
-                        >
-                          +
-                        </button>
+                        />
                       </div>
 
                       <button
