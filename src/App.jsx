@@ -596,7 +596,9 @@ const [productosVendidos, setProductosVendidos] = useState([]);
   const [cierreCajaFiltros, setCierreCajaFiltros] = useState({
     fecha_inicio: "",
     fecha_fin: "",
+    punto_id: "",
   });
+  const [mostrarReporteCierres, setMostrarReporteCierres] = useState(false);
 
   const [productosPorDiaFiltros, setProductosPorDiaFiltros] = useState({
   fecha_inicio: "",
@@ -1110,6 +1112,7 @@ const totalRecargasVista = useMemo(() => {
     setCierreCajaFiltros({
       fecha_inicio: "",
       fecha_fin: "",
+      punto_id: "",
     });
   };
 
@@ -7570,6 +7573,7 @@ Disponible: ${formatearMoneda(
       const params = new URLSearchParams({ institucion_id: String(institucionId) });
       if (cierreCajaFiltros.fecha_inicio) params.set("fecha_inicio", cierreCajaFiltros.fecha_inicio);
       if (cierreCajaFiltros.fecha_fin) params.set("fecha_fin", cierreCajaFiltros.fecha_fin);
+      if (cierreCajaFiltros.punto_id) params.set("punto_id", cierreCajaFiltros.punto_id);
       const respuesta = await fetch(`${API_URL}/api/cierres?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -8845,6 +8849,17 @@ if (!usuario) {
             {cargandoConsolidado ? "Calculando..." : "Cierre total del local"}
           </button>
         )}
+        <button
+          type="button"
+          style={styles.outlineButton}
+          onClick={async () => {
+            setMostrarReporteCierres((actual) => !actual);
+            await cargarPuntosOperacion();
+            await cargarCierres();
+          }}
+        >
+          Reporte cierres de caja
+        </button>
       </div>
     </div>
 
@@ -8858,6 +8873,108 @@ if (!usuario) {
         <button type="button" style={styles.outlineButton} onClick={() => { limpiarFiltrosCierreCaja(); setTimeout(cargarCierres, 0); }}>Borrar filtros</button>
       </div>
     </div>
+
+    {mostrarReporteCierres && (
+      <>
+        <div style={{ height: 20 }} />
+        <div style={styles.box}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:16}}>
+            <div>
+              <h3 style={{margin:0}}>Reporte de cierres de caja</h3>
+              <p style={{margin:"6px 0 0",color:"#64748b"}}>
+                Consulta los cierres por rango de fechas y ubicación.
+              </p>
+            </div>
+            <button type="button" style={styles.outlineButton} onClick={()=>setMostrarReporteCierres(false)}>
+              Ocultar reporte
+            </button>
+          </div>
+
+          <div style={styles.filtersGridPaymon}>
+            <div style={styles.filterField}>
+              <label style={styles.filterLabelTop}>Fecha inicial</label>
+              <input type="date" value={cierreCajaFiltros.fecha_inicio}
+                onChange={(e)=>setCierreCajaFiltros({...cierreCajaFiltros,fecha_inicio:e.target.value})}
+                style={styles.input}/>
+            </div>
+            <div style={styles.filterField}>
+              <label style={styles.filterLabelTop}>Fecha final</label>
+              <input type="date" value={cierreCajaFiltros.fecha_fin}
+                onChange={(e)=>setCierreCajaFiltros({...cierreCajaFiltros,fecha_fin:e.target.value})}
+                style={styles.input}/>
+            </div>
+            <div style={styles.filterField}>
+              <label style={styles.filterLabelTop}>Ubicación</label>
+              <select value={cierreCajaFiltros.punto_id}
+                onChange={(e)=>setCierreCajaFiltros({...cierreCajaFiltros,punto_id:e.target.value})}
+                style={styles.input}>
+                <option value="">Todas las ubicaciones</option>
+                {puntosOperacion.map((p)=>(
+                  <option key={p.id} value={p.id}>{p.nombre || "PRINCIPAL"}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div style={styles.filterButtons}>
+            <button type="button" style={styles.button} onClick={cargarCierres}>Generar reporte</button>
+            <button type="button" style={styles.outlineButton}
+              onClick={()=>{
+                setCierreCajaFiltros({fecha_inicio:"",fecha_fin:"",punto_id:""});
+                setTimeout(cargarCierres,0);
+              }}>
+              Borrar filtros
+            </button>
+          </div>
+
+          <div style={{height:18}} />
+          <div style={styles.tableWrap}>
+            <table style={styles.table}>
+              <thead><tr>
+                <th style={styles.th}>Fecha</th>
+                <th style={styles.th}>Ubicación</th>
+                <th style={styles.th}>Operador</th>
+                <th style={styles.th}>Desde</th>
+                <th style={styles.th}>Hasta</th>
+                <th style={styles.th}>Ventas efectivo</th>
+                <th style={styles.th}>Ventas transferencia</th>
+                <th style={styles.th}>Recargas efectivo</th>
+                <th style={styles.th}>Egresos</th>
+                <th style={styles.th}>Efectivo contado</th>
+                <th style={styles.th}>Diferencia</th>
+                <th style={styles.th}>Acción</th>
+              </tr></thead>
+              <tbody>
+                {cargandoCierres ? (
+                  <tr><td colSpan={12} style={styles.td}>Generando reporte...</td></tr>
+                ) : cierresCaja.length===0 ? (
+                  <tr><td colSpan={12} style={styles.td}>No existen cierres para los filtros seleccionados.</td></tr>
+                ) : cierresCaja.map((c)=>(
+                  <tr key={`reporte-${c.id}`}>
+                    <td style={styles.td}>{formatearSoloFecha(c.fecha)}</td>
+                    <td style={{...styles.td,fontWeight:800}}>{c.punto_nombre || "HISTÓRICO"}</td>
+                    <td style={styles.td}>{c.usuario_nombre || c.usuario_correo || "Sistema"}</td>
+                    <td style={styles.td}>{c.periodo_desde_ecuador || "-"}</td>
+                    <td style={styles.td}>{c.periodo_hasta_ecuador || "-"}</td>
+                    <td style={styles.td}>{formatearMoneda(c.ventas_efectivo)}</td>
+                    <td style={styles.td}>{formatearMoneda(c.ventas_transferencia)}</td>
+                    <td style={styles.td}>{formatearMoneda(c.recargas_efectivo)}</td>
+                    <td style={styles.td}>{formatearMoneda(c.egresos_total)}</td>
+                    <td style={styles.td}>{formatearMoneda(c.efectivo_contado)}</td>
+                    <td style={{...styles.td,fontWeight:900,color:Number(c.diferencia_general||0)<0?"#dc2626":"#b45309"}}>
+                      {formatearMoneda(c.diferencia_general)}
+                    </td>
+                    <td style={styles.td}>
+                      <button style={styles.editIconButton} onClick={()=>verCierre(c)}>Ver</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </>
+    )}
 
     <div style={{ height: 20 }} />
     <div style={styles.box}>
