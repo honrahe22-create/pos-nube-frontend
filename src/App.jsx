@@ -6053,6 +6053,74 @@ if (institucionIdLogin) {
       return;
     }
 
+    const montoTicket = (valor) => Number(valor || 0);
+    const recargaEfectivoTicket = montoTicket(cierre.recargas_efectivo);
+    const recargaTransferenciaTicket = montoTicket(cierre.recargas_transferencia);
+    const ventasEfectivoTicket = montoTicket(cierre.ventas_efectivo);
+    const ventasTransferenciaTicket = montoTicket(cierre.ventas_transferencia);
+    const ventasSaldoTicket = montoTicket(cierre.ventas_saldo);
+    const ventasCreditoTicket = montoTicket(cierre.ventas_credito);
+    const ventasTarjetaHistoricaTicket = montoTicket(cierre.ventas_tarjeta);
+    const egresosTicket = montoTicket(cierre.egresos_total);
+    const contadoTicket = montoTicket(cierre.efectivo_contado);
+    const subtotalRecargasTicket = recargaEfectivoTicket + recargaTransferenciaTicket;
+    const subtotalVentasTicket =
+      ventasEfectivoTicket +
+      ventasTransferenciaTicket +
+      ventasSaldoTicket +
+      ventasCreditoTicket +
+      ventasTarjetaHistoricaTicket;
+    const efectivoEsperadoTicket =
+      ventasEfectivoTicket + recargaEfectivoTicket - egresosTicket;
+    const diferenciaEfectivoTicket = contadoTicket - efectivoEsperadoTicket;
+    const granTotalTicket = subtotalRecargasTicket + subtotalVentasTicket;
+    const estadoTicket = String(cierre.estado_cierre || "CERRADA").toUpperCase();
+    const fechaOperativaTicket = formatearSoloFecha(cierre.fecha);
+    const fechaCierreTicket =
+      cierre.fecha_cierre_ecuador ||
+      formatearSoloFecha(cierre.periodo_hasta || cierre.created_at || cierre.fecha);
+    const horaCierreTicket =
+      cierre.hora_cierre_ecuador ||
+      formatearSoloHora(cierre.periodo_hasta || cierre.created_at);
+    const signoDiferenciaTicket =
+      Math.abs(diferenciaEfectivoTicket) < 0.005
+        ? "CUADRADO"
+        : diferenciaEfectivoTicket > 0
+        ? "SOBRA"
+        : "FALTA";
+    const textoCompactoCierre = [
+      "CIERRE DE CAJA",
+      institucionActiva?.nombre || cierre.institucion_nombre || "POS NUBE",
+      `Ubicacion: ${cierre.punto_nombre || "PRINCIPAL"}`,
+      `Jornada: #${cierre.jornada_id || "-"}`,
+      `Fecha operativa: ${fechaOperativaTicket}`,
+      `Cierre: ${fechaCierreTicket} ${horaCierreTicket}`,
+      `Estado: ${estadoTicket}`,
+      `Usuario: ${cierre.usuario_nombre || cierre.usuario_correo || usuario?.correo || usuario?.nombre || "Administrador"}`,
+      "------------------------------",
+      "RECARGAS",
+      `Efectivo: $${recargaEfectivoTicket.toFixed(2)}`,
+      `Transferencia: $${recargaTransferenciaTicket.toFixed(2)}`,
+      `SUBTOTAL RECARGAS: $${subtotalRecargasTicket.toFixed(2)}`,
+      "------------------------------",
+      "VENTAS",
+      `Efectivo: $${ventasEfectivoTicket.toFixed(2)}`,
+      `Transferencia: $${ventasTransferenciaTicket.toFixed(2)}`,
+      `Saldo: $${ventasSaldoTicket.toFixed(2)}`,
+      `Credito: $${ventasCreditoTicket.toFixed(2)}`,
+      `SUBTOTAL VENTAS: $${subtotalVentasTicket.toFixed(2)}`,
+      "------------------------------",
+      `Egresos: $${egresosTicket.toFixed(2)}`,
+      `EFECTIVO ESPERADO: $${efectivoEsperadoTicket.toFixed(2)}`,
+      `EFECTIVO CONTADO: $${contadoTicket.toFixed(2)}`,
+      `DIFERENCIA EFECTIVO: $${diferenciaEfectivoTicket.toFixed(2)}`,
+      `RESULTADO: ${signoDiferenciaTicket}`,
+      "------------------------------",
+      `GRAN TOTAL MOV.: $${granTotalTicket.toFixed(2)}`,
+      `Obs: ${cierre.observacion_automatica || cierre.observacion || "-"}`,
+      "FIN DE CIERRE",
+    ].join("\n");
+
     try {
       const cierreNativo = {
         tipo_documento: "CIERRE_CAJA",
@@ -6062,6 +6130,17 @@ if (institucionIdLogin) {
           "POS NUBE",
         negocio: cierre.negocio || "POS NUBE",
         fecha: cierre.fecha || obtenerFechaEcuadorISO(),
+        fecha_operativa: fechaOperativaTicket,
+        fecha_cierre: fechaCierreTicket,
+        hora_cierre: horaCierreTicket,
+        estado_cierre: estadoTicket,
+        ubicacion: cierre.punto_nombre || "PRINCIPAL",
+        punto_nombre: cierre.punto_nombre || "PRINCIPAL",
+        jornada_id: cierre.jornada_id || null,
+        periodo_desde: cierre.periodo_desde_ecuador || cierre.periodo_desde || null,
+        periodo_hasta: cierre.periodo_hasta_ecuador || cierre.periodo_hasta || null,
+        formato_compacto: true,
+        texto_compacto: textoCompactoCierre,
         usuario:
           cierre.usuario_nombre ||
           cierre.usuario_correo ||
@@ -6100,6 +6179,12 @@ if (institucionIdLogin) {
         diferencia_general: Number(
           cierre.diferencia_general || 0
         ),
+        subtotal_recargas: subtotalRecargasTicket,
+        subtotal_ventas: subtotalVentasTicket,
+        efectivo_esperado: efectivoEsperadoTicket,
+        diferencia_efectivo_calculada: diferenciaEfectivoTicket,
+        resultado_efectivo: signoDiferenciaTicket,
+        gran_total_movimientos: granTotalTicket,
 
         observacion:
           cierre.observacion_automatica ||
@@ -6173,56 +6258,28 @@ if (institucionIdLogin) {
         `$${Number(valor || 0).toFixed(2)}`;
 
       const filasResumen = [
-        ["Fecha de cierre", formatearSoloFecha(cierre.fecha)],
-        [
-          "Unidad educativa",
-          institucionActiva?.nombre ||
-            cierre.institucion_nombre ||
-            "POS NUBE",
-        ],
-        ["Negocio", cierre.negocio || "POS NUBE"],
-        [
-          "Usuario",
-          cierre.usuario_nombre ||
-            cierre.usuario_correo ||
-            usuario?.correo ||
-            usuario?.nombre ||
-            "Administrador",
-        ],
-        ["Total recarga efectivo", moneda(cierre.recargas_efectivo)],
-        [
-          "Total recarga transferencia",
-          moneda(cierre.recargas_transferencia),
-        ],
-        ["Total ventas por efectivo", moneda(cierre.ventas_efectivo)],
-        [
-          "Total ventas por transferencia",
-          moneda(cierre.ventas_transferencia),
-        ],
-        ["Total ventas por tarjeta", moneda(cierre.ventas_tarjeta)],
-        ["Egresos", moneda(cierre.egresos_total)],
-        ["Efectivo entregado", moneda(cierre.efectivo_contado)],
-        ["Tarjeta manual", moneda(cierre.tarjeta_manual)],
-        [
-          "Transferencia manual",
-          moneda(cierre.transferencia_manual),
-        ],
-        [
-          "Diferencia efectivo",
-          moneda(cierre.diferencia_efectivo),
-        ],
-        ["Diferencia tarjeta", moneda(cierre.diferencia_tarjeta)],
-        [
-          "Diferencia transferencia",
-          moneda(cierre.diferencia_transferencia),
-        ],
-        ["Diferencia general", moneda(cierre.diferencia_general)],
-        [
-          "Observación",
-          cierre.observacion_automatica ||
-            cierre.observacion ||
-            "-",
-        ],
+        ["Ubicación", cierre.punto_nombre || "PRINCIPAL"],
+        ["Jornada", `#${cierre.jornada_id || "-"}`],
+        ["Fecha operativa", fechaOperativaTicket],
+        ["Fecha de cierre", fechaCierreTicket],
+        ["Hora de cierre", horaCierreTicket],
+        ["Estado", estadoTicket],
+        ["Usuario", cierre.usuario_nombre || cierre.usuario_correo || usuario?.correo || usuario?.nombre || "Administrador"],
+        ["Recargas efectivo", moneda(recargaEfectivoTicket)],
+        ["Recargas transferencia", moneda(recargaTransferenciaTicket)],
+        ["Subtotal recargas", moneda(subtotalRecargasTicket)],
+        ["Ventas efectivo", moneda(ventasEfectivoTicket)],
+        ["Ventas transferencia", moneda(ventasTransferenciaTicket)],
+        ["Ventas con saldo", moneda(ventasSaldoTicket)],
+        ["Ventas con crédito", moneda(ventasCreditoTicket)],
+        ["Subtotal ventas", moneda(subtotalVentasTicket)],
+        ["Egresos", moneda(egresosTicket)],
+        ["Efectivo esperado", moneda(efectivoEsperadoTicket)],
+        ["Efectivo contado", moneda(contadoTicket)],
+        ["Diferencia efectivo", moneda(diferenciaEfectivoTicket)],
+        ["Resultado", signoDiferenciaTicket],
+        ["Gran total movimientos", moneda(granTotalTicket)],
+        ["Observación", cierre.observacion_automatica || cierre.observacion || "-"],
       ];
 
       const resumenHtml = filasResumen
@@ -6310,21 +6367,21 @@ if (institucionIdLogin) {
                 background: #fff;
                 color: #111827;
                 font-family: Arial, Helvetica, sans-serif;
-                font-size: 11pt;
+                font-size: 9pt;
               }
 
               body {
-                padding: 16mm 14mm;
+                padding: 7mm 8mm;
               }
 
               h1 {
-                margin: 0 0 18px;
-                font-size: 23pt;
+                margin: 0 0 8px;
+                font-size: 16pt;
               }
 
               h2 {
-                margin: 24px 0 10px;
-                font-size: 15pt;
+                margin: 12px 0 6px;
+                font-size: 11pt;
                 page-break-after: avoid;
                 break-after: avoid-page;
               }
@@ -6332,21 +6389,21 @@ if (institucionIdLogin) {
               .resumen {
                 display: grid;
                 grid-template-columns: repeat(3, minmax(0, 1fr));
-                gap: 8px;
+                gap: 4px;
               }
 
               .dato {
                 border: 1px solid #d7dde5;
                 border-radius: 6px;
-                padding: 8px 9px;
+                padding: 4px 5px;
                 break-inside: avoid;
                 page-break-inside: avoid;
               }
 
               .etiqueta {
                 color: #64748b;
-                font-size: 9.5pt;
-                margin-bottom: 3px;
+                font-size: 7.5pt;
+                margin-bottom: 1px;
               }
 
               .valor {
@@ -6376,10 +6433,10 @@ if (institucionIdLogin) {
               th,
               td {
                 border-bottom: 1px solid #e5e7eb;
-                padding: 7px 6px;
+                padding: 4px 4px;
                 text-align: left;
                 vertical-align: top;
-                font-size: 10pt;
+                font-size: 8pt;
               }
 
               th {
@@ -9197,12 +9254,12 @@ if (!usuario) {
                   cierre hasta este momento.
                 </small>
               </div>
-              <p>Ventas efectivo: {formatearMoneda(resumenCierreServidor.ventas_efectivo)}</p>
-              <p>Ventas transferencia: {formatearMoneda(resumenCierreServidor.ventas_transferencia)}</p>
-              <p>Ventas tarjeta: {formatearMoneda(resumenCierreServidor.ventas_tarjeta)}</p>
-              <p>Recargas efectivo: {formatearMoneda(resumenCierreServidor.recargas_efectivo)}</p>
-              <p>Recargas transferencia: {formatearMoneda(resumenCierreServidor.recargas_transferencia)}</p>
-              <p>Egresos activos: {formatearMoneda(resumenCierreServidor.egresos_total)}</p>
+              {/* El resumen previo se deja intencionalmente compacto. */}
+              {/* Los valores económicos se muestran después de guardar el cierre. */}
+              {/* Ubicación, operador y jornada permanecen visibles arriba. */}
+              {/* El período exacto permanece visible para confirmar el corte. */}
+              {/* Detalle de ventas/recargas/egresos: disponible en cierre guardado. */}
+              {/* Evita saturar la pantalla de conteo en PC e iMin. */}
             </div>
           )}
           <div style={{marginTop:20}}><label>Observación</label><input style={styles.input} value={cierreForm.observacion} onChange={(e)=>setCierreForm({...cierreForm,observacion:e.target.value})}/></div>
@@ -15862,7 +15919,6 @@ onClick={() => eliminarEgreso(egreso)}
                   {formatearMoneda(totalVentaCalculado)}
                 </div>
               </div>
-
               <button
                 type="submit"
                 disabled={
@@ -15921,7 +15977,6 @@ onClick={() => eliminarEgreso(egreso)}
               >
                 Crear orden
               </button>
-
               <button
                 type="button"
                 onClick={() => {
@@ -15931,7 +15986,6 @@ onClick={() => eliminarEgreso(egreso)}
                     window.confirm(
                       "¿Deseas cancelar esta orden y eliminar los productos agregados?"
                     );
-
                   if (!confirmar) return;
                   limpiarFormularioVenta();
                 }}
@@ -15956,7 +16010,6 @@ onClick={() => eliminarEgreso(egreso)}
     </form>
   </div>
 )}
-
             {vistaVentasInterna === "consultar" && (
               <>
                 <div style={styles.box}>
@@ -15976,7 +16029,6 @@ onClick={() => eliminarEgreso(egreso)}
                         <option value="created_at">Compras</option>
                       </select>
                     </div>
-
                     <div style={styles.filterField}>
                       <label style={styles.filterLabelTop}>Fecha inicial</label>
                       <input
@@ -15991,7 +16043,6 @@ onClick={() => eliminarEgreso(egreso)}
                         style={styles.input}
                       />
                     </div>
-
                     <div style={styles.filterField}>
                       <label style={styles.filterLabelTop}>Fecha final</label>
                       <input
@@ -16006,7 +16057,6 @@ onClick={() => eliminarEgreso(egreso)}
                         style={styles.input}
                       />
                     </div>
-
                     <div style={styles.filterField}>
                       <label style={styles.filterLabelTop}>Tipo de orden</label>
                       <select
@@ -16023,7 +16073,6 @@ onClick={() => eliminarEgreso(egreso)}
                         <option value="NORMAL">Normal</option>
                       </select>
                     </div>
-
                     <div style={styles.filterField}>
                       <label style={styles.filterLabelTop}>Orden ID</label>
                       <input
@@ -16039,7 +16088,6 @@ onClick={() => eliminarEgreso(egreso)}
                         style={styles.input}
                       />
                     </div>
-
                     <div style={styles.filterField}>
                       <label style={styles.filterLabelTop}>Ubicación</label>
                       <select
@@ -16056,7 +16104,6 @@ onClick={() => eliminarEgreso(egreso)}
                         <option value="PRINCIPAL">Principal</option>
                       </select>
                     </div>
-
                     <div style={styles.filterField}>
                       <label style={styles.filterLabelTop}>Operador</label>
                       <select
@@ -16072,7 +16119,6 @@ onClick={() => eliminarEgreso(egreso)}
                         <option value="">Selecciona</option>
                       </select>
                     </div>
-
                     <div style={styles.filterField}>
                       <label style={styles.filterLabelTop}>Estado</label>
                       <select
@@ -16088,7 +16134,6 @@ onClick={() => eliminarEgreso(egreso)}
                         <option value="ENTREGADA">Entregada</option>
                       </select>
                     </div>
-
                     <div style={styles.filterField}>
                       <label style={styles.filterLabelTop}>Forma de pago</label>
                       <select
@@ -16108,7 +16153,6 @@ onClick={() => eliminarEgreso(egreso)}
                       </select>
                     </div>
                   </div>
-
                   <div style={styles.filterButtons}>
                     <button
                       type="button"
@@ -16117,7 +16161,6 @@ onClick={() => eliminarEgreso(egreso)}
                     >
                       Consultar
                     </button>
-
                     <button
                       type="button"
                       style={styles.outlineButton}
@@ -16127,28 +16170,22 @@ onClick={() => eliminarEgreso(egreso)}
                     </button>
                   </div>
                 </div>
-
                 <div style={{ height: 20 }} />
-
                 <div style={styles.paymonTotalWrap}>
                   <span style={styles.paymonTotalLabel}>
                     Total de ventas: {formatearMoneda(resumenVentasVista.montoTotal)}
                   </span>
                 </div>
-
                 <div style={{ height: 20 }} />
-
                 <div style={styles.box}>
   <div style={styles.pageHeaderSmall}>
     <div>
       <h3 style={{ margin: 0 }}>Historial de ventas</h3>
     </div>
-
     <div style={styles.headerActions}>
       <span style={styles.recordsBadge}>
         {ventasFiltradas.length} registros
       </span>
-
       <button
         type="button"
         style={styles.exportButton}
@@ -16158,7 +16195,6 @@ onClick={() => eliminarEgreso(egreso)}
       </button>
     </div>
   </div>
-
                   {ventasFiltradas.length === 0 ? (
                     <p>No hay ventas para los filtros seleccionados.</p>
                   ) : (
@@ -16226,7 +16262,6 @@ onClick={() => eliminarEgreso(egreso)}
             )}
           </>
         )}
-
         {vista === "reportes" && (
           <>
             <div style={styles.pageHeader}>
@@ -16236,7 +16271,6 @@ onClick={() => eliminarEgreso(egreso)}
                   Resumen de recargas, ventas, saldo y comportamiento del sistema
                 </p>
               </div>
-
               <button
                 style={styles.refreshButton}
                 onClick={() => {
@@ -16250,45 +16284,36 @@ onClick={() => eliminarEgreso(egreso)}
                 Refrescar
               </button>
             </div>
-
             <div style={styles.grid}>
               <div style={styles.box}>
                 <h3>Total recargas</h3>
                 <p>{formatearMoneda(reporteResumen.totalRecargas)}</p>
               </div>
-
               <div style={styles.box}>
                 <h3>Total ventas</h3>
                 <p>{formatearMoneda(reporteResumen.totalVentas)}</p>
               </div>
-
               <div style={styles.box}>
                 <h3>Ventas efectivo</h3>
                 <p>{formatearMoneda(reporteResumen.ventasEfectivo)}</p>
               </div>
-
               <div style={styles.box}>
                 <h3>Ventas transferencia</h3>
                 <p>{formatearMoneda(reporteResumen.ventasTransferencia)}</p>
               </div>
-
               <div style={styles.box}>
                 <h3>Ventas por recarga</h3>
                 <p>{formatearMoneda(reporteResumen.ventasRecarga)}</p>
               </div>
-
               <div style={styles.box}>
                 <h3>Saldo total alumnos</h3>
                 <p>{formatearMoneda(reporteResumen.saldoTotalAlumnos)}</p>
               </div>
             </div>
-
             <div style={{ height: 20 }} />
-
             <div style={styles.twoColumn}>
               <div style={styles.box}>
                 <h3>Últimas recargas</h3>
-
                 {recargas.length === 0 ? (
                   <p>No hay recargas registradas.</p>
                 ) : (
@@ -16316,10 +16341,8 @@ onClick={() => eliminarEgreso(egreso)}
                   </div>
                 )}
               </div>
-
               <div style={styles.box}>
                 <h3>Últimas ventas</h3>
-
                 {ventas.length === 0 ? (
                   <p>No hay ventas registradas.</p>
                 ) : (
@@ -16357,8 +16380,6 @@ onClick={() => eliminarEgreso(egreso)}
             </div>
           </>
         )}
-
-
         {vista === "configuracion" &&
           ["ADMIN", "SUPER_ADMIN"].includes(rolActual) && (
           <ConfiguracionModulo
@@ -16370,12 +16391,10 @@ onClick={() => eliminarEgreso(egreso)}
             puede={puede}
           />
         )}
-
               </main>
     </div>
   );
 }
-
 const styles = {
   page: {
     minHeight: "100vh",
@@ -16936,14 +16955,12 @@ const styles = {
   color: "#1d4ed8",
   fontWeight: "500",
 },
-
 subMenu: {
   marginLeft: 10,
   display: "flex",
   flexDirection: "column",
   gap: 6,
 },
-
 subMenuButton: {
   padding: "8px 10px",
   border: "none",
@@ -16953,7 +16970,6 @@ subMenuButton: {
   textAlign: "left",
   fontSize: 14,
 },
-
 card: {
   background: "#fff",
   borderRadius: "18px",
@@ -16962,7 +16978,6 @@ card: {
   boxSizing: "border-box",
   minWidth: 0,
 },
-
 reporteHeader: {
   display: "flex",
   justifyContent: "space-between",
@@ -16971,7 +16986,6 @@ reporteHeader: {
   flexWrap: "wrap",
   gap: 12,
 },
-
 filtrosRow: {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
@@ -16979,13 +16993,11 @@ filtrosRow: {
   width: "100%",
   alignItems: "end",
 },
-
 filterGroup: {
   display: "flex",
   flexDirection: "column",
   gap: 6,
 },
-
 filterActions: {
   display: "flex",
   alignItems: "flex-end",
@@ -16993,7 +17005,6 @@ filterActions: {
   flexWrap: "wrap",
   marginTop: 16,
 },
-
 reportToolbar: {
   display: "flex",
   justifyContent: "space-between",
@@ -17002,7 +17013,6 @@ reportToolbar: {
   marginTop: 16,
   flexWrap: "wrap",
 },
-
 exportButton: {
   padding: "12px 18px",
   borderRadius: "10px",
@@ -17013,7 +17023,6 @@ exportButton: {
   fontSize: "16px",
   fontWeight: "bold",
 },
-
 emptyState: {
   padding: "18px",
   textAlign: "center",
@@ -17022,7 +17031,6 @@ emptyState: {
   borderRadius: 10,
   color: "#64748b",
 },
-
 tableHeaderProductos: {
   display: "grid",
   gridTemplateColumns: "2fr 1fr 1.2fr 2fr 1fr 1.2fr",
@@ -17034,7 +17042,6 @@ tableHeaderProductos: {
   color: "#334155",
   marginBottom: 10,
 },
-
 rowTablaProductos: {
   display: "grid",
   gridTemplateColumns: "2fr 1fr 1.2fr 2fr 1fr 1.2fr",
@@ -17043,7 +17050,6 @@ rowTablaProductos: {
   borderBottom: "1px solid #e2e8f0",
   alignItems: "center",
 },
-
 tableHeaderProductosDia: {
   display: "grid",
   gridTemplateColumns: "2fr 1.2fr repeat(7, 1fr)",
@@ -17056,7 +17062,6 @@ tableHeaderProductosDia: {
   marginBottom: 10,
   minWidth: "1100px",
 },
-
 rowTablaProductosDia: {
   display: "grid",
   gridTemplateColumns: "2fr 1.2fr repeat(7, 1fr)",
@@ -17066,7 +17071,6 @@ rowTablaProductosDia: {
   alignItems: "center",
   minWidth: "1100px",
 },
-
 moveIconButton: {
   border: "none",
   background: "#d97706",
@@ -17077,7 +17081,6 @@ moveIconButton: {
   cursor: "pointer",
   fontSize: "16px",
 },
-
 smallDarkButton: {
   border: "none",
   background: "#7f1d1d",
@@ -17088,7 +17091,6 @@ smallDarkButton: {
   cursor: "pointer",
   fontSize: "16px",
 },
-
 saveIconButton: {
   border: "none",
   background: "#1d4ed8",
@@ -17099,7 +17101,6 @@ saveIconButton: {
   cursor: "pointer",
   fontSize: "16px",
 },
-
 viewIconButton: {
   border: "none",
   background: "#059669",
@@ -17110,7 +17111,6 @@ viewIconButton: {
   cursor: "pointer",
   fontSize: "16px",
 },
-
 subMenuButtonActive: {
   padding: "8px 10px",
   border: "none",
