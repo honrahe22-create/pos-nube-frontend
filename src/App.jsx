@@ -338,8 +338,7 @@ const [ordenDetalleAlumno, setOrdenDetalleAlumno] = useState(null);
     monto: "",
     metodo_pago: "EFECTIVO",
     numero_comprobante: "",
-    banco: "",
-    cuenta_bancaria_id: "",
+    fecha_transferencia: "",
     observacion: "",
   });
 
@@ -556,8 +555,7 @@ const [recargaProfesorForm, setRecargaProfesorForm] = useState({
   monto: "",
   metodo_pago: "EFECTIVO",
   numero_comprobante: "",
-  banco: "",
-  cuenta_bancaria_id: "",
+  fecha_transferencia: "",
   observacion: "",
 });
 const [guardandoRecargaProfesor, setGuardandoRecargaProfesor] = useState(false);
@@ -1280,9 +1278,7 @@ const totalRecargasVista = useMemo(() => {
       monto: "",
       metodo_pago: "EFECTIVO",
       numero_comprobante: "",
-      banco: "",
-      cuenta_bancaria_id: "",
-      observacion: "",
+                  observacion: "",
     });
   };
 
@@ -4312,9 +4308,7 @@ if (institucionIdLogin) {
       monto: "",
       metodo_pago: "EFECTIVO",
       numero_comprobante: "",
-      banco: "",
-      cuenta_bancaria_id: "",
-      observacion: "",
+                  observacion: "",
     });
     setMostrarModalRecargaProfesor(true);
   };
@@ -4326,9 +4320,7 @@ if (institucionIdLogin) {
       monto: "",
       metodo_pago: "EFECTIVO",
       numero_comprobante: "",
-      banco: "",
-      cuenta_bancaria_id: "",
-      observacion: "",
+                  observacion: "",
     });
   };
 
@@ -4467,8 +4459,8 @@ if (institucionIdLogin) {
     }
 
     if (recargaProfesorForm.metodo_pago === "TRANSFERENCIA") {
-      if (!recargaProfesorForm.cuenta_bancaria_id || !recargaProfesorForm.banco) {
-        alert("Selecciona el banco receptor.");
+      if (!String(recargaProfesorForm.fecha_transferencia || "").trim()) {
+        alert("Ingresa la fecha en que se realizó la transferencia.");
         return;
       }
 
@@ -4506,14 +4498,9 @@ if (institucionIdLogin) {
                 recargaProfesorForm.numero_comprobante || ""
               ).trim()
             : null,
-        banco:
+        fecha_transferencia:
           recargaProfesorForm.metodo_pago === "TRANSFERENCIA"
-            ? recargaProfesorForm.banco
-            : null,
-        cuenta_bancaria_id:
-          recargaProfesorForm.metodo_pago === "TRANSFERENCIA" &&
-          recargaProfesorForm.cuenta_bancaria_id
-            ? Number(recargaProfesorForm.cuenta_bancaria_id)
+            ? String(recargaProfesorForm.fecha_transferencia || "").trim()
             : null,
         comercio: "POS NUBE",
         observacion:
@@ -4555,9 +4542,7 @@ if (institucionIdLogin) {
         monto: "",
         metodo_pago: "EFECTIVO",
         numero_comprobante: "",
-        banco: "",
-        cuenta_bancaria_id: "",
-        observacion: "",
+                        observacion: "",
       });
 
       await cargarCreditosProfesores(profesorDetalle.id);
@@ -6000,8 +5985,8 @@ if (institucionIdLogin) {
       }
 
       if (recargaForm.metodo_pago === "TRANSFERENCIA") {
-        if (!String(recargaForm.banco || "").trim()) {
-          alert("Debes seleccionar el banco donde se realizó la transferencia.");
+        if (!String(recargaForm.fecha_transferencia || "").trim()) {
+          alert("Debes ingresar la fecha en que se realizó la transferencia.");
           return;
         }
 
@@ -6020,14 +6005,9 @@ if (institucionIdLogin) {
           recargaForm.metodo_pago === "TRANSFERENCIA"
             ? String(recargaForm.numero_comprobante || "").trim()
             : null,
-        banco:
+        fecha_transferencia:
           recargaForm.metodo_pago === "TRANSFERENCIA"
-            ? String(recargaForm.banco || "").trim()
-            : null,
-        cuenta_bancaria_id:
-          recargaForm.metodo_pago === "TRANSFERENCIA" &&
-          recargaForm.cuenta_bancaria_id
-            ? Number(recargaForm.cuenta_bancaria_id)
+            ? String(recargaForm.fecha_transferencia || "").trim()
             : null,
         observacion: recargaForm.observacion,
       };
@@ -10880,8 +10860,7 @@ onClick={() => eliminarEgreso(egreso)}
                     metodo_pago: e.target.checked
                       ? "TRANSFERENCIA"
                       : "EFECTIVO",
-                    cuenta_bancaria_id: "",
-                    banco: "",
+                    fecha_transferencia: "",
                     numero_comprobante: "",
                   }))
                 }
@@ -10890,8 +10869,7 @@ onClick={() => eliminarEgreso(egreso)}
             </label>
 
             {recargaProfesorForm.metodo_pago === "TRANSFERENCIA" && (
-              <>
-                <label
+              <>                <label
                   style={{
                     display: "block",
                     fontWeight: 800,
@@ -10901,21 +10879,17 @@ onClick={() => eliminarEgreso(egreso)}
                     marginBottom: 8,
                   }}
                 >
-                  Banco donde realizó la transferencia *
+                  Fecha en que realizó la transferencia *
                 </label>
-                <select
-                  value={recargaProfesorForm.cuenta_bancaria_id}
-                  onChange={(e) => {
-                    const cuenta = cuentasBancarias.find(
-                      (c) => String(c.id) === String(e.target.value)
-                    );
-
+                <input
+                  type="date"
+                  value={recargaProfesorForm.fecha_transferencia}
+                  onChange={(e) =>
                     setRecargaProfesorForm((prev) => ({
                       ...prev,
-                      cuenta_bancaria_id: e.target.value,
-                      banco: cuenta ? cuenta.banco : "",
-                    }));
-                  }}
+                      fecha_transferencia: e.target.value,
+                    }))
+                  }
                   required
                   style={{
                     width: "100%",
@@ -10927,31 +10901,7 @@ onClick={() => eliminarEgreso(egreso)}
                     background: "#ffffff",
                     boxSizing: "border-box",
                   }}
-                >
-                  <option value="">Seleccionar banco</option>
-                  {cuentasBancarias
-                    .filter((cuenta) => cuenta.activo !== false)
-                    .map((cuenta) => (
-                      <option key={cuenta.id} value={cuenta.id}>
-                        {cuenta.banco}
-                      </option>
-                    ))}
-                </select>
-
-                {!cuentasBancarias.length && (
-                  <div
-                    style={{
-                      marginTop: 8,
-                      padding: 10,
-                      borderRadius: 8,
-                      background: "#fff7ed",
-                      color: "#9a3412",
-                    }}
-                  >
-                    No hay bancos configurados. Regístralos en
-                    Configuración → Bancos.
-                  </div>
-                )}
+                />
 
                 <label
                   style={{
@@ -11996,8 +11946,7 @@ onClick={() => eliminarEgreso(egreso)}
                             ...prev,
                             metodo_pago: e.target.value,
                             numero_comprobante: "",
-                            banco: "",
-                            cuenta_bancaria_id: "",
+                            fecha_transferencia: "",
                           }))
                         }
                         style={styles.input}
@@ -12010,32 +11959,21 @@ onClick={() => eliminarEgreso(egreso)}
                     {recargaProfesorForm.metodo_pago === "TRANSFERENCIA" && (
                       <>
                         <div>
-                          <label style={styles.filterLabelTop}>Banco *</label>
-                          <select
-                            value={recargaProfesorForm.cuenta_bancaria_id || ""}
-                            onChange={(e) => {
-                              const cuenta = cuentasBancarias.find(
-                                (item) => String(item.id) === String(e.target.value)
-                              );
-
+                          <label style={styles.filterLabelTop}>
+                            Fecha de transferencia *
+                          </label>
+                          <input
+                            type="date"
+                            value={recargaProfesorForm.fecha_transferencia}
+                            onChange={(e) =>
                               setRecargaProfesorForm((prev) => ({
                                 ...prev,
-                                cuenta_bancaria_id: e.target.value,
-                                banco: cuenta ? cuenta.banco : "",
-                              }));
-                            }}
+                                fecha_transferencia: e.target.value,
+                              }))
+                            }
                             style={styles.input}
                             required
-                          >
-                            <option value="">Seleccionar banco</option>
-                            {cuentasBancarias
-                              .filter((cuenta) => cuenta.activo !== false)
-                              .map((cuenta) => (
-                                <option key={cuenta.id} value={cuenta.id}>
-                                  {cuenta.banco}
-                                </option>
-                              ))}
-                          </select>
+                          />
                         </div>
 
                         <div>
@@ -14441,9 +14379,7 @@ onClick={() => eliminarEgreso(egreso)}
                   ...recargaForm,
                   metodo_pago: e.target.value,
                   numero_comprobante: "",
-                  banco: "",
-                  cuenta_bancaria_id: "",
-                })
+                                                    })
               }
               style={styles.input}
             >
@@ -14476,49 +14412,20 @@ onClick={() => eliminarEgreso(egreso)}
 
               <div style={styles.filterField}>
                 <label style={styles.filterLabelTop}>
-                  Banco donde realizó la transferencia *
+                  Fecha en que realizó la transferencia *
                 </label>
-
-                <select
-                  value={recargaForm.cuenta_bancaria_id || ""}
-                  onChange={(e) => {
-                    const cuenta = cuentasBancarias.find(
-                      (item) =>
-                        String(item.id) === String(e.target.value)
-                    );
-
+                <input
+                  type="date"
+                  value={recargaForm.fecha_transferencia || ""}
+                  onChange={(e) =>
                     setRecargaForm({
                       ...recargaForm,
-                      cuenta_bancaria_id: e.target.value,
-                      banco: cuenta
-                        ? cuenta.banco
-                        : "",
-                      // Solo se guarda el nombre del banco
-                      // El número de cuenta se comparte de forma privada
-                    });
-                  }}
+                      fecha_transferencia: e.target.value,
+                    })
+                  }
                   style={styles.input}
                   required
-                >
-                  <option value="">Seleccionar banco</option>
-
-                  {cuentasBancarias
-                    .filter((cuenta) => cuenta.activo !== false)
-                    .map((cuenta) => (
-                      <option key={cuenta.id} value={cuenta.id}>
-                        {cuenta.banco}
-                        {/* Solo nombre del banco */}
-                        {null}
-                      </option>
-                    ))}
-                </select>
-
-                {!cuentasBancarias.length && (
-                  <small style={{ color: "#b45309" }}>
-                    Registra primero un banco en Configuración →
-                    Bancos.
-                  </small>
-                )}
+                />
               </div>
             </>
           )}
@@ -17215,3 +17122,96 @@ subMenuButtonActive: {
   fontSize: 14,
 },
 };
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
+// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
