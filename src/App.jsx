@@ -4471,36 +4471,44 @@ if (institucionIdLogin) {
       const token = localStorage.getItem("token");
       const institucionId = obtenerInstitucionActivaId();
 
-      const esEfectivo =
-        recargaProfesorForm.metodo_pago === "EFECTIVO";
+      /*
+       * IMPORTANTE:
+       * Toda recarga del profesor, tanto EFECTIVO como TRANSFERENCIA,
+       * debe pasar por /recargas porque esa ruta aplica primero el pago
+       * contra credito_utilizado (FIFO) y solo manda el excedente a saldo.
+       *
+       * Antes, EFECTIVO usaba /creditos y por eso sumaba saldo sin bajar
+       * la deuda de crédito.
+       */
+      const urlRecargaProfesor =
+        `${API_URL}/api/profesores/${profesorDetalle.id}/recargas`;
 
-      const urlRecargaProfesor = esEfectivo
-        ? `${API_URL}/api/profesores/${profesorDetalle.id}/creditos`
-        : `${API_URL}/api/profesores/${profesorDetalle.id}/recargas`;
-
-      const payloadRecargaProfesor = esEfectivo
-        ? {
-            institucion_id: Number(institucionId),
-            tipo: "RECARGA",
-            monto,
-            comercio: "POS NUBE",
-            observacion:
-              recargaProfesorForm.observacion || "Recarga en efectivo",
-          }
-        : {
-            institucion_id: Number(institucionId),
-            monto,
-            metodo_pago: recargaProfesorForm.metodo_pago,
-            numero_comprobante: String(
-              recargaProfesorForm.numero_comprobante
-            ).trim(),
-            banco: recargaProfesorForm.banco,
-            cuenta_bancaria_id: Number(
-              recargaProfesorForm.cuenta_bancaria_id
-            ),
-            comercio: "POS NUBE",
-            observacion: recargaProfesorForm.observacion,
-          };
+      const payloadRecargaProfesor = {
+        institucion_id: Number(institucionId),
+        monto,
+        metodo_pago: recargaProfesorForm.metodo_pago,
+        numero_comprobante:
+          recargaProfesorForm.metodo_pago === "TRANSFERENCIA"
+            ? String(
+                recargaProfesorForm.numero_comprobante || ""
+              ).trim()
+            : null,
+        banco:
+          recargaProfesorForm.metodo_pago === "TRANSFERENCIA"
+            ? recargaProfesorForm.banco
+            : null,
+        cuenta_bancaria_id:
+          recargaProfesorForm.metodo_pago === "TRANSFERENCIA" &&
+          recargaProfesorForm.cuenta_bancaria_id
+            ? Number(recargaProfesorForm.cuenta_bancaria_id)
+            : null,
+        comercio: "POS NUBE",
+        observacion:
+          recargaProfesorForm.observacion ||
+          (recargaProfesorForm.metodo_pago === "EFECTIVO"
+            ? "Recarga en efectivo"
+            : "Recarga por transferencia"),
+      };
 
       const res = await fetch(urlRecargaProfesor, {
         method: "POST",
