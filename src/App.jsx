@@ -10,7 +10,11 @@ import KardexModulo from "./components/KardexModulo";
 import ProductosFormaPagoModulo from "./components/ProductosFormaPagoModulo";
 import PortalUsuarioModulo from "./components/PortalUsuarioModulo";
 
-const API_URL = "https://pos-nube-backend.onrender.com";
+const API_URL =
+  typeof window !== "undefined" &&
+  ["localhost", "127.0.0.1"].includes(window.location.hostname)
+    ? "http://localhost:3000"
+    : "https://pos-nube-backend.onrender.com";
 
 
 const ROLES_POS = {
@@ -4279,6 +4283,10 @@ if (institucionIdLogin) {
       }
 
       setCreditosProfesores(Array.isArray(data) ? data : []);
+
+      if (profesorId) {
+        await cargarProfesores();
+      }
     } catch (error) {
       console.error("Error cargando créditos de profesores:", error);
       setCreditosProfesores([]);
@@ -4357,10 +4365,10 @@ if (institucionIdLogin) {
         return;
       }
 
-      // Usamos la ruta estable de movimientos de crédito.
-      // El backend actual acepta tipo RECARGA y acredita el saldo.
+      // Toda recarga del profesor pasa por /recargas para pagar primero
+      // credito_utilizado (FIFO) y acreditar solo el excedente al saldo.
       const res = await fetch(
-        `${API_URL}/api/profesores/${profesorDetalle.id}/creditos`,
+        `${API_URL}/api/profesores/${profesorDetalle.id}/recargas`,
         {
           method: "POST",
           headers: {
@@ -4369,8 +4377,11 @@ if (institucionIdLogin) {
           },
           body: JSON.stringify({
             institucion_id: Number(institucionId),
-            tipo: "RECARGA",
             monto,
+            metodo_pago: "EFECTIVO",
+            numero_comprobante: null,
+            banco: null,
+            cuenta_bancaria_id: null,
             comercio: "POS NUBE",
             observacion: "Recarga en efectivo",
           }),
@@ -7544,7 +7555,7 @@ Disponible: ${formatearMoneda(
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const data = await respuesta.json();
-      if (!respuesta.ok) throw new Error(data.message || data.error || "No se pudo calcular el cierre");
+      if (!respuesta.ok) throw new Error(data.error || data.message || "No se pudo calcular el cierre");
       setResumenCierreServidor(data);
     } catch (error) {
       console.error("Error cargando resumen de cierre:", error);
