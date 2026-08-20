@@ -4540,8 +4540,24 @@ if (institucionIdLogin) {
       });
 
       await cargarCreditosProfesores(profesorDetalle.id);
+      await cargarProfesores();
       setMostrarModalRecargaProfesor(false);
-      alert("Recarga realizada correctamente. El saldo se actualizó inmediatamente.");
+
+      const aplicadoCredito = Number(data.aplicado_credito || 0);
+      const excedenteSaldo = Number(data.excedente_saldo || 0);
+
+      if (aplicadoCredito > 0) {
+        alert(
+          `Recarga realizada correctamente.\n` +
+            `Aplicado a deuda de crédito: ${formatearMoneda(aplicadoCredito)}\n` +
+            `Excedente a saldo: ${formatearMoneda(excedenteSaldo)}`
+        );
+      } else {
+        alert(
+          `Recarga realizada correctamente.\n` +
+            `Saldo acreditado: ${formatearMoneda(excedenteSaldo)}`
+        );
+      }
     } catch (error) {
       console.error("Error realizando recarga del profesor:", error);
       alert(error.message || "No se pudo realizar la recarga.");
@@ -7034,8 +7050,15 @@ if (institucionIdLogin) {
         return;
       }
 
-      const disponible = Number(
-        profesorVentaSeleccionado.saldo || 0
+      const limiteProfesor = Number(
+        profesorVentaSeleccionado.limite_credito || 0
+      );
+      const utilizadoProfesor = Number(
+        profesorVentaSeleccionado.credito_utilizado || 0
+      );
+      const disponible = Math.max(
+        0,
+        limiteProfesor - utilizadoProfesor
       );
 
       if (totalVentaCalculado > disponible) {
@@ -7238,6 +7261,7 @@ Disponible: ${formatearMoneda(
       cargarProductos(),
       cargarExistenciasInventario(),
       cargarAlumnos(),
+      cargarProfesores(),
       cargarResumen(),
     ]);
 
@@ -15642,7 +15666,15 @@ onClick={() => eliminarEgreso(egreso)}
                   >
                     Crédito disponible del profesor:{" "}
                     {formatearMoneda(
-                      profesorVentaSeleccionado.saldo || 0
+                      Math.max(
+                        0,
+                        Number(
+                          profesorVentaSeleccionado.limite_credito || 0
+                        ) -
+                          Number(
+                            profesorVentaSeleccionado.credito_utilizado || 0
+                          )
+                      )
                     )}
                   </div>
                 )}
