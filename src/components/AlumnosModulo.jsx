@@ -60,7 +60,8 @@ export default function AlumnosModulo({
   const [recargaAlumnoForm, setRecargaAlumnoForm] = useState({
     monto: "",
     metodo_pago: "EFECTIVO",
-    fecha_transferencia: "",
+    cuenta_bancaria_id: "",
+    banco: "",
     numero_comprobante: "",
     observacion: "",
   });
@@ -399,7 +400,8 @@ export default function AlumnosModulo({
     setRecargaAlumnoForm({
       monto: "",
       metodo_pago: "EFECTIVO",
-      fecha_transferencia: "",
+      cuenta_bancaria_id: "",
+      banco: "",
       numero_comprobante: "",
       observacion: "",
     });
@@ -416,11 +418,10 @@ export default function AlumnosModulo({
     }
 
     if (recargaAlumnoForm.metodo_pago === "TRANSFERENCIA") {
-      if (!String(recargaAlumnoForm.fecha_transferencia || "").trim()) {
-        alert("Selecciona la fecha en que se realizó la transferencia.");
+      if (!recargaAlumnoForm.cuenta_bancaria_id || !recargaAlumnoForm.banco) {
+        alert("Selecciona la cuenta bancaria receptora.");
         return;
       }
-
       if (!String(recargaAlumnoForm.numero_comprobante || "").trim()) {
         alert("Ingresa el número de comprobante de la transferencia.");
         return;
@@ -442,9 +443,13 @@ export default function AlumnosModulo({
           alumno_id: Number(alumnoDetalle.id),
           monto,
           metodo_pago: recargaAlumnoForm.metodo_pago,
-          fecha_transferencia:
+          cuenta_bancaria_id:
             recargaAlumnoForm.metodo_pago === "TRANSFERENCIA"
-              ? String(recargaAlumnoForm.fecha_transferencia).trim()
+              ? Number(recargaAlumnoForm.cuenta_bancaria_id)
+              : null,
+          banco:
+            recargaAlumnoForm.metodo_pago === "TRANSFERENCIA"
+              ? recargaAlumnoForm.banco
               : null,
           numero_comprobante:
             recargaAlumnoForm.metodo_pago === "TRANSFERENCIA"
@@ -466,6 +471,9 @@ export default function AlumnosModulo({
       });
       await cargarAlumnos();
       if (typeof cargarRecargas === "function") await cargarRecargas();
+
+      // Refresca también la tabla de Créditos para que la recarga aparezca allí.
+      await cargarCreditoAlumno();
 
       setHistorialRecargasAlumno((actual) => [
         {
@@ -778,7 +786,8 @@ export default function AlumnosModulo({
                 onChange={(e) => setRecargaAlumnoForm({
                   ...recargaAlumnoForm,
                   metodo_pago: e.target.checked ? "TRANSFERENCIA" : "EFECTIVO",
-                  fecha_transferencia: "",
+                  cuenta_bancaria_id: "",
+                  banco: "",
                   numero_comprobante: "",
                 })}
               />
@@ -786,21 +795,33 @@ export default function AlumnosModulo({
 
             {recargaAlumnoForm.metodo_pago === "TRANSFERENCIA" && (
               <>
-                <label style={paymon.modalLabel}>
-                  Fecha en que realizó la transferencia *
-                </label>
-                <input
-                  type="date"
-                  value={recargaAlumnoForm.fecha_transferencia}
-                  onChange={(e) =>
+                <label style={paymon.modalLabel}>Banco donde realizó la transferencia *</label>
+                <select
+                  value={recargaAlumnoForm.cuenta_bancaria_id}
+                  onChange={(e) => {
+                    const cuenta = cuentasBancarias.find((c) => String(c.id) === String(e.target.value));
                     setRecargaAlumnoForm({
                       ...recargaAlumnoForm,
-                      fecha_transferencia: e.target.value,
-                    })
-                  }
+                      cuenta_bancaria_id: e.target.value,
+                      banco: cuenta ? cuenta.banco : "",
+                    });
+                  }}
                   style={paymon.modalInput}
                   required
-                />
+                >
+                  <option value="">Seleccionar banco</option>
+                  {cuentasBancarias.filter((c) => c.activo !== false).map((cuenta) => (
+                    <option key={cuenta.id} value={cuenta.id}>
+                      {cuenta.banco}
+                    </option>
+                  ))}
+                </select>
+
+                {!cuentasBancarias.length && (
+                  <div style={paymon.modalWarning}>
+                    No hay bancos configurados. Regístralos en Configuración → Bancos.
+                  </div>
+                )}
 
                 <label style={paymon.modalLabel}>Número de comprobante *</label>
                 <input
@@ -1272,6 +1293,20 @@ export default function AlumnosModulo({
               >
                 <div style={paymon.summaryCard}>
                   <div style={paymon.summaryCell}>
+                    <span>Saldo a favor</span>
+                    <strong style={{ ...paymon.paidValue, color: "#0f766e" }}>
+                      {formatearMoneda(
+                        creditoAlumno?.saldo_a_favor ??
+                          creditoAlumno?.saldo ??
+                          alumnoDetalle.saldo ??
+                          0
+                      )}
+                    </strong>
+                  </div>
+                </div>
+
+                <div style={paymon.summaryCard}>
+                  <div style={paymon.summaryCell}>
                     <span>Límite de crédito</span>
                     <strong style={paymon.paidValue}>
                       {formatearMoneda(
@@ -1531,7 +1566,7 @@ export default function AlumnosModulo({
               <div style={paymon.tableCard}>
                 <div style={paymon.tableToolbar}>
                   <h3 style={{ margin: 0 }}>
-                    Historial de créditos
+                    Historial de créditos y recargas
                   </h3>
 
                   <button
@@ -1553,7 +1588,7 @@ export default function AlumnosModulo({
                         </th>
                         <th style={paymon.th}>Tipo</th>
                         <th style={paymon.th}>Monto</th>
-                        <th style={paymon.th}>Deuda nueva</th>
+                        <th style={paymon.th}>Saldo nuevo</th>
                         <th style={paymon.th}>Fecha</th>
                         <th style={paymon.th}>Estado</th>
                         <th style={paymon.th}>Acciones</th>
@@ -1576,7 +1611,9 @@ export default function AlumnosModulo({
                       ) : (
                         movimientosCreditoAlumno.map(
                           (movimiento) => (
-                            <tr key={movimiento.id}>
+                            <tr
+                              key={`${movimiento.origen || "CREDITO"}-${movimiento.id}`}
+                            >
                               <td style={paymon.td}>
                                 {movimiento.comercio ||
                                   "POS NUBE"}
@@ -1596,7 +1633,9 @@ export default function AlumnosModulo({
                               </td>
                               <td style={paymon.td}>
                                 {formatearMoneda(
-                                  movimiento.credito_nuevo || 0
+                                  movimiento.saldo_nuevo ??
+                                    movimiento.credito_nuevo ??
+                                    0
                                 )}
                               </td>
                               <td style={paymon.td}>
