@@ -3336,55 +3336,38 @@ const exportarVentasExcel = () => {
     return;
   }
 
-  const encabezados = [
-    "Orden No",
-    "Usuario",
-    "Ubicación",
-    "Fecha de Consumo",
-    "Fecha de Pago",
-    "Fecha de Creación",
-    "Hora compra",
-    "Total",
-    "Estado",
-    "Forma Pago",
-    "Tipo orden",
+  const datos = ventasFiltradas.map((v) => ({
+    "Orden No": `#${v.id}`,
+    Usuario: v.alumno_nombre || "",
+    "Ubicación": v.ubicacion_visual || v.ubicacion || "PRINCIPAL",
+    "Fecha de Consumo": formatearSoloFecha(v.fecha_base),
+    "Fecha de Pago": formatearSoloFecha(v.fecha_base),
+    "Fecha de Creación": formatearSoloFecha(v.fecha_base),
+    "Hora compra": formatearSoloHora(v.fecha_base),
+    Total: Number(v.total || 0),
+    Estado: v.estado || "Entregada",
+    "Forma Pago": v.metodo_visual || v.metodo_pago || "",
+    "Tipo orden": v.tipo_orden || "Normal",
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(datos);
+  worksheet["!cols"] = [
+    { wch: 12 },
+    { wch: 30 },
+    { wch: 20 },
+    { wch: 18 },
+    { wch: 16 },
+    { wch: 18 },
+    { wch: 14 },
+    { wch: 12 },
+    { wch: 15 },
+    { wch: 20 },
+    { wch: 15 },
   ];
 
-  const filas = ventasFiltradas.map((v) => [
-    `#${v.id}`,
-    v.alumno_nombre || "",
-    "PRINCIPAL",
-    formatearSoloFecha(v.fecha_base),
-    formatearSoloFecha(v.fecha_base),
-    formatearSoloFecha(v.fecha_base),
-    formatearSoloHora(v.fecha_base),
-    Number(v.total || 0).toFixed(2),
-    "Entregada",
-    v.metodo_visual || "",
-    "Normal",
-  ]);
-
-  const csvContenido = [
-    encabezados.join(","),
-    ...filas.map((fila) =>
-      fila
-        .map((valor) => `"${String(valor).replace(/"/g, '""')}"`)
-        .join(",")
-    ),
-  ].join("\n");
-
-  const blob = new Blob(["\ufeff" + csvContenido], {
-    type: "text/csv;charset=utf-8;",
-  });
-
-  const url = window.URL.createObjectURL(blob);
-  const enlace = document.createElement("a");
-  enlace.href = url;
-  enlace.setAttribute("download", "ventas_exportadas.csv");
-  document.body.appendChild(enlace);
-  enlace.click();
-  document.body.removeChild(enlace);
-  window.URL.revokeObjectURL(url);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Ventas");
+  XLSX.writeFile(workbook, "ventas_exportadas.xlsx");
 };
 
   const agregarItemVenta = () => {
