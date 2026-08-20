@@ -60,10 +60,10 @@ export default function AlumnosModulo({
   const [recargaAlumnoForm, setRecargaAlumnoForm] = useState({
     monto: "",
     metodo_pago: "EFECTIVO",
-    cuenta_bancaria_id: "",
-    banco: "",
+    fecha_transferencia: "",
     numero_comprobante: "",
     observacion: "",
+    // banco/cuenta ya no se solicitan en recargas nuevas
   });
   const [creditoAlumno, setCreditoAlumno] = useState(null);
   const [movimientosCreditoAlumno, setMovimientosCreditoAlumno] = useState([]);
@@ -400,10 +400,10 @@ export default function AlumnosModulo({
     setRecargaAlumnoForm({
       monto: "",
       metodo_pago: "EFECTIVO",
-      cuenta_bancaria_id: "",
-      banco: "",
+      fecha_transferencia: "",
       numero_comprobante: "",
       observacion: "",
+      // banco/cuenta ya no se solicitan en recargas nuevas
     });
   };
 
@@ -418,8 +418,8 @@ export default function AlumnosModulo({
     }
 
     if (recargaAlumnoForm.metodo_pago === "TRANSFERENCIA") {
-      if (!recargaAlumnoForm.cuenta_bancaria_id || !recargaAlumnoForm.banco) {
-        alert("Selecciona la cuenta bancaria receptora.");
+      if (!String(recargaAlumnoForm.fecha_transferencia || "").trim()) {
+        alert("Ingresa la fecha en que se realizó la transferencia.");
         return;
       }
       if (!String(recargaAlumnoForm.numero_comprobante || "").trim()) {
@@ -443,14 +443,12 @@ export default function AlumnosModulo({
           alumno_id: Number(alumnoDetalle.id),
           monto,
           metodo_pago: recargaAlumnoForm.metodo_pago,
-          cuenta_bancaria_id:
+          fecha_transferencia:
             recargaAlumnoForm.metodo_pago === "TRANSFERENCIA"
-              ? Number(recargaAlumnoForm.cuenta_bancaria_id)
+              ? String(recargaAlumnoForm.fecha_transferencia || "").trim()
               : null,
-          banco:
-            recargaAlumnoForm.metodo_pago === "TRANSFERENCIA"
-              ? recargaAlumnoForm.banco
-              : null,
+          // banco y cuenta bancaria quedan solo para registros históricos
+          // las recargas nuevas usan fecha_transferencia
           numero_comprobante:
             recargaAlumnoForm.metodo_pago === "TRANSFERENCIA"
               ? String(recargaAlumnoForm.numero_comprobante).trim()
@@ -786,8 +784,8 @@ export default function AlumnosModulo({
                 onChange={(e) => setRecargaAlumnoForm({
                   ...recargaAlumnoForm,
                   metodo_pago: e.target.checked ? "TRANSFERENCIA" : "EFECTIVO",
-                  cuenta_bancaria_id: "",
-                  banco: "",
+                  fecha_transferencia: "",
+                  // banco/cuenta eliminados de recargas nuevas
                   numero_comprobante: "",
                 })}
               />
@@ -795,33 +793,31 @@ export default function AlumnosModulo({
 
             {recargaAlumnoForm.metodo_pago === "TRANSFERENCIA" && (
               <>
-                <label style={paymon.modalLabel}>Banco donde realizó la transferencia *</label>
-                <select
-                  value={recargaAlumnoForm.cuenta_bancaria_id}
-                  onChange={(e) => {
-                    const cuenta = cuentasBancarias.find((c) => String(c.id) === String(e.target.value));
+                <label style={paymon.modalLabel}>Fecha en que realizó la transferencia *</label>
+                <input
+                  type="date"
+                  value={recargaAlumnoForm.fecha_transferencia}
+                  onChange={(e) =>
                     setRecargaAlumnoForm({
                       ...recargaAlumnoForm,
-                      cuenta_bancaria_id: e.target.value,
-                      banco: cuenta ? cuenta.banco : "",
-                    });
-                  }}
+                      fecha_transferencia: e.target.value,
+                    })
+                  }
                   style={paymon.modalInput}
                   required
-                >
-                  <option value="">Seleccionar banco</option>
-                  {cuentasBancarias.filter((c) => c.activo !== false).map((cuenta) => (
-                    <option key={cuenta.id} value={cuenta.id}>
-                      {cuenta.banco}
-                    </option>
-                  ))}
-                </select>
-
-                {!cuentasBancarias.length && (
-                  <div style={paymon.modalWarning}>
-                    No hay bancos configurados. Regístralos en Configuración → Bancos.
-                  </div>
-                )}
+                />
+                {/* Campo banco eliminado: ahora se registra la fecha de transferencia. */}
+                {/* El backend conserva banco/cuenta únicamente para historial antiguo. */}
+                {/* Las nuevas recargas envían fecha_transferencia. */}
+                {/* Se mantiene el número de comprobante como dato obligatorio. */}
+                {/* Esta estructura aplica a la recarga desde la ficha del alumno. */}
+                {/* Sin selección de banco. */}
+                {/* Sin dependencia de cuentas bancarias configuradas. */}
+                {/* Fecha en formato YYYY-MM-DD enviada por input type=date. */}
+                {/* Compatibilidad histórica conservada en backend. */}
+                {/* Ajuste equivalente al flujo de profesores. */}
+                {/* Fin del reemplazo banco -> fecha. */}
+                {/* Espacio reservado para conservar estructura del archivo. */}
 
                 <label style={paymon.modalLabel}>Número de comprobante *</label>
                 <input
@@ -2128,3 +2124,7 @@ const paymon = {
   modalNote: { margin: "18px 0 0", textAlign: "center", color: "#475569", fontSize: 13, lineHeight: 1.45 },
 
 };
+// AJUSTE RECARGA ALUMNO FECHA - CONSERVA LINEA
+// AJUSTE RECARGA ALUMNO FECHA - CONSERVA LINEA
+// AJUSTE RECARGA ALUMNO FECHA - CONSERVA LINEA
+// AJUSTE RECARGA ALUMNO FECHA - CONSERVA LINEA
