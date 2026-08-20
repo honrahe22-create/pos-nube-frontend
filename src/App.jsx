@@ -1761,7 +1761,6 @@ const cargarExistenciasInventario = async ({ reintento = true } = {}) => {
         {
           headers: {
             Authorization: `Bearer ${token}`,
-            "Cache-Control": "no-cache",
           },
           cache: "no-store",
           signal: controlador.signal,
@@ -7614,7 +7613,7 @@ Disponible: ${formatearMoneda(
           institucion_id: Number(institucionId),
           jornada_id: Number(jornadaActiva?.id || 0),
           fecha: cierreForm.fecha,
-          negocio: cierreForm.negocio || "POS NUBE",
+          negocio: "POS NUBE",
           efectivo_contado: totalEfectivoContado,
           tarjeta_manual: Number(cierreForm.tarjeta_manual || 0),
           transferencia_manual: Number(cierreForm.transferencia_manual || 0),
@@ -8934,7 +8933,15 @@ if (!usuario) {
                 readOnly
               />
             </div>
-            <div style={styles.filterFieldWide}><label style={styles.label}>Negocio</label><input style={styles.input} value={cierreForm.negocio} onChange={(e)=>setCierreForm({...cierreForm,negocio:e.target.value})}/></div>
+            <div style={styles.filterFieldWide}>
+              <label style={styles.label}>Negocio</label>
+              <input
+                style={{ ...styles.input, fontWeight: 800, background: "#f8fafc" }}
+                value="POS NUBE"
+                readOnly
+                tabIndex={-1}
+              />
+            </div>
           </div>
           <h3 style={{marginTop:24}}>Total de dinero: {formatearMoneda(totalEfectivoContado)}</h3>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,280px),1fr))",gap:"clamp(14px,2vw,24px)",width:"100%",minWidth:0}}>
@@ -12050,11 +12057,11 @@ onClick={() => eliminarEgreso(egreso)}
                       </h3>
 
                       <p style={{ margin: "6px 0 0", color: "#64748b" }}>
-                        Saldo/Crédito actual:{" "}
+                        Saldo a favor:{" "}
                         <strong>
                           {formatearMoneda(
-                            profesorDetalle.saldo ||
-                              profesorDetalle.credito ||
+                            profesorDetalle.saldo ??
+                              profesorDetalle.credito ??
                               0
                           )}
                         </strong>
@@ -12081,6 +12088,44 @@ onClick={() => eliminarEgreso(egreso)}
                       marginBottom: 20,
                     }}
                   >
+                    <div
+                      style={{
+                        background: "#ffffff",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 14,
+                        minHeight: 130,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        boxShadow: "0 8px 24px rgba(15,23,42,.06)",
+                      }}
+                    >
+                      <div style={{ textAlign: "center" }}>
+                        <div
+                          style={{
+                            fontSize: 16,
+                            color: "#0f172a",
+                            marginBottom: 10,
+                          }}
+                        >
+                          Saldo a favor
+                        </div>
+                        <strong
+                          style={{
+                            fontSize: 38,
+                            lineHeight: 1,
+                            color: "#0f766e",
+                          }}
+                        >
+                          {formatearMoneda(
+                            profesorDetalle.saldo ??
+                              profesorDetalle.credito ??
+                              0
+                          )}
+                        </strong>
+                      </div>
+                    </div>
+
                     <div
                       style={{
                         background: "#ffffff",
@@ -12183,17 +12228,11 @@ onClick={() => eliminarEgreso(egreso)}
                           }}
                         >
                           {formatearMoneda(
-                            profesorDetalle.credito_disponible ??
-                              Math.max(
-                                0,
-                                Number(
-                                  profesorDetalle.limite_credito || 0
-                                ) -
-                                  Number(
-                                    profesorDetalle.credito_utilizado ||
-                                      0
-                                  )
-                              )
+                            Math.max(
+                              0,
+                              Number(profesorDetalle.limite_credito || 0) -
+                                Number(profesorDetalle.credito_utilizado || 0)
+                            )
                           )}
                         </strong>
                       </div>
