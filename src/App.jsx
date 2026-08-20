@@ -7071,6 +7071,19 @@ if (institucionIdLogin) {
         return;
       }
 
+      const saldoFavorProfesor = Number(
+        profesorVentaSeleccionado.saldo || 0
+      );
+
+      if (saldoFavorProfesor > 0.0001) {
+        alert(
+          `El crédito del profesor está bloqueado mientras exista saldo a favor.\nSaldo disponible: ${formatearMoneda(
+            saldoFavorProfesor
+          )}`
+        );
+        return;
+      }
+
       const limiteProfesor = Number(
         profesorVentaSeleccionado.limite_credito || 0
       );
@@ -11657,7 +11670,11 @@ onClick={() => eliminarEgreso(egreso)}
                 setVentaForm({
                   alumno_id: "",
                   profesor_id: String(profesorDetalle.id),
-                  metodo_pago: profesorDetalle.credito_habilitado === true ? "CREDITO_PROFESOR" : "EFECTIVO",
+                  metodo_pago:
+                    profesorDetalle.credito_habilitado === true &&
+                    Number(profesorDetalle.saldo || 0) <= 0.0001
+                      ? "CREDITO_PROFESOR"
+                      : "EFECTIVO",
                   observacion: "",
                 });
                 setBusquedaUsuarioNuevaOrden(
@@ -15078,7 +15095,11 @@ onClick={() => eliminarEgreso(egreso)}
                       ...prev,
                       alumno_id: "",
                       profesor_id: String(p.id),
-                      metodo_pago: "CREDITO_PROFESOR",
+                      metodo_pago:
+                        p.credito_habilitado === true &&
+                        Number(p.saldo || 0) <= 0.0001
+                          ? "CREDITO_PROFESOR"
+                          : "EFECTIVO",
                     }));
                     setModoNuevaOrden("consumidor_final");
                     setBusquedaUsuarioNuevaOrden("");
@@ -15741,6 +15762,24 @@ onClick={() => eliminarEgreso(egreso)}
                   // si todavía no hay profesor, abrimos directamente
                   // la identificación filtrada por profesores.
                   if (nuevoMetodo === "CREDITO_PROFESOR") {
+                    if (
+                      profesorVentaSeleccionado &&
+                      Number(profesorVentaSeleccionado.saldo || 0) > 0.0001
+                    ) {
+                      alert(
+                        `El crédito del profesor se habilita únicamente cuando su saldo a favor llegue a $0.00.\nSaldo actual: ${formatearMoneda(
+                          profesorVentaSeleccionado.saldo || 0
+                        )}`
+                      );
+
+                      setVentaForm((prev) => ({
+                        ...prev,
+                        alumno_id: "",
+                        metodo_pago: "EFECTIVO",
+                      }));
+                      return;
+                    }
+
                     setVentaForm((prev) => ({
                       ...prev,
                       alumno_id: "",
@@ -15758,10 +15797,56 @@ onClick={() => eliminarEgreso(egreso)}
               >
                 <option value="EFECTIVO">Efectivo</option>
                 <option value="TRANSFERENCIA">Transferencia</option>
-                <option value="RECARGA">Saldo del alumno</option>
-                <option value="CREDITO">Crédito del alumno</option>
-                <option value="CREDITO_PROFESOR">Crédito del profesor</option>
+
+                {!profesorVentaSeleccionado && (
+                  <>
+                    <option value="RECARGA">Saldo del alumno</option>
+                    <option value="CREDITO">Crédito del alumno</option>
+                  </>
+                )}
+
+                {profesorVentaSeleccionado && (
+                  <option
+                    value="CREDITO_PROFESOR"
+                    disabled={
+                      profesorVentaSeleccionado.credito_habilitado !== true ||
+                      Number(profesorVentaSeleccionado.saldo || 0) > 0.0001
+                    }
+                  >
+                    {Number(profesorVentaSeleccionado.saldo || 0) > 0.0001
+                      ? `Crédito del profesor (bloqueado: saldo ${formatearMoneda(
+                          profesorVentaSeleccionado.saldo || 0
+                        )})`
+                      : profesorVentaSeleccionado.credito_habilitado === true
+                      ? "Crédito del profesor"
+                      : "Crédito del profesor (inhabilitado)"}
+                  </option>
+                )}
+
+                {!profesorVentaSeleccionado && !alumnoVentaSeleccionado && (
+                  <option value="CREDITO_PROFESOR">Crédito del profesor</option>
+                )}
               </select>
+
+              {profesorVentaSeleccionado &&
+                Number(profesorVentaSeleccionado.saldo || 0) > 0.0001 && (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      borderRadius: 8,
+                      background: "#fff7ed",
+                      border: "1px solid #fdba74",
+                      color: "#9a3412",
+                      padding: 10,
+                      fontWeight: 800,
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    Crédito del profesor bloqueado mientras tenga saldo a favor.
+                    Saldo actual:{" "}
+                    {formatearMoneda(profesorVentaSeleccionado.saldo || 0)}
+                  </div>
+                )}
 
               <div style={{ height: 12 }} />
 
