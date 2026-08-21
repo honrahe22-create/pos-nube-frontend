@@ -5429,11 +5429,21 @@ if (institucionIdLogin) {
     }
 
     if (filtros.ubicacion) {
-      lista = lista.filter(
-        (venta) =>
-          String(venta.ubicacion_visual || "PRINCIPAL") ===
-          String(filtros.ubicacion)
-      );
+      const ubicacionFiltro = String(filtros.ubicacion || "")
+        .trim()
+        .toUpperCase();
+
+      lista = lista.filter((venta) => {
+        const ubicacionVenta = String(
+          venta.ubicacion_visual ||
+          venta.ubicacion ||
+          "PRINCIPAL"
+        )
+          .trim()
+          .toUpperCase();
+
+        return ubicacionVenta === ubicacionFiltro;
+      });
     }
 
     return lista;
@@ -5494,8 +5504,15 @@ if (institucionIdLogin) {
   };
 
   const consultarProductos = () => {
+    const filtrosConsulta = {
+      ...productosFiltros,
+      ubicacion: String(productosFiltros.ubicacion || "")
+        .trim()
+        .toUpperCase(),
+    };
+
     const ventasFiltradasReporte =
-      obtenerVentasParaReporteProductos(productosFiltros);
+      obtenerVentasParaReporteProductos(filtrosConsulta);
 
     const vendidos =
       construirResumenProductosVendidos(ventasFiltradasReporte);
@@ -9813,7 +9830,22 @@ if (!usuario) {
           style={styles.input}
         >
           <option value="">Todas</option>
-          <option value="PRINCIPAL">PRINCIPAL</option>
+          {[...new Set([
+            ...(puntosOperacion || []).map((p) =>
+              String(p?.nombre || "").trim().toUpperCase()
+            ),
+            ...ventasEnriquecidas.map((venta) =>
+              String(
+                venta.ubicacion_visual ||
+                venta.ubicacion ||
+                ""
+              ).trim().toUpperCase()
+            ),
+          ].filter(Boolean))].map((ubicacion) => (
+            <option key={ubicacion} value={ubicacion}>
+              {ubicacion}
+            </option>
+          ))}
         </select>
       </div>
 
