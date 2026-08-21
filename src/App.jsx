@@ -438,6 +438,18 @@ const [stockConfirmacion,setStockConfirmacion]=useState(null);
 const [stockResultado,setStockResultado]=useState(null);
 const [guardandoStockOperacion,setGuardandoStockOperacion]=useState(false);
 
+const [mostrarReporteStock,setMostrarReporteStock]=useState(false);
+const [reporteStock,setReporteStock]=useState([]);
+const [cargandoReporteStock,setCargandoReporteStock]=useState(false);
+const [reporteStockFiltros,setReporteStockFiltros]=useState({
+  fecha_inicio:"",
+  fecha_fin:"",
+  producto_id:"",
+  familia:"",
+  tipo:"CARGA",
+  ubicacion:"",
+});
+
 
 
 const familiasOperacionStock = useMemo(() => {
@@ -1354,6 +1366,274 @@ const exportarRecargasExcel = () => {
 };
 
 // ===== STOCK =====
+
+const cargarReporteStock=async(filtrosOpcionales=null)=>{
+  try{
+    setCargandoReporteStock(true);
+
+    const token=localStorage.getItem("token");
+    const institucionId=obtenerInstitucionActivaId();
+
+    if(!token||!institucionId){
+      setReporteStock([]);
+      return [];
+    }
+
+    const filtros=filtrosOpcionales||reporteStockFiltros;
+    const params=new URLSearchParams({
+      institucion_id:String(Number(institucionId)),
+    });
+
+    if(filtros.fecha_inicio)params.set("fecha_inicio",filtros.fecha_inicio);
+    if(filtros.fecha_fin)params.set("fecha_fin",filtros.fecha_fin);
+    if(filtros.producto_id)params.set("producto_id",String(filtros.producto_id));
+    if(filtros.familia)params.set("familia",String(filtros.familia));
+    if(filtros.tipo&&filtros.tipo!=="TODOS")params.set("tipo",String(filtros.tipo));
+    if(filtros.ubicacion)params.set("ubicacion",String(filtros.ubicacion));
+
+    const res=await fetch(
+      `${API_URL}/api/inventario/reporte-movimientos?${params.toString()}&t=${Date.now()}`,
+      {
+        headers:{Authorization:`Bearer ${token}`},
+        cache:"no-store",
+      }
+    );
+
+    const data=await res.json();
+
+    if(!res.ok){
+      throw new Error(data.message||data.error||"No se pudo cargar el reporte de stock");
+    }
+
+    const lista=Array.isArray(data)?data:[];
+    setReporteStock(lista);
+    return lista;
+  }catch(error){
+    console.error("Error cargando reporte de stock:",error);
+    setReporteStock([]);
+    alert(error.message||"No se pudo cargar el reporte de stock.");
+    return [];
+  }finally{
+    setCargandoReporteStock(false);
+  }
+};
+
+const abrirReporteStock=async()=>{
+  setMostrarReporteStock(true);
+  await cargarReporteStock();
+};
+
+const limpiarReporteStock=async()=>{
+  const filtros={
+    fecha_inicio:"",
+    fecha_fin:"",
+    producto_id:"",
+    familia:"",
+    tipo:"CARGA",
+    ubicacion:"",
+  };
+
+  setReporteStockFiltros(filtros);
+  await cargarReporteStock(filtros);
+};
+
+const exportarReporteStockExcel=()=>{
+  if(!reporteStock.length){
+    alert("No hay movimientos de stock para exportar.");
+    return;
+  }
+
+  const datos=reporteStock.map((mov)=>({
+    "Fecha y hora":formatearFechaHora(mov.fecha),
+    "Producto":mov.producto_nombre||"",
+    "Código":mov.producto_codigo||"",
+    "Familia":mov.familia||"Sin familia",
+    "Tipo":mov.tipo_visual||mov.tipo||"",
+    "Cantidad":Number(mov.cantidad||0),
+    "Stock anterior":mov.stock_anterior==null?"":Number(mov.stock_anterior),
+    "Stock nuevo":mov.stock_nuevo==null?"":Number(mov.stock_nuevo),
+    "Ubicación":mov.ubicacion||"PRINCIPAL",
+    "Proveedor":mov.proveedor_nombre||"",
+    "No. factura":mov.numero_factura||"",
+    "Referencia":mov.referencia||"",
+    "Usuario":mov.usuario_nombre||"",
+    "Observación":mov.motivo||"",
+  }));
+
+  const worksheet=XLSX.utils.json_to_sheet(datos);
+
+  worksheet["!cols"]=[
+    {wch:22},
+    {wch:30},
+    {wch:14},
+    {wch:22},
+    {wch:24},
+    {wch:12},
+    {wch:15},
+    {wch:15},
+    {wch:20},
+    {wch:28},
+    {wch:18},
+    {wch:24},
+    {wch:28},
+    {wch:40},
+  ];
+
+  const workbook=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook,worksheet,"Movimientos Stock");
+  XLSX.writeFile(workbook,"reporte_movimientos_stock.xlsx");
+};
+
+const exportarReporteStockPdf=()=>{
+  if(!reporteStock.length){
+    alert("No hay movimientos de stock para exportar.");
+    return;
+  }
+
+  const escaparPdf=(valor)=>
+    String(valor??"")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g,"")
+      .replace(/[^\x20-\x7E]/g,"")
+      .replace(/[()\\]/g,(m)=>`\\${m}`);
+
+  const cortar=(valor,maximo)=>
+    String(valor??"")
+      .replace(/\s+/g," ")
+      .trim()
+      .slice(0,maximo);
+
+  const fechaReporte=new Date().toLocaleString("es-EC");
+  const filtrosTexto=[
+    reporteStockFiltros.fecha_inicio?`Desde: ${reporteStockFiltros.fecha_inicio}`:"",
+    reporteStockFiltros.fecha_fin?`Hasta: ${reporteStockFiltros.fecha_fin}`:"",
+    reporteStockFiltros.familia?`Familia: ${reporteStockFiltros.familia}`:"",
+    reporteStockFiltros.tipo?`Tipo: ${reporteStockFiltros.tipo}`:"",
+    reporteStockFiltros.ubicacion?`Ubicacion: ${reporteStockFiltros.ubicacion}`:"",
+  ].filter(Boolean).join(" | ")||"Sin filtros";
+
+  const lineas=[
+    "POS NUBE - REPORTE MOVIMIENTOS DE STOCK",
+    `Institucion: ${institucionActiva?.nombre||"POS NUBE"}`,
+    `Generado: ${fechaReporte}`,
+    `Filtros: ${filtrosTexto}`,
+    `Total movimientos: ${reporteStock.length}`,
+    "--------------------------------------------------------------------------",
+    "Fecha/hora           Producto              Familia        Tipo        Cant",
+    "--------------------------------------------------------------------------",
+  ];
+
+  reporteStock.forEach((mov)=>{
+    lineas.push(
+      [
+        cortar(formatearFechaHora(mov.fecha),19).padEnd(19," "),
+        cortar(mov.producto_nombre||"Producto",21).padEnd(21," "),
+        cortar(mov.familia||"Sin familia",14).padEnd(14," "),
+        cortar(mov.tipo_visual||mov.tipo||"-",11).padEnd(11," "),
+        String(Number(mov.cantidad||0)).padStart(5," "),
+      ].join(" ")
+    );
+
+    lineas.push(
+      `  Stock: ${mov.stock_anterior==null?"-":mov.stock_anterior} -> ${mov.stock_nuevo==null?"-":mov.stock_nuevo} | `+
+      `Ubicacion: ${cortar(mov.ubicacion||"PRINCIPAL",22)} | `+
+      `Usuario: ${cortar(mov.usuario_nombre||"Sistema",22)}`
+    );
+
+    if(mov.proveedor_nombre||mov.numero_factura||mov.motivo){
+      lineas.push(
+        `  Prov: ${cortar(mov.proveedor_nombre||"-",22)} | `+
+        `Factura: ${cortar(mov.numero_factura||"-",16)} | `+
+        `Obs: ${cortar(mov.motivo||"-",35)}`
+      );
+    }
+
+    lineas.push("--------------------------------------------------------------------------");
+  });
+
+  const pageWidth=612;
+  const pageHeight=792;
+  const marginLeft=36;
+  const startY=748;
+  const lineHeight=12;
+  const linesPerPage=58;
+  const paginas=[];
+
+  for(let i=0;i<lineas.length;i+=linesPerPage){
+    paginas.push(lineas.slice(i,i+linesPerPage));
+  }
+
+  const objetos=[];
+  const agregarObjeto=(contenido)=>{
+    objetos.push(contenido);
+    return objetos.length;
+  };
+
+  const fontObj=agregarObjeto("<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>");
+  const pageRefs=[];
+
+  paginas.forEach((lineasPagina,indice)=>{
+    let stream="BT\n/F1 8 Tf\n";
+    let y=startY;
+
+    lineasPagina.forEach((linea)=>{
+      stream+=`${marginLeft} ${y} Td (${escaparPdf(linea)}) Tj\n`;
+      stream+=`-${marginLeft} 0 Td\n`;
+      y-=lineHeight;
+    });
+
+    stream+="ET";
+    const streamObj=agregarObjeto(
+      `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`
+    );
+
+    const pageObj=agregarObjeto(
+      `<< /Type /Page /Parent 0 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] `+
+      `/Resources << /Font << /F1 ${fontObj} 0 R >> >> /Contents ${streamObj} 0 R >>`
+    );
+
+    pageRefs.push(pageObj);
+  });
+
+  const pagesObj=agregarObjeto(
+    `<< /Type /Pages /Kids [${pageRefs.map((n)=>`${n} 0 R`).join(" ")}] /Count ${pageRefs.length} >>`
+  );
+
+  pageRefs.forEach((pageObj)=>{
+    objetos[pageObj-1]=objetos[pageObj-1].replace("/Parent 0 0 R",`/Parent ${pagesObj} 0 R`);
+  });
+
+  const catalogObj=agregarObjeto(`<< /Type /Catalog /Pages ${pagesObj} 0 R >>`);
+
+  let pdf="%PDF-1.4\n";
+  const offsets=[0];
+
+  objetos.forEach((obj,index)=>{
+    offsets.push(pdf.length);
+    pdf+=`${index+1} 0 obj\n${obj}\nendobj\n`;
+  });
+
+  const xrefOffset=pdf.length;
+  pdf+=`xref\n0 ${objetos.length+1}\n`;
+  pdf+="0000000000 65535 f \n";
+  offsets.slice(1).forEach((offset)=>{
+    pdf+=`${String(offset).padStart(10,"0")} 00000 n \n`;
+  });
+  pdf+=
+    `trailer\n<< /Size ${objetos.length+1} /Root ${catalogObj} 0 R >>\n`+
+    `startxref\n${xrefOffset}\n%%EOF`;
+
+  const blob=new Blob([pdf],{type:"application/pdf"});
+  const url=window.URL.createObjectURL(blob);
+  const enlace=document.createElement("a");
+  enlace.href=url;
+  enlace.download="reporte_movimientos_stock.pdf";
+  document.body.appendChild(enlace);
+  enlace.click();
+  document.body.removeChild(enlace);
+  window.URL.revokeObjectURL(url);
+};
+
 const exportarStockExcel = () => {
   try {
     const encabezados = ["Nombre", "Código", "Precio", "Categoría", "Stock actual"];
@@ -3368,220 +3648,6 @@ const exportarVentasExcel = () => {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Ventas");
   XLSX.writeFile(workbook, "ventas_exportadas.xlsx");
-};
-
-const exportarVentasPDF = () => {
-  if (!ventasFiltradas.length) {
-    alert("No hay ventas para exportar");
-    return;
-  }
-
-  const limpiarTextoPDF = (valor) =>
-    String(valor ?? "")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^\x20-\x7E]/g, " ")
-      .replace(/\\/g, "\\\\")
-      .replace(/\(/g, "\\(")
-      .replace(/\)/g, "\\)");
-
-  const cortarTexto = (valor, maximo) => {
-    const texto = String(valor ?? "");
-    return texto.length > maximo
-      ? `${texto.slice(0, Math.max(0, maximo - 3))}...`
-      : texto;
-  };
-
-  const formaPagoSeleccionada = (() => {
-    const valor = String(ventasFiltros.metodo_pago || "todos");
-    if (valor === "todos") return "TODAS";
-    if (valor === "EFECTIVO") return "EFECTIVO";
-    if (valor === "TRANSFERENCIA") return "TRANSFERENCIA";
-    if (valor === "RECARGA" || valor === "SALDO") return "SALDO";
-    if (valor === "CREDITO") return "CREDITO ALUMNO";
-    if (valor === "CREDITO_PROFESOR") return "CREDITO PROFESOR";
-    return valor;
-  })();
-
-  const filas = ventasFiltradas.map((v) => [
-    `#${v.id ?? ""}`,
-    v.alumno_nombre || "",
-    v.ubicacion_visual || v.ubicacion || "PRINCIPAL",
-    formatearSoloFecha(v.fecha_base),
-    formatearSoloHora(v.fecha_base),
-    `$${Number(v.total || 0).toFixed(2)}`,
-    v.estado || "Entregada",
-    v.metodo_visual || v.metodo_pago || "",
-    v.tipo_orden || "Normal",
-  ]);
-
-  const totalReporte = ventasFiltradas.reduce(
-    (acumulado, venta) => acumulado + Number(venta.total || 0),
-    0
-  );
-
-  const columnas = [
-    { titulo: "Orden", x: 28, max: 9 },
-    { titulo: "Usuario", x: 72, max: 23 },
-    { titulo: "Ubicacion", x: 205, max: 16 },
-    { titulo: "Fecha", x: 300, max: 11 },
-    { titulo: "Hora", x: 365, max: 6 },
-    { titulo: "Total", x: 410, max: 9 },
-    { titulo: "Estado", x: 462, max: 11 },
-    { titulo: "Forma Pago", x: 527, max: 16 },
-    { titulo: "Tipo orden", x: 630, max: 13 },
-  ];
-
-  const filasPorPagina = 31;
-  const paginasDatos = [];
-
-  for (let i = 0; i < filas.length; i += filasPorPagina) {
-    paginasDatos.push(filas.slice(i, i + filasPorPagina));
-  }
-
-  const comandosTexto = (texto, x, y, tamano = 8, fuente = "F1") =>
-    `BT /${fuente} ${tamano} Tf 1 0 0 1 ${x} ${y} Tm (${limpiarTextoPDF(texto)}) Tj ET\n`;
-
-  const paginasContenido = paginasDatos.map((filasPagina, indicePagina) => {
-    let contenido = "";
-
-    contenido += comandosTexto("REPORTE DE VENTAS", 330, 565, 16, "F2");
-    contenido += comandosTexto(
-      institucionActiva?.nombre || "POS NUBE",
-      330,
-      548,
-      9,
-      "F1"
-    );
-
-    contenido += comandosTexto(
-      `Forma de pago: ${formaPagoSeleccionada}   Desde: ${
-        ventasFiltros.fecha_inicio || "Todas"
-      }   Hasta: ${ventasFiltros.fecha_fin || "Todas"}   Registros: ${
-        ventasFiltradas.length
-      }`,
-      28,
-      526,
-      8,
-      "F1"
-    );
-
-    contenido += "0.75 w 28 518 m 814 518 l S\n";
-
-    columnas.forEach((columna) => {
-      contenido += comandosTexto(columna.titulo, columna.x, 502, 7.5, "F2");
-    });
-
-    contenido += "0.5 w 28 496 m 814 496 l S\n";
-
-    let y = 481;
-
-    filasPagina.forEach((fila) => {
-      fila.forEach((valor, indice) => {
-        const columna = columnas[indice];
-        contenido += comandosTexto(
-          cortarTexto(valor, columna.max),
-          columna.x,
-          y,
-          7,
-          "F1"
-        );
-      });
-
-      contenido += `0.2 w 28 ${y - 5} m 814 ${y - 5} l S\n`;
-      y -= 14;
-    });
-
-    if (indicePagina === paginasDatos.length - 1) {
-      contenido += comandosTexto(
-        `TOTAL REPORTE: $${totalReporte.toFixed(2)}`,
-        650,
-        28,
-        10,
-        "F2"
-      );
-    }
-
-    contenido += comandosTexto(
-      `Pagina ${indicePagina + 1} de ${paginasDatos.length}`,
-      28,
-      28,
-      7,
-      "F1"
-    );
-
-    return contenido;
-  });
-
-  const objetos = [];
-  objetos[1] = "<< /Type /Catalog /Pages 2 0 R >>";
-  objetos[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
-  objetos[4] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>";
-
-  const referenciasPaginas = [];
-
-  paginasContenido.forEach((contenido, indice) => {
-    const paginaId = 5 + indice * 2;
-    const contenidoId = paginaId + 1;
-
-    referenciasPaginas.push(`${paginaId} 0 R`);
-
-    objetos[paginaId] =
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] ` +
-      `/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> ` +
-      `/Contents ${contenidoId} 0 R >>`;
-
-    objetos[contenidoId] =
-      `<< /Length ${contenido.length} >>\nstream\n${contenido}endstream`;
-  });
-
-  objetos[2] =
-    `<< /Type /Pages /Kids [${referenciasPaginas.join(" ")}] ` +
-    `/Count ${referenciasPaginas.length} >>`;
-
-  let pdf = "%PDF-1.4\n";
-  const offsets = [0];
-
-  for (let id = 1; id < objetos.length; id += 1) {
-    if (!objetos[id]) continue;
-
-    offsets[id] = pdf.length;
-    pdf += `${id} 0 obj\n${objetos[id]}\nendobj\n`;
-  }
-
-  const xrefOffset = pdf.length;
-  const maxId = objetos.length - 1;
-
-  pdf += `xref\n0 ${maxId + 1}\n`;
-  pdf += "0000000000 65535 f \n";
-
-  for (let id = 1; id <= maxId; id += 1) {
-    const offset = offsets[id] || 0;
-    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
-  }
-
-  pdf +=
-    `trailer\n<< /Size ${maxId + 1} /Root 1 0 R >>\n` +
-    `startxref\n${xrefOffset}\n%%EOF`;
-
-  const blob = new Blob([pdf], { type: "application/pdf" });
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = url;
-  link.download = `reporte_ventas_${new Date()
-    .toISOString()
-    .slice(0, 10)}.pdf`;
-
-  link.style.display = "none";
-  link.setAttribute("download", link.download);
-  document.body.appendChild(link);
-  link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
-  document.body.removeChild(link);
-
-  window.setTimeout(() => {
-    window.URL.revokeObjectURL(url);
-  }, 3000);
 };
 
   const agregarItemVenta = () => {
@@ -13177,6 +13243,14 @@ onClick={() => eliminarEgreso(egreso)}
           Exportar existencias
         </button>
 
+        <button
+          type="button"
+          style={styles.outlineButton}
+          onClick={abrirReporteStock}
+        >
+          Reporte movimientos
+        </button>
+
         {puede("inventario.gestionar")&&(
           <button
             type="button"
@@ -13196,6 +13270,290 @@ onClick={() => eliminarEgreso(egreso)}
         />
       </div>
     </div>
+
+    {mostrarReporteStock&&(
+      <div style={{...styles.box,marginBottom:20,border:"1px solid #cbd5e1"}}>
+        <div style={styles.pageHeaderSmall}>
+          <div>
+            <h2 style={{margin:0}}>Reporte de movimientos de stock</h2>
+            <p style={{color:"#64748b",margin:"6px 0 0"}}>
+              Consulta cuándo se cargó o movió inventario, por fecha, producto, familia y ubicación.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={()=>setMostrarReporteStock(false)}
+          >
+            Cerrar reporte
+          </button>
+        </div>
+
+        <div style={{...styles.filtersGrid,marginTop:18}}>
+          <div style={styles.filterField}>
+            <label style={styles.filterLabelTop}>Fecha inicial</label>
+            <input
+              type="date"
+              style={styles.input}
+              value={reporteStockFiltros.fecha_inicio}
+              onChange={(e)=>setReporteStockFiltros((p)=>({
+                ...p,
+                fecha_inicio:e.target.value,
+              }))}
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.filterLabelTop}>Fecha final</label>
+            <input
+              type="date"
+              style={styles.input}
+              value={reporteStockFiltros.fecha_fin}
+              onChange={(e)=>setReporteStockFiltros((p)=>({
+                ...p,
+                fecha_fin:e.target.value,
+              }))}
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.filterLabelTop}>Producto</label>
+            <select
+              style={styles.input}
+              value={reporteStockFiltros.producto_id}
+              onChange={(e)=>setReporteStockFiltros((p)=>({
+                ...p,
+                producto_id:e.target.value,
+              }))}
+            >
+              <option value="">Todos los productos</option>
+
+              {productos
+                .filter((p)=>p?.activo!==false)
+                .slice()
+                .sort((a,b)=>
+                  String(a.nombre||"").localeCompare(String(b.nombre||""))
+                )
+                .map((p)=>(
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}{p.codigo?` · ${p.codigo}`:""}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.filterLabelTop}>Familia</label>
+            <select
+              style={styles.input}
+              value={reporteStockFiltros.familia}
+              onChange={(e)=>setReporteStockFiltros((p)=>({
+                ...p,
+                familia:e.target.value,
+              }))}
+            >
+              <option value="">Todas las familias</option>
+
+              {familiasOperacionStock.map((familia)=>(
+                <option key={familia} value={familia}>
+                  {familia}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.filterLabelTop}>Tipo de movimiento</label>
+            <select
+              style={styles.input}
+              value={reporteStockFiltros.tipo}
+              onChange={(e)=>setReporteStockFiltros((p)=>({
+                ...p,
+                tipo:e.target.value,
+              }))}
+            >
+              <option value="TODOS">Todos</option>
+              <option value="CARGA">Carga / ingreso</option>
+              <option value="TRANSFERENCIA_ENTRADA">Transferencia entrada</option>
+              <option value="TRANSFERENCIA_SALIDA">Transferencia salida</option>
+              <option value="BAJA">Baja</option>
+              <option value="CORTESIA">Cortesía</option>
+              <option value="AJUSTE">Ajuste</option>
+            </select>
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.filterLabelTop}>Ubicación</label>
+            <select
+              style={styles.input}
+              value={reporteStockFiltros.ubicacion}
+              onChange={(e)=>setReporteStockFiltros((p)=>({
+                ...p,
+                ubicacion:e.target.value,
+              }))}
+            >
+              <option value="">Todas las ubicaciones</option>
+
+              {[...new Set([
+                ...(puntosOperacion||[]).map((p)=>p?.nombre),
+                ...(puntosInventario||[]),
+              ].filter(Boolean))].map((ubicacion)=>(
+                <option key={ubicacion} value={ubicacion}>
+                  {ubicacion}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div style={{...styles.filterButtons,marginTop:16}}>
+          <button
+            type="button"
+            style={styles.button}
+            onClick={()=>cargarReporteStock()}
+            disabled={cargandoReporteStock}
+          >
+            {cargandoReporteStock?"Consultando...":"Consultar"}
+          </button>
+
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={limpiarReporteStock}
+            disabled={cargandoReporteStock}
+          >
+            Borrar filtros
+          </button>
+
+          <button
+            type="button"
+            style={styles.exportButton}
+            onClick={exportarReporteStockExcel}
+            disabled={!reporteStock.length}
+          >
+            Exportar Excel
+          </button>
+
+          <button
+            type="button"
+            style={styles.exportButton}
+            onClick={exportarReporteStockPdf}
+            disabled={!reporteStock.length}
+          >
+            Exportar PDF
+          </button>
+
+          <span style={{
+            alignSelf:"center",
+            fontWeight:700,
+            color:"#475569",
+          }}>
+            {reporteStock.length} movimientos
+          </span>
+        </div>
+
+        {cargandoReporteStock?(
+          <p style={{marginTop:18}}>
+            Cargando movimientos...
+          </p>
+        ):reporteStock.length===0?(
+          <p style={{marginTop:18}}>
+            No hay movimientos para los filtros seleccionados.
+          </p>
+        ):(
+          <div style={{...styles.tableWrap,marginTop:18}}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Fecha y hora</th>
+                  <th style={styles.th}>Producto</th>
+                  <th style={styles.th}>Familia</th>
+                  <th style={styles.th}>Tipo</th>
+                  <th style={styles.th}>Cantidad</th>
+                  <th style={styles.th}>Stock anterior</th>
+                  <th style={styles.th}>Stock nuevo</th>
+                  <th style={styles.th}>Ubicación</th>
+                  <th style={styles.th}>Proveedor</th>
+                  <th style={styles.th}>Factura</th>
+                  <th style={styles.th}>Usuario</th>
+                  <th style={styles.th}>Observación</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {reporteStock.map((mov)=>(
+                  <tr key={mov.id}>
+                    <td style={styles.td}>
+                      {formatearFechaHora(mov.fecha)}
+                    </td>
+
+                    <td style={styles.td}>
+                      <strong>
+                        {mov.producto_nombre||"Producto"}
+                      </strong>
+
+                      {mov.producto_codigo?(
+                        <div style={{
+                          fontSize:12,
+                          color:"#64748b",
+                        }}>
+                          {mov.producto_codigo}
+                        </div>
+                      ):null}
+                    </td>
+
+                    <td style={styles.td}>
+                      {mov.familia||"Sin familia"}
+                    </td>
+
+                    <td style={styles.td}>
+                      {mov.tipo_visual||mov.tipo||"-"}
+                    </td>
+
+                    <td style={styles.td}>
+                      {Number(mov.cantidad||0)}
+                    </td>
+
+                    <td style={styles.td}>
+                      {mov.stock_anterior==null
+                        ? "-"
+                        : Number(mov.stock_anterior)}
+                    </td>
+
+                    <td style={styles.td}>
+                      {mov.stock_nuevo==null
+                        ? "-"
+                        : Number(mov.stock_nuevo)}
+                    </td>
+
+                    <td style={styles.td}>
+                      {mov.ubicacion||"PRINCIPAL"}
+                    </td>
+
+                    <td style={styles.td}>
+                      {mov.proveedor_nombre||"-"}
+                    </td>
+
+                    <td style={styles.td}>
+                      {mov.numero_factura||"-"}
+                    </td>
+
+                    <td style={styles.td}>
+                      {mov.usuario_nombre||"Sistema"}
+                    </td>
+
+                    <td style={styles.td}>
+                      {mov.motivo||"-"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    )}
 
     <div style={{
       ...styles.box,
@@ -16343,12 +16701,10 @@ onClick={() => eliminarEgreso(egreso)}
                         }
                         style={styles.input}
                       >
-                        <option value="todos">Todos</option>
+                        <option value="todos">Selecciona</option>
                         <option value="EFECTIVO">Efectivo</option>
                         <option value="TRANSFERENCIA">Transferencia</option>
-                        <option value="RECARGA">Saldo</option>
-                        <option value="CREDITO">Crédito alumno</option>
-                        <option value="CREDITO_PROFESOR">Crédito profesor</option>
+                        <option value="RECARGA">Recarga</option>
                       </select>
                     </div>
                   </div>
@@ -16390,15 +16746,7 @@ onClick={() => eliminarEgreso(egreso)}
         style={styles.exportButton}
         onClick={exportarVentasExcel}
       >
-        Exportar Excel
-      </button>
-      <button
-        type="button"
-        style={styles.exportButton}
-        onClick={exportarVentasPDF}
-        title="Descarga directa en PDF"
-      >
-        Descargar PDF
+        Exportar
       </button>
     </div>
   </div>
