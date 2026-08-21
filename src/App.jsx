@@ -3370,6 +3370,195 @@ const exportarVentasExcel = () => {
   XLSX.writeFile(workbook, "ventas_exportadas.xlsx");
 };
 
+const exportarVentasPDF = () => {
+  if (!ventasFiltradas.length) {
+    alert("No hay ventas para exportar");
+    return;
+  }
+
+  const escaparHtml = (valor) =>
+    String(valor ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
+  const formaPagoSeleccionada = (() => {
+    const valor = String(ventasFiltros.metodo_pago || "todos");
+    if (valor === "todos") return "TODAS";
+    if (valor === "EFECTIVO") return "EFECTIVO";
+    if (valor === "TRANSFERENCIA") return "TRANSFERENCIA";
+    if (valor === "RECARGA" || valor === "SALDO") return "SALDO";
+    if (valor === "CREDITO") return "CRÉDITO ALUMNO";
+    if (valor === "CREDITO_PROFESOR") return "CRÉDITO PROFESOR";
+    return valor;
+  })();
+
+  const totalReporte = ventasFiltradas.reduce(
+    (acumulado, venta) => acumulado + Number(venta.total || 0),
+    0
+  );
+
+  const filas = ventasFiltradas
+    .map(
+      (v) => `
+        <tr>
+          <td>#${escaparHtml(v.id)}</td>
+          <td>${escaparHtml(v.alumno_nombre || "")}</td>
+          <td>${escaparHtml(v.ubicacion_visual || v.ubicacion || "PRINCIPAL")}</td>
+          <td>${escaparHtml(formatearSoloFecha(v.fecha_base))}</td>
+          <td>${escaparHtml(formatearSoloHora(v.fecha_base))}</td>
+          <td class="numero">$${Number(v.total || 0).toFixed(2)}</td>
+          <td>${escaparHtml(v.estado || "Entregada")}</td>
+          <td>${escaparHtml(v.metodo_visual || v.metodo_pago || "")}</td>
+          <td>${escaparHtml(v.tipo_orden || "Normal")}</td>
+        </tr>
+      `
+    )
+    .join("");
+
+  const ventana = window.open("", "_blank", "width=1100,height=800");
+
+  if (!ventana) {
+    alert("El navegador bloqueó la ventana del PDF. Habilita ventanas emergentes e inténtalo nuevamente.");
+    return;
+  }
+
+  ventana.document.write(`
+    <!doctype html>
+    <html lang="es">
+      <head>
+        <meta charset="utf-8" />
+        <title>Reporte de ventas</title>
+        <style>
+          @page {
+            size: A4 landscape;
+            margin: 10mm;
+          }
+
+          * {
+            box-sizing: border-box;
+          }
+
+          body {
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            color: #111827;
+            font-size: 10px;
+          }
+
+          h1 {
+            margin: 0 0 4px;
+            font-size: 20px;
+            text-align: center;
+          }
+
+          .subtitulo {
+            text-align: center;
+            margin-bottom: 12px;
+            font-size: 11px;
+          }
+
+          .filtros {
+            margin-bottom: 10px;
+            padding: 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            background: #f9fafb;
+          }
+
+          .filtros strong {
+            margin-right: 4px;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+
+          th,
+          td {
+            border: 1px solid #9ca3af;
+            padding: 5px 4px;
+            vertical-align: top;
+          }
+
+          th {
+            background: #e5e7eb;
+            font-weight: 700;
+            text-align: left;
+          }
+
+          .numero {
+            text-align: right;
+            white-space: nowrap;
+          }
+
+          .total {
+            margin-top: 10px;
+            text-align: right;
+            font-size: 13px;
+            font-weight: 700;
+          }
+
+          .pie {
+            margin-top: 8px;
+            text-align: right;
+            font-size: 9px;
+            color: #4b5563;
+          }
+        </style>
+      </head>
+      <body>
+        <h1>REPORTE DE VENTAS</h1>
+        <div class="subtitulo">${escaparHtml(institucionActiva?.nombre || "POS NUBE")}</div>
+
+        <div class="filtros">
+          <strong>Forma de pago:</strong> ${escaparHtml(formaPagoSeleccionada)}
+          &nbsp;&nbsp;
+          <strong>Desde:</strong> ${escaparHtml(ventasFiltros.fecha_inicio || "Todas")}
+          &nbsp;&nbsp;
+          <strong>Hasta:</strong> ${escaparHtml(ventasFiltros.fecha_fin || "Todas")}
+          &nbsp;&nbsp;
+          <strong>Registros:</strong> ${ventasFiltradas.length}
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Orden No</th>
+              <th>Usuario</th>
+              <th>Ubicación</th>
+              <th>Fecha</th>
+              <th>Hora</th>
+              <th>Total</th>
+              <th>Estado</th>
+              <th>Forma Pago</th>
+              <th>Tipo orden</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filas}
+          </tbody>
+        </table>
+
+        <div class="total">TOTAL REPORTE: $${totalReporte.toFixed(2)}</div>
+        <div class="pie">Generado desde POS NUBE</div>
+
+        <script>
+          window.onload = function () {
+            window.focus();
+            window.print();
+          };
+        <\/script>
+      </body>
+    </html>
+  `);
+
+  ventana.document.close();
+};
+
   const agregarItemVenta = () => {
     setVentaItems((prev) => [
       ...prev,
@@ -16176,7 +16365,14 @@ onClick={() => eliminarEgreso(egreso)}
         style={styles.exportButton}
         onClick={exportarVentasExcel}
       >
-        Exportar
+        Exportar Excel
+      </button>
+      <button
+        type="button"
+        style={styles.exportButton}
+        onClick={exportarVentasPDF}
+      >
+        Exportar PDF
       </button>
     </div>
   </div>
