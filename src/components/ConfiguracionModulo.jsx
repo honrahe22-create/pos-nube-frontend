@@ -61,7 +61,12 @@ export default function ConfiguracionModulo({
   }, [usuario?.rol]);
 
   const rolRequiereUbicacion = (rol) =>
-    ["ADMIN", "CAJERO", "ENCARGADO_LOCAL"].includes(
+    ["CAJERO", "ENCARGADO_LOCAL"].includes(
+      String(rol || "").trim().toUpperCase()
+    );
+
+  const rolEsAdministrativo = (rol) =>
+    ["ADMIN", "SUPER_ADMIN"].includes(
       String(rol || "").trim().toUpperCase()
     );
 
@@ -477,7 +482,9 @@ export default function ConfiguracionModulo({
     const esYo = Number(item.id) === Number(usuario?.id);
 
     if (esYo) {
-      setMensaje("No puedes eliminar la cuenta con la que tienes la sesión abierta.");
+      setMensaje(
+        "No puedes eliminar la cuenta con la que tienes la sesión abierta."
+      );
       return;
     }
 
@@ -489,11 +496,18 @@ export default function ConfiguracionModulo({
       return;
     }
 
-    try {
-      setMensaje("");
+    const ejecutarEliminacion = async (forzarCierreJornada = false) => {
       const token = localStorage.getItem("token");
+      const params = new URLSearchParams({
+        institucion_id: String(Number(institucionId)),
+      });
+
+      if (forzarCierreJornada) {
+        params.set("forzar_cierre_jornada", "1");
+      }
+
       const respuesta = await fetch(
-        `${API_URL}/api/usuarios/${item.id}?institucion_id=${Number(institucionId)}`,
+        `${API_URL}/api/usuarios/${item.id}?${params.toString()}`,
         {
           method: "DELETE",
           headers: {
@@ -503,6 +517,32 @@ export default function ConfiguracionModulo({
       );
 
       const data = await respuesta.json().catch(() => ({}));
+      return { respuesta, data };
+    };
+
+    try {
+      setMensaje("");
+
+      let { respuesta, data } = await ejecutarEliminacion(false);
+
+      if (
+        respuesta.status === 409 &&
+        data?.requiere_cierre_jornada === true
+      ) {
+        const confirmarCierre = window.confirm(
+          `${data.message}\n\n` +
+            "¿Deseas cerrar administrativamente esa jornada y eliminar el usuario?"
+        );
+
+        if (!confirmarCierre) {
+          setMensaje(
+            "El usuario no fue eliminado porque mantiene una jornada abierta."
+          );
+          return;
+        }
+
+        ({ respuesta, data } = await ejecutarEliminacion(true));
+      }
 
       if (!respuesta.ok) {
         throw new Error(
@@ -1062,6 +1102,22 @@ export default function ConfiguracionModulo({
                     </select>
                   </label>
 
+                  {rolEsAdministrativo(usuarioForm.rol) && (
+                    <label style={ui.label}>
+                      Acceso / ubicación
+                      <input
+                        style={{
+                          ...ui.input,
+                          background: "#f1f5f9",
+                          color: "#334155",
+                          fontWeight: 700,
+                        }}
+                        value={`ADMINISTRACIÓN - ${nombreInstitucion}`}
+                        readOnly
+                      />
+                    </label>
+                  )}
+
                   {rolRequiereUbicacion(usuarioForm.rol) && (
                     <label style={ui.label}>
                       Ubicación de trabajo *
@@ -1132,7 +1188,7 @@ export default function ConfiguracionModulo({
                 <div>✓ ADMIN puede administrar usuarios de su institución.</div>
                 <div>✓ Solo SUPER_ADMIN puede crear o modificar otro SUPER_ADMIN.</div>
                 <div>✓ Un usuario no puede desactivar ni eliminar su propia cuenta.</div>
-                <div>✓ Administradores, cajeros y encargados se asignan a una ubicación de trabajo.</div>
+                <div>✓ ADMIN usa acceso ADMINISTRACIÓN; cajeros y encargados se asignan a BAR PRINCIPAL o KIOSKO.</div>
                 <div>✓ Cambiar el rol requiere volver a iniciar sesión para aplicar el nuevo menú.</div>
                 <div>✓ El backend también bloquea APIs no autorizadas; no es solo ocultar botones.</div>
               </div>
@@ -1180,7 +1236,13 @@ export default function ConfiguracionModulo({
                           <td style={ui.td}>
                             <span style={ui.badge}>{item.rol || "-"}</span>
                           </td>
-                          <td style={ui.td}>{item.punto_nombre || "-"}</td>
+                          <td style={ui.td}>
+                            {["ADMIN", "SUPER_ADMIN"].includes(
+                              String(item.rol || "").toUpperCase()
+                            )
+                              ? `ADMINISTRACIÓN - ${nombreInstitucion}`
+                              : item.punto_nombre || "-"}
+                          </td>
                           <td style={ui.td}>
                             <span
                               style={item.estado === false ? ui.badgeDanger : ui.badgeSuccess}

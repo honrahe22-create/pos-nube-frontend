@@ -17232,14 +17232,16 @@ onClick={guardarEgreso}
                   </>
                 )}
 
-                {alumnoVentaSeleccionado && !profesorVentaSeleccionado && (
+                {modoNuevaOrden !== "consumidor_final" &&
+                  alumnoVentaSeleccionado && !profesorVentaSeleccionado && (
                   <>
                     <option value="RECARGA">Saldo del alumno</option>
                     <option value="CREDITO">Crédito del alumno</option>
                   </>
                 )}
 
-                {profesorVentaSeleccionado && (
+                {modoNuevaOrden !== "consumidor_final" &&
+                  profesorVentaSeleccionado && (
                   <option
                     value="CREDITO_PROFESOR"
                     disabled={
