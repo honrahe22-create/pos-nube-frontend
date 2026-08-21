@@ -16492,11 +16492,12 @@ onClick={() => eliminarEgreso(egreso)}
                 setVentaForm((prev) => ({
                   ...prev,
                   alumno_id: "",
-                  metodo_pago:
-                    prev.metodo_pago === "RECARGA" ||
-                    prev.metodo_pago === "CREDITO"
-                      ? "EFECTIVO"
-                      : prev.metodo_pago,
+                  profesor_id: "",
+                  metodo_pago: "EFECTIVO",
+
+
+
+
                 }));
               }}
               style={{
@@ -17025,8 +17026,8 @@ onClick={() => eliminarEgreso(egreso)}
                   En la Nueva Orden general se conservan Efectivo y Transferencia.
                 */}
                 {!(
-                  alumnoDetalle &&
-                  Number(alumnoDetalle.id) === Number(ventaForm.alumno_id)
+                  alumnoVentaSeleccionado ||
+                  profesorVentaSeleccionado
                 ) && (
                   <>
                     <option value="EFECTIVO">Efectivo</option>
@@ -17034,7 +17035,7 @@ onClick={() => eliminarEgreso(egreso)}
                   </>
                 )}
 
-                {!profesorVentaSeleccionado && (
+                {alumnoVentaSeleccionado && !profesorVentaSeleccionado && (
                   <>
                     <option value="RECARGA">Saldo del alumno</option>
                     <option value="CREDITO">Crédito del alumno</option>
@@ -17059,7 +17060,7 @@ onClick={() => eliminarEgreso(egreso)}
                   </option>
                 )}
 
-                {!profesorVentaSeleccionado && !alumnoVentaSeleccionado && (
+                {false && (
                   <option value="CREDITO_PROFESOR">Crédito del profesor</option>
                 )}
               </select>
