@@ -395,6 +395,193 @@ export default function AlumnosModulo({
     URL.revokeObjectURL(url);
   };
 
+
+  const exportarListadoAlumnosExcel = () => {
+    if (!alumnosFiltradosBusqueda.length) {
+      alert("No hay alumnos para exportar.");
+      return;
+    }
+
+    const filas = alumnosFiltradosBusqueda.map((a) => ({
+      ID: a.id || "",
+      Nombre: a.nombres || "",
+      Apellido: a.apellidos || "",
+      Cédula: obtenerCedulaAlumno(a) || "",
+      Curso: a.curso || "",
+      Paralelo: a.paralelo || "",
+      Saldo: Number(a.saldo || 0),
+      Estado: a.activo !== false ? "Activo" : "Inactivo",
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(filas);
+
+    ws["!cols"] = [
+      { wch: 8 },
+      { wch: 22 },
+      { wch: 22 },
+      { wch: 18 },
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 14 },
+      { wch: 14 },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Alumnos");
+    XLSX.writeFile(wb, "alumnos.xlsx");
+  };
+
+  const exportarListadoAlumnosPdf = () => {
+    if (!alumnosFiltradosBusqueda.length) {
+      alert("No hay alumnos para exportar.");
+      return;
+    }
+
+    const limpiarPdf = (valor) =>
+      String(valor ?? "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^\x20-\x7E]/g, "")
+        .replace(/[()\\]/g, (m) => `\\${m}`);
+
+    const cortar = (valor, maximo) =>
+      String(valor ?? "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, maximo);
+
+    const lineas = [
+      "POS NUBE - LISTADO DE ALUMNOS",
+      `Generado: ${new Date().toLocaleString("es-EC")}`,
+      `Filtro: ${filtroAlumnos || "todos"}`,
+      "--------------------------------------------------------------------------------------------",
+      "ID   Nombre              Apellido            Cedula            Curso       Paralelo  Saldo",
+      "--------------------------------------------------------------------------------------------",
+    ];
+
+    alumnosFiltradosBusqueda.forEach((a) => {
+      lineas.push(
+        [
+          String(a.id || "").padEnd(4, " "),
+          cortar(a.nombres || "-", 18).padEnd(18, " "),
+          cortar(a.apellidos || "-", 18).padEnd(18, " "),
+          cortar(obtenerCedulaAlumno(a) || "-", 17).padEnd(17, " "),
+          cortar(a.curso || "-", 11).padEnd(11, " "),
+          cortar(a.paralelo || "-", 8).padEnd(8, " "),
+          formatearMoneda(a.saldo || 0).padStart(9, " "),
+        ].join(" ")
+      );
+
+      lineas.push(
+        `     Estado: ${a.activo !== false ? "Activo" : "Inactivo"}`
+      );
+    });
+
+    lineas.push(
+      "--------------------------------------------------------------------------------------------"
+    );
+    lineas.push(`TOTAL ALUMNOS: ${alumnosFiltradosBusqueda.length}`);
+
+    const pageWidth = 792;
+    const pageHeight = 612;
+    const marginLeft = 30;
+    const startY = 575;
+    const lineHeight = 11;
+    const linesPerPage = 46;
+    const paginas = [];
+
+    for (let i = 0; i < lineas.length; i += linesPerPage) {
+      paginas.push(lineas.slice(i, i + linesPerPage));
+    }
+
+    const objetos = [];
+
+    const agregarObjeto = (contenido) => {
+      objetos.push(contenido);
+      return objetos.length;
+    };
+
+    const fontObj = agregarObjeto(
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>"
+    );
+
+    const pageRefs = [];
+
+    paginas.forEach((lineasPagina) => {
+      let stream = "BT\n/F1 8 Tf\n";
+      let y = startY;
+
+      lineasPagina.forEach((linea) => {
+        stream += `1 0 0 1 ${marginLeft} ${y} Tm (${limpiarPdf(
+          linea
+        )}) Tj\n`;
+        y -= lineHeight;
+      });
+
+      stream += "ET";
+
+      const streamObj = agregarObjeto(
+        `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`
+      );
+
+      const pageObj = agregarObjeto(
+        `<< /Type /Page /Parent 0 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] ` +
+          `/Resources << /Font << /F1 ${fontObj} 0 R >> >> ` +
+          `/Contents ${streamObj} 0 R >>`
+      );
+
+      pageRefs.push(pageObj);
+    });
+
+    const pagesObj = agregarObjeto(
+      `<< /Type /Pages /Kids [${pageRefs
+        .map((n) => `${n} 0 R`)
+        .join(" ")}] /Count ${pageRefs.length} >>`
+    );
+
+    pageRefs.forEach((pageObj) => {
+      objetos[pageObj - 1] = objetos[pageObj - 1].replace(
+        "/Parent 0 0 R",
+        `/Parent ${pagesObj} 0 R`
+      );
+    });
+
+    const catalogObj = agregarObjeto(
+      `<< /Type /Catalog /Pages ${pagesObj} 0 R >>`
+    );
+
+    let pdf = "%PDF-1.4\n";
+    const offsets = [0];
+
+    objetos.forEach((objeto, index) => {
+      offsets.push(pdf.length);
+      pdf += `${index + 1} 0 obj\n${objeto}\nendobj\n`;
+    });
+
+    const xrefOffset = pdf.length;
+    pdf += `xref\n0 ${objetos.length + 1}\n`;
+    pdf += "0000000000 65535 f \n";
+
+    offsets.slice(1).forEach((offset) => {
+      pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+    });
+
+    pdf +=
+      `trailer\n<< /Size ${objetos.length + 1} /Root ${catalogObj} 0 R >>\n` +
+      `startxref\n${xrefOffset}\n%%EOF`;
+
+    const blob = new Blob([pdf], { type: "application/pdf" });
+    const url = window.URL.createObjectURL(blob);
+    const enlace = document.createElement("a");
+    enlace.href = url;
+    enlace.download = "alumnos.pdf";
+
+    document.body.appendChild(enlace);
+    enlace.click();
+    document.body.removeChild(enlace);
+    window.URL.revokeObjectURL(url);
+  };
+
   const cerrarModalRecarga = () => {
     setMostrarModalRecarga(false);
     setRecargaAlumnoForm({
@@ -1792,35 +1979,17 @@ export default function AlumnosModulo({
             <button
               type="button"
               style={styles.secondaryButton}
-              onClick={() => {
-                const filas = [
-                ["ID", "Nombres", "Apellidos", "Cédula", "Curso", "Paralelo", "Saldo", "Estado"],
-                ...alumnosFiltradosBusqueda.map((a) => [
-                  a.id || "",
-                  a.nombres || "",
-                  a.apellidos || "",
-                  obtenerCedulaAlumno(a) || "",
-                  a.curso || "",
-                  a.paralelo || "",
-                  Number(a.saldo || 0).toFixed(2),
-                  a.activo !== false ? "Activo" : "Inactivo",
-                ]),
-              ];
-
-              const csv = filas
-                .map((fila) => fila.map((valor) => `"${String(valor).replace(/"/g, '""')}"`).join(","))
-                .join("\n");
-
-              const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-              const url = URL.createObjectURL(blob);
-              const link = document.createElement("a");
-              link.href = url;
-              link.download = "alumnos.csv";
-              link.click();
-              URL.revokeObjectURL(url);
-            }}
+              onClick={exportarListadoAlumnosExcel}
             >
-              Exportar
+              Exportar Excel
+            </button>
+
+            <button
+              type="button"
+              style={styles.outlineButton}
+              onClick={exportarListadoAlumnosPdf}
+            >
+              Exportar PDF
             </button>
           </div>
         </div>
