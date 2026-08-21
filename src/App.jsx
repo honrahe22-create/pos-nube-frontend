@@ -91,6 +91,7 @@ const PERMISOS_FRONTEND = {
     "inventario.gestionar",
     "personas.ver",
     "recargas.ver",
+    "recargas.gestionar",
     "egresos.ver",
     "egresos.gestionar",
     "cierres.ver",
@@ -393,6 +394,11 @@ const [verPasswordOperadorJornada,setVerPasswordOperadorJornada]=useState(false)
 const [mostrarEditarAccesoJornada,setMostrarEditarAccesoJornada]=useState(false);
 const [editarPuntoStock,setEditarPuntoStock]=useState(null);
 const [cargandoJornada,setCargandoJornada]=useState(false);
+useEffect(()=>{
+  if(jornadaActiva?.id){
+    setMostrarSelectorJornada(false);
+  }
+},[jornadaActiva?.id]);
 const [mostrarPuntosStock,setMostrarPuntosStock]=useState(false);
 const [nuevoPuntoForm,setNuevoPuntoForm]=useState({nombre:"",codigo:"",descripcion:""});
 const [mostrarNuevoProductoStock,setMostrarNuevoProductoStock]=useState(false);
@@ -4145,6 +4151,7 @@ const exportarVentasExcel = () => {
 
     localStorage.setItem("token", data.token);
     localStorage.setItem("usuario", JSON.stringify(data.usuario));
+    localStorage.setItem("accesoOperativo", JSON.stringify({ punto_id: Number(loginPuntoId), institucion_id: Number(loginInstitucionId) }));
     localStorage.setItem(
       "institucionSeleccionadaId",
       String(data.usuario.institucion_id)
@@ -4264,7 +4271,7 @@ if (institucionIdLogin) {
       setMensaje("");
     } catch (error) {
       console.error("Error login:", error);
-      setMensaje("No se pudo conectar con el servidor");
+      setMensaje(error?.message || "No se pudo conectar con el servidor");
     } finally {
       setCargando(false);
     }
@@ -8830,6 +8837,7 @@ Disponible: ${formatearMoneda(
 
   const cerrarSesion = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("accesoOperativo");
     localStorage.removeItem("usuario");
     localStorage.removeItem("institucionSeleccionadaId");
     localStorage.removeItem("jornadaActiva");
@@ -10818,26 +10826,28 @@ if (!usuario) {
         </h2>
       </div>
 
-      <button
-        style={styles.secondaryButton}
-        onClick={() => {
-          const abrir = !mostrarCrearEgreso;
+      {puede("egresos.gestionar") && (
+        <button
+          style={styles.secondaryButton}
+          onClick={() => {
+            const abrir = !mostrarCrearEgreso;
 
-          if (abrir && !editandoEgresoId) {
-            setEgresoForm((actual) => ({
-              ...actual,
-              fecha: actual.fecha || obtenerFechaEcuadorISO(),
-            }));
-          }
+            if (abrir && !editandoEgresoId) {
+              setEgresoForm((actual) => ({
+                ...actual,
+                fecha: actual.fecha || obtenerFechaEcuadorISO(),
+              }));
+            }
 
-          setMostrarCrearEgreso(abrir);
-        }}
-      >
-        {mostrarCrearEgreso ? "Cerrar formulario" : "Crear egreso"}
-      </button>
+            setMostrarCrearEgreso(abrir);
+          }}
+        >
+          {mostrarCrearEgreso ? "Cerrar formulario" : "Crear egreso"}
+        </button>
+      )}
     </div>
 
-    {mostrarCrearEgreso && (
+    {mostrarCrearEgreso && puede("egresos.gestionar") && (
       <div style={{ ...styles.box, marginBottom: 20, padding: 20 }}>
         <div style={styles.filtersGrid}>
           <div style={styles.filterField}>
@@ -11092,35 +11102,39 @@ onClick={guardarEgreso}
                 <td style={styles.td}>{egreso.numero_factura}</td>
                 <td style={styles.td}>{egreso.tipo_egreso}</td>
                 <td style={styles.td}>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button
-                      style={styles.editIconButton}
-                      onClick={() => {
-                        setEgresoForm({
-                          negocio: egreso.negocio || "",
-                          usuario: egreso.usuario || "",
-                          fecha: normalizarFechaISO(egreso.fecha) || "",
-                          nombre_egreso: egreso.nombre_egreso || "",
-                          total: egreso.total || "",
-                          descripcion: egreso.descripcion || "",
-                          estado: egreso.estado || "ACTIVO",
-                          numero_factura: egreso.numero_factura || "",
-                          tipo_egreso: egreso.tipo_egreso || "Efectivo",
-                        });
-                        setEditandoEgresoId(egreso.id);
-                        setMostrarCrearEgreso(true);
-                      }}
-                    >
-                      ✎
-                    </button>
+                  {puede("egresos.gestionar") ? (
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        style={styles.editIconButton}
+                        onClick={() => {
+                          setEgresoForm({
+                            negocio: egreso.negocio || "",
+                            usuario: egreso.usuario || "",
+                            fecha: normalizarFechaISO(egreso.fecha) || "",
+                            nombre_egreso: egreso.nombre_egreso || "",
+                            total: egreso.total || "",
+                            descripcion: egreso.descripcion || "",
+                            estado: egreso.estado || "ACTIVO",
+                            numero_factura: egreso.numero_factura || "",
+                            tipo_egreso: egreso.tipo_egreso || "Efectivo",
+                          });
+                          setEditandoEgresoId(egreso.id);
+                          setMostrarCrearEgreso(true);
+                        }}
+                      >
+                        ✎
+                      </button>
 
-                    <button
-                      style={styles.deleteIconButton}
-onClick={() => eliminarEgreso(egreso)}
-                    >
-                      🗑
-                    </button>
-                  </div>
+                      <button
+                        style={styles.deleteIconButton}
+                        onClick={() => eliminarEgreso(egreso)}
+                      >
+                        🗑
+                      </button>
+                    </div>
+                  ) : (
+                    <span style={{ color: "#64748b" }}>Solo consulta</span>
+                  )}
                 </td>
               </tr>
             ))}
@@ -15813,6 +15827,7 @@ onClick={() => eliminarEgreso(egreso)}
 
     {/* NUEVA RECARGA */}
 
+    {puede("recargas.gestionar") && (
     <div style={styles.box}>
       <div style={styles.pageHeaderSmall}>
         <div>
@@ -15975,6 +15990,7 @@ onClick={() => eliminarEgreso(egreso)}
         del colegio y registra el número de comprobante.
       </div>
     </div>
+    )}
 
     <div style={{ height: 20 }} />
 
