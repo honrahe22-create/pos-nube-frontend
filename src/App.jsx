@@ -41,11 +41,6 @@ const MENU_POR_ROL = {
     "recargas",
     "egresos",
     "cierre_caja",
-    "productos_vendidos",
-    "productos_dia",
-    "productos_mas_vendidos",
-    "kardex_productos",
-    "productos_forma_pago",
   ],
   CAJERO: [
     "consultar_ventas",
@@ -96,7 +91,6 @@ const PERMISOS_FRONTEND = {
     "egresos.gestionar",
     "cierres.ver",
     "cierres.crear",
-    "reportes.ver",
   ],
   CAJERO: [
     "ventas.ver",
@@ -215,6 +209,64 @@ const formatearSoloHora = (valor) => {
   if (Number.isNaN(fecha.getTime())) return "-";
   return fecha.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
+
+const codigoUbicacionCierre = (nombre) => {
+  const texto = String(nombre || "HIST")
+    .trim()
+    .toUpperCase();
+
+  if (texto.includes("BAR")) return "BAR";
+  if (texto.includes("KIOS")) return "KIOSKO";
+
+  return (
+    texto
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Z0-9]+/g, "")
+      .slice(0, 8) || "HIST"
+  );
+};
+
+const obtenerCodigoCierre = (cierre) => {
+  if (cierre?.codigo_cierre) return String(cierre.codigo_cierre);
+
+  const fecha = normalizarFechaISO(
+    cierre?.fecha ||
+      cierre?.periodo_hasta ||
+      cierre?.created_at
+  ).replace(/-/g, "");
+
+  const ubicacion = codigoUbicacionCierre(cierre?.punto_nombre);
+  const jornada = String(cierre?.jornada_id || cierre?.id || 0).padStart(3, "0");
+
+  return `CIE-${fecha || "00000000"}-${ubicacion}-${jornada}`;
+};
+
+const subtotalRecargasCierre = (cierre) =>
+  Number(cierre?.subtotal_recargas ??
+    (Number(cierre?.recargas_efectivo || 0) +
+      Number(cierre?.recargas_transferencia || 0)));
+
+const subtotalVentasCierre = (cierre) =>
+  Number(cierre?.subtotal_ventas ??
+    (Number(cierre?.ventas_efectivo || 0) +
+      Number(cierre?.ventas_transferencia || 0) +
+      Number(cierre?.ventas_tarjeta || 0) +
+      Number(cierre?.ventas_saldo || 0) +
+      Number(cierre?.ventas_credito || 0)));
+
+const subtotalEgresosCierre = (cierre) =>
+  Number(cierre?.subtotal_egresos ?? cierre?.egresos_total ?? 0);
+
+const efectivoEsperadoCierre = (cierre) =>
+  Number(cierre?.efectivo_esperado ??
+    (Number(cierre?.ventas_efectivo || 0) +
+      Number(cierre?.recargas_efectivo || 0) -
+      Number(cierre?.egresos_total || 0)));
+
+const granTotalCierre = (cierre) =>
+  Number(cierre?.gran_total ??
+    (subtotalRecargasCierre(cierre) + subtotalVentasCierre(cierre)));
 
 export default function App() {
   const [correo, setCorreo] = useState("");
@@ -7097,6 +7149,12 @@ if (institucionIdLogin) {
     }
 
     const montoTicket = (valor) => Number(valor || 0);
+    const monedaTicket = (valor) => {
+      const numero = Number(valor || 0);
+      return numero < 0
+        ? `-$${Math.abs(numero).toFixed(2)}`
+        : `$${numero.toFixed(2)}`;
+    };
     const recargaEfectivoTicket = montoTicket(cierre.recargas_efectivo);
     const recargaTransferenciaTicket = montoTicket(cierre.recargas_transferencia);
     const ventasEfectivoTicket = montoTicket(cierre.ventas_efectivo);
@@ -7134,6 +7192,7 @@ if (institucionIdLogin) {
     const textoCompactoCierre = [
       "CIERRE DE CAJA",
       institucionActiva?.nombre || cierre.institucion_nombre || "POS NUBE",
+      `Codigo: ${obtenerCodigoCierre(cierre)}`,
       `Ubicacion: ${cierre.punto_nombre || "PRINCIPAL"}`,
       `Jornada: #${cierre.jornada_id || "-"}`,
       `Fecha operativa: ${fechaOperativaTicket}`,
@@ -7142,24 +7201,24 @@ if (institucionIdLogin) {
       `Usuario: ${cierre.usuario_nombre || cierre.usuario_correo || usuario?.correo || usuario?.nombre || "Administrador"}`,
       "------------------------------",
       "RECARGAS",
-      `Efectivo: $${recargaEfectivoTicket.toFixed(2)}`,
-      `Transferencia: $${recargaTransferenciaTicket.toFixed(2)}`,
-      `SUBTOTAL RECARGAS: $${subtotalRecargasTicket.toFixed(2)}`,
+      `Efectivo: ${monedaTicket(recargaEfectivoTicket)}`,
+      `Transferencia: ${monedaTicket(recargaTransferenciaTicket)}`,
+      `SUBTOTAL RECARGAS: ${monedaTicket(subtotalRecargasTicket)}`,
       "------------------------------",
       "VENTAS",
-      `Efectivo: $${ventasEfectivoTicket.toFixed(2)}`,
-      `Transferencia: $${ventasTransferenciaTicket.toFixed(2)}`,
-      `Saldo: $${ventasSaldoTicket.toFixed(2)}`,
-      `Credito: $${ventasCreditoTicket.toFixed(2)}`,
-      `SUBTOTAL VENTAS: $${subtotalVentasTicket.toFixed(2)}`,
+      `Efectivo: ${monedaTicket(ventasEfectivoTicket)}`,
+      `Transferencia: ${monedaTicket(ventasTransferenciaTicket)}`,
+      `Saldo: ${monedaTicket(ventasSaldoTicket)}`,
+      `Credito: ${monedaTicket(ventasCreditoTicket)}`,
+      `SUBTOTAL VENTAS: ${monedaTicket(subtotalVentasTicket)}`,
       "------------------------------",
-      `Egresos: $${egresosTicket.toFixed(2)}`,
-      `EFECTIVO ESPERADO: $${efectivoEsperadoTicket.toFixed(2)}`,
-      `EFECTIVO CONTADO: $${contadoTicket.toFixed(2)}`,
-      `DIFERENCIA EFECTIVO: $${diferenciaEfectivoTicket.toFixed(2)}`,
+      `Egresos: ${monedaTicket(egresosTicket)}`,
+      `EFECTIVO ESPERADO: ${monedaTicket(efectivoEsperadoTicket)}`,
+      `EFECTIVO CONTADO: ${monedaTicket(contadoTicket)}`,
+      `DIFERENCIA EFECTIVO: ${monedaTicket(diferenciaEfectivoTicket)}`,
       `RESULTADO: ${signoDiferenciaTicket}`,
       "------------------------------",
-      `GRAN TOTAL MOV.: $${granTotalTicket.toFixed(2)}`,
+      `GRAN TOTAL MOV.: ${monedaTicket(granTotalTicket)}`,
       `Obs: ${cierre.observacion_automatica || cierre.observacion || "-"}`,
       "FIN DE CIERRE",
     ].join("\n");
@@ -7167,6 +7226,7 @@ if (institucionIdLogin) {
     try {
       const cierreNativo = {
         tipo_documento: "CIERRE_CAJA",
+        codigo_cierre: obtenerCodigoCierre(cierre),
         institucion:
           institucionActiva?.nombre ||
           cierre.institucion_nombre ||
@@ -7297,10 +7357,15 @@ if (institucionIdLogin) {
     // En PC se crea un documento limpio y paginable exclusivamente
     // para impresión.
     try {
-      const moneda = (valor) =>
-        `$${Number(valor || 0).toFixed(2)}`;
+      const moneda = (valor) => {
+        const numero = Number(valor || 0);
+        return numero < 0
+          ? `-$${Math.abs(numero).toFixed(2)}`
+          : `$${numero.toFixed(2)}`;
+      };
 
       const filasResumen = [
+        ["Código cierre", obtenerCodigoCierre(cierre)],
         ["Ubicación", cierre.punto_nombre || "PRINCIPAL"],
         ["Jornada", `#${cierre.jornada_id || "-"}`],
         ["Fecha operativa", fechaOperativaTicket],
@@ -10000,7 +10065,7 @@ if (!usuario) {
           Crear cierre de caja
         </button>
 
-        {["SUPER_ADMIN","ADMIN","ENCARGADO_LOCAL"].includes(rolActual)&&(
+        {["SUPER_ADMIN","ADMIN"].includes(rolActual)&&(
           <button
             type="button"
             style={styles.outlineButton}
@@ -10010,17 +10075,19 @@ if (!usuario) {
             {cargandoConsolidado ? "Calculando..." : "Cierre total del local"}
           </button>
         )}
-        <button
-          type="button"
-          style={styles.outlineButton}
-          onClick={async () => {
-            setMostrarReporteCierres((actual) => !actual);
-            await cargarPuntosOperacion();
-            await cargarCierres();
-          }}
-        >
-          Reporte cierres de caja
-        </button>
+        {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={async () => {
+              setMostrarReporteCierres((actual) => !actual);
+              await cargarPuntosOperacion();
+              await cargarCierres();
+            }}
+          >
+            Reporte cierres de caja
+          </button>
+        )}
       </div>
     </div>
 
@@ -10035,7 +10102,7 @@ if (!usuario) {
       </div>
     </div>
 
-    {mostrarReporteCierres && (
+    {mostrarReporteCierres && ["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
       <>
         <div style={{ height: 20 }} />
         <div style={styles.box}>
@@ -10092,39 +10159,45 @@ if (!usuario) {
           <div style={styles.tableWrap}>
             <table style={styles.table}>
               <thead><tr>
+                <th style={styles.th}>Código cierre</th>
                 <th style={styles.th}>Fecha</th>
                 <th style={styles.th}>Ubicación</th>
+                <th style={styles.th}>Jornada</th>
                 <th style={styles.th}>Operador</th>
-                <th style={styles.th}>Desde</th>
-                <th style={styles.th}>Hasta</th>
-                <th style={styles.th}>Ventas efectivo</th>
-                <th style={styles.th}>Ventas transferencia</th>
-                <th style={styles.th}>Recargas efectivo</th>
-                <th style={styles.th}>Egresos</th>
+                <th style={styles.th}>Hora apertura</th>
+                <th style={styles.th}>Hora cierre</th>
+                <th style={styles.th}>Subtotal recargas</th>
+                <th style={styles.th}>Subtotal ventas</th>
+                <th style={styles.th}>Subtotal egresos</th>
+                <th style={styles.th}>Efectivo esperado</th>
                 <th style={styles.th}>Efectivo contado</th>
                 <th style={styles.th}>Diferencia</th>
+                <th style={styles.th}>GRAN TOTAL</th>
                 <th style={styles.th}>Acción</th>
               </tr></thead>
               <tbody>
                 {cargandoCierres ? (
-                  <tr><td colSpan={12} style={styles.td}>Generando reporte...</td></tr>
+                  <tr><td colSpan={15} style={styles.td}>Generando reporte...</td></tr>
                 ) : cierresCaja.length===0 ? (
-                  <tr><td colSpan={12} style={styles.td}>No existen cierres para los filtros seleccionados.</td></tr>
+                  <tr><td colSpan={15} style={styles.td}>No existen cierres para los filtros seleccionados.</td></tr>
                 ) : cierresCaja.map((c)=>(
                   <tr key={`reporte-${c.id}`}>
+                    <td style={{...styles.td,fontWeight:900,whiteSpace:"nowrap"}}>{obtenerCodigoCierre(c)}</td>
                     <td style={styles.td}>{formatearSoloFecha(c.fecha)}</td>
                     <td style={{...styles.td,fontWeight:800}}>{c.punto_nombre || "HISTÓRICO"}</td>
+                    <td style={styles.td}>{c.jornada_id ? `#${c.jornada_id}` : "-"}</td>
                     <td style={styles.td}>{c.usuario_nombre || c.usuario_correo || "Sistema"}</td>
                     <td style={styles.td}>{c.periodo_desde_ecuador || "-"}</td>
                     <td style={styles.td}>{c.periodo_hasta_ecuador || "-"}</td>
-                    <td style={styles.td}>{formatearMoneda(c.ventas_efectivo)}</td>
-                    <td style={styles.td}>{formatearMoneda(c.ventas_transferencia)}</td>
-                    <td style={styles.td}>{formatearMoneda(c.recargas_efectivo)}</td>
-                    <td style={styles.td}>{formatearMoneda(c.egresos_total)}</td>
+                    <td style={styles.td}>{formatearMoneda(subtotalRecargasCierre(c))}</td>
+                    <td style={styles.td}>{formatearMoneda(subtotalVentasCierre(c))}</td>
+                    <td style={styles.td}>{formatearMoneda(subtotalEgresosCierre(c))}</td>
+                    <td style={styles.td}>{formatearMoneda(efectivoEsperadoCierre(c))}</td>
                     <td style={styles.td}>{formatearMoneda(c.efectivo_contado)}</td>
                     <td style={{...styles.td,fontWeight:900,color:Number(c.diferencia_general||0)<0?"#dc2626":"#b45309"}}>
                       {formatearMoneda(c.diferencia_general)}
                     </td>
+                    <td style={{...styles.td,fontWeight:900}}>{formatearMoneda(granTotalCierre(c))}</td>
                     <td style={styles.td}>
                       <button style={styles.editIconButton} onClick={()=>verCierre(c)}>Ver</button>
                     </td>
@@ -10146,27 +10219,41 @@ if (!usuario) {
       <div style={styles.tableWrap}>
         <table style={styles.table}>
           <thead><tr>
-            <th style={styles.th}>Operador</th><th style={styles.th}>Ubicación</th><th style={styles.th}>Fecha</th><th style={styles.th}>Efectivo contado</th>
-            <th style={styles.th}>Recargas efectivo</th><th style={styles.th}>Transferencia manual</th>
-            <th style={styles.th}>Ventas efectivo</th><th style={styles.th}>Ventas transferencia</th>
-            <th style={styles.th}>Egresos</th><th style={styles.th}>Diferencia</th><th style={styles.th}>Observación</th><th style={styles.th}>Acciones</th>
+            <th style={styles.th}>Código cierre</th>
+            <th style={styles.th}>Fecha</th>
+            <th style={styles.th}>Ubicación</th>
+            <th style={styles.th}>Jornada</th>
+            <th style={styles.th}>Operador</th>
+            <th style={styles.th}>Subtotal recargas</th>
+            <th style={styles.th}>Subtotal ventas</th>
+            <th style={styles.th}>Subtotal egresos</th>
+            <th style={styles.th}>Efectivo esperado</th>
+            <th style={styles.th}>Efectivo contado</th>
+            <th style={styles.th}>Diferencia</th>
+            <th style={styles.th}>GRAN TOTAL</th>
+            <th style={styles.th}>Observación</th>
+            <th style={styles.th}>Acciones</th>
           </tr></thead>
           <tbody>
-            {cargandoCierres ? <tr><td colSpan={12} style={styles.td}>Cargando cierres...</td></tr> : cierresCaja.length===0 ? <tr><td colSpan={12} style={styles.td}>No hay cierres registrados.</td></tr> : cierresCaja.map((c)=><tr key={c.id}>
-              <td style={styles.td}>{c.usuario_nombre || c.usuario_correo || "Sistema"}</td>
-              <td style={{...styles.td,fontWeight:800}}>{c.punto_nombre || "HISTÓRICO"}</td>
+            {cargandoCierres ? <tr><td colSpan={14} style={styles.td}>Cargando cierres...</td></tr> : cierresCaja.length===0 ? <tr><td colSpan={14} style={styles.td}>No hay cierres registrados.</td></tr> : cierresCaja.map((c)=><tr key={c.id}>
+              <td style={{...styles.td,fontWeight:900,whiteSpace:"nowrap"}}>{obtenerCodigoCierre(c)}</td>
               <td style={styles.td}>{formatearSoloFecha(c.fecha)}</td>
+              <td style={{...styles.td,fontWeight:800}}>{c.punto_nombre || "HISTÓRICO"}</td>
+              <td style={styles.td}>{c.jornada_id ? `#${c.jornada_id}` : "-"}</td>
+              <td style={styles.td}>{c.usuario_nombre || c.usuario_correo || "Sistema"}</td>
+              <td style={styles.td}>{formatearMoneda(subtotalRecargasCierre(c))}</td>
+              <td style={styles.td}>{formatearMoneda(subtotalVentasCierre(c))}</td>
+              <td style={styles.td}>{formatearMoneda(subtotalEgresosCierre(c))}</td>
+              <td style={styles.td}>{formatearMoneda(efectivoEsperadoCierre(c))}</td>
               <td style={styles.td}>{formatearMoneda(c.efectivo_contado)}</td>
-              <td style={styles.td}>{formatearMoneda(c.recargas_efectivo)}</td>
-              <td style={styles.td}>{formatearMoneda(c.transferencia_manual)}</td>
-              <td style={styles.td}>{formatearMoneda(c.ventas_efectivo)}</td>
-              <td style={styles.td}>{formatearMoneda(c.ventas_transferencia)}</td>
-              <td style={styles.td}>{formatearMoneda(c.egresos_total)}</td>
               <td style={{...styles.td,fontWeight:900,color:Number(c.diferencia_general||0)<0?"#dc2626":"#b45309"}}>{formatearMoneda(c.diferencia_general)}</td>
+              <td style={{...styles.td,fontWeight:900}}>{formatearMoneda(granTotalCierre(c))}</td>
               <td style={styles.td}>{c.observacion_automatica || c.observacion || "-"}</td>
               <td style={styles.td}><div style={{display:"flex",gap:8}}>
                 <button style={styles.editIconButton} onClick={()=>verCierre(c)}>Ver</button>
-                <button style={styles.deleteIconButton} onClick={()=>eliminarCierre(c)}>Eliminar</button>
+                {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+                  <button style={styles.deleteIconButton} onClick={()=>eliminarCierre(c)}>Eliminar</button>
+                )}
               </div></td>
             </tr>)}
           </tbody>
@@ -10391,7 +10478,7 @@ if (!usuario) {
     ), document.body)}
 
 
-    {cierreConsolidado && createPortal((
+    {cierreConsolidado && ["SUPER_ADMIN","ADMIN"].includes(rolActual) && createPortal((
       <div style={{
         position:"fixed", inset:0, zIndex:100001,
         background:"rgba(15,23,42,.68)",
@@ -10431,13 +10518,15 @@ if (!usuario) {
             gap:10,
             marginTop:18
           }}>
-            <div style={styles.statCard}><span>Ventas efectivo</span><strong>{formatearMoneda(cierreConsolidado.ventas_efectivo)}</strong></div>
-            <div style={styles.statCard}><span>Ventas transferencia</span><strong>{formatearMoneda(cierreConsolidado.ventas_transferencia)}</strong></div>
-            <div style={styles.statCard}><span>Ventas tarjeta</span><strong>{formatearMoneda(cierreConsolidado.ventas_tarjeta)}</strong></div>
-            <div style={styles.statCard}><span>Recargas efectivo</span><strong>{formatearMoneda(cierreConsolidado.recargas_efectivo)}</strong></div>
-            <div style={styles.statCard}><span>Egresos</span><strong>{formatearMoneda(cierreConsolidado.egresos_total)}</strong></div>
+            <div style={styles.statCard}><span>Código consolidado</span><strong>{cierreConsolidado.codigo_consolidado || `CIE-TOTAL-${String(cierreConsolidado.fecha||"").replace(/-/g,"")}`}</strong></div>
+            <div style={styles.statCard}><span>Cierres incluidos</span><strong>{cierreConsolidado.cantidad_cierres || 0}</strong></div>
+            <div style={styles.statCard}><span>Subtotal recargas</span><strong>{formatearMoneda(subtotalRecargasCierre(cierreConsolidado))}</strong></div>
+            <div style={styles.statCard}><span>Subtotal ventas</span><strong>{formatearMoneda(subtotalVentasCierre(cierreConsolidado))}</strong></div>
+            <div style={styles.statCard}><span>Subtotal egresos</span><strong>{formatearMoneda(subtotalEgresosCierre(cierreConsolidado))}</strong></div>
+            <div style={styles.statCard}><span>Efectivo esperado</span><strong>{formatearMoneda(efectivoEsperadoCierre(cierreConsolidado))}</strong></div>
             <div style={styles.statCard}><span>Efectivo contado</span><strong>{formatearMoneda(cierreConsolidado.efectivo_contado)}</strong></div>
             <div style={styles.statCard}><span>Diferencia general</span><strong>{formatearMoneda(cierreConsolidado.diferencia_general)}</strong></div>
+            <div style={{...styles.statCard,border:"2px solid #1d4ed8"}}><span>GRAN TOTAL</span><strong>{formatearMoneda(granTotalCierre(cierreConsolidado))}</strong></div>
           </div>
 
           <h3 style={{marginTop:24}}>Cierres por ubicación</h3>
@@ -10446,34 +10535,36 @@ if (!usuario) {
             <table style={styles.table}>
               <thead>
                 <tr>
+                  <th style={styles.th}>Código cierre</th>
                   <th style={styles.th}>Ubicación</th>
                   <th style={styles.th}>Operador</th>
                   <th style={styles.th}>Jornada</th>
-                  <th style={styles.th}>Ventas efectivo</th>
-                  <th style={styles.th}>Transferencias</th>
-                  <th style={styles.th}>Egresos</th>
+                  <th style={styles.th}>Subtotal recargas</th>
+                  <th style={styles.th}>Subtotal ventas</th>
+                  <th style={styles.th}>Subtotal egresos</th>
                   <th style={styles.th}>Efectivo contado</th>
-                  <th style={styles.th}>Diferencia</th>
+                  <th style={styles.th}>GRAN TOTAL</th>
                 </tr>
               </thead>
               <tbody>
                 {(cierreConsolidado.puntos||[]).length===0 ? (
                   <tr>
-                    <td colSpan={8} style={styles.td}>
+                    <td colSpan={9} style={styles.td}>
                       Todavía no existen cierres por punto para esta fecha.
                     </td>
                   </tr>
                 ) : (
                   (cierreConsolidado.puntos||[]).map((c)=>(
                     <tr key={c.id}>
+                      <td style={{...styles.td,fontWeight:900,whiteSpace:"nowrap"}}>{obtenerCodigoCierre(c)}</td>
                       <td style={{...styles.td,fontWeight:900}}>{c.punto_nombre || "-"}</td>
                       <td style={styles.td}>{c.usuario_nombre || c.usuario_correo || "-"}</td>
                       <td style={styles.td}>{c.jornada_id ? `#${c.jornada_id}` : "-"}</td>
-                      <td style={styles.td}>{formatearMoneda(c.ventas_efectivo)}</td>
-                      <td style={styles.td}>{formatearMoneda(Number(c.ventas_transferencia||0)+Number(c.recargas_transferencia||0))}</td>
-                      <td style={styles.td}>{formatearMoneda(c.egresos_total)}</td>
+                      <td style={styles.td}>{formatearMoneda(subtotalRecargasCierre(c))}</td>
+                      <td style={styles.td}>{formatearMoneda(subtotalVentasCierre(c))}</td>
+                      <td style={styles.td}>{formatearMoneda(subtotalEgresosCierre(c))}</td>
                       <td style={styles.td}>{formatearMoneda(c.efectivo_contado)}</td>
-                      <td style={styles.td}>{formatearMoneda(c.diferencia_general)}</td>
+                      <td style={{...styles.td,fontWeight:900}}>{formatearMoneda(granTotalCierre(c))}</td>
                     </tr>
                   ))
                 )}
@@ -10502,26 +10593,28 @@ if (!usuario) {
             }}
           >
             {[
+              ["Código de cierre", obtenerCodigoCierre(cierreDetalle)],
               ["Fecha de cierre", formatearSoloFecha(cierreDetalle.fecha)],
               ["Ubicación", cierreDetalle.punto_nombre || "HISTÓRICO"],
-              ["Operador", cierreDetalle.usuario_nombre || cierreDetalle.usuario_correo || "-"],
               ["Jornada", cierreDetalle.jornada_id ? `#${cierreDetalle.jornada_id}` : "-"],
+              ["Operador", cierreDetalle.usuario_nombre || cierreDetalle.usuario_correo || "-"],
+              ["Hora apertura", cierreDetalle.periodo_desde_ecuador || "-"],
+              ["Hora cierre", cierreDetalle.periodo_hasta_ecuador || `${cierreDetalle.fecha_cierre_ecuador || ""} ${cierreDetalle.hora_cierre_ecuador || ""}`.trim() || "-"],
               ["Unidad educativa", institucionActiva?.nombre],
-              ["Negocio", cierreDetalle.negocio],
-              ["Usuario", cierreDetalle.usuario_nombre || cierreDetalle.usuario_correo],
-              ["Total recarga efectivo", formatearMoneda(cierreDetalle.recargas_efectivo)],
-              ["Egreso", formatearMoneda(cierreDetalle.egresos_total)],
-              ["Total recarga transferencia", formatearMoneda(cierreDetalle.recargas_transferencia)],
-              ["Total ventas por efectivo", formatearMoneda(cierreDetalle.ventas_efectivo)],
-              ["Total ventas por transferencia", formatearMoneda(cierreDetalle.ventas_transferencia)],
-              ["Total ventas por tarjeta", formatearMoneda(cierreDetalle.ventas_tarjeta)],
-              ["Efectivo entregado", formatearMoneda(cierreDetalle.efectivo_contado)],
-              ["Tarjeta manual", formatearMoneda(cierreDetalle.tarjeta_manual)],
-              ["Transferencia manual", formatearMoneda(cierreDetalle.transferencia_manual)],
-              ["Diferencia efectivo", formatearMoneda(cierreDetalle.diferencia_efectivo)],
-              ["Diferencia tarjeta", formatearMoneda(cierreDetalle.diferencia_tarjeta)],
-              ["Diferencia transferencia", formatearMoneda(cierreDetalle.diferencia_transferencia)],
-              ["Diferencia general", formatearMoneda(cierreDetalle.diferencia_general)],
+              ["RECARGAS - Efectivo", formatearMoneda(cierreDetalle.recargas_efectivo)],
+              ["RECARGAS - Transferencia", formatearMoneda(cierreDetalle.recargas_transferencia)],
+              ["SUBTOTAL RECARGAS", formatearMoneda(subtotalRecargasCierre(cierreDetalle))],
+              ["VENTAS - Efectivo", formatearMoneda(cierreDetalle.ventas_efectivo)],
+              ["VENTAS - Transferencia", formatearMoneda(cierreDetalle.ventas_transferencia)],
+              ["VENTAS - Saldo", formatearMoneda(cierreDetalle.ventas_saldo)],
+              ["VENTAS - Crédito", formatearMoneda(cierreDetalle.ventas_credito)],
+              ["VENTAS - Tarjeta histórico", formatearMoneda(cierreDetalle.ventas_tarjeta)],
+              ["SUBTOTAL VENTAS", formatearMoneda(subtotalVentasCierre(cierreDetalle))],
+              ["SUBTOTAL EGRESOS", formatearMoneda(subtotalEgresosCierre(cierreDetalle))],
+              ["EFECTIVO ESPERADO", formatearMoneda(efectivoEsperadoCierre(cierreDetalle))],
+              ["EFECTIVO CONTADO", formatearMoneda(cierreDetalle.efectivo_contado)],
+              ["DIFERENCIA", formatearMoneda(cierreDetalle.diferencia_general)],
+              ["GRAN TOTAL", formatearMoneda(granTotalCierre(cierreDetalle))],
               [
                 "Observación",
                 cierreDetalle.observacion_automatica ||
