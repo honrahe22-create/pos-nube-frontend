@@ -5898,24 +5898,106 @@ if (institucionIdLogin) {
   };
 
   const exportarProductosVendidosPorDia = () => {
-    descargarCsv(
+    if (!productosVendidosPorDia.length) {
+      alert("No hay productos vendidos por día para exportar.");
+      return;
+    }
+
+    const datos = productosVendidosPorDia.map((producto) => ({
+      "Producto": producto.producto || "",
+      "Categoría": producto.categoria || "",
+      "Domingo": Number(producto.domingo || 0),
+      "Lunes": Number(producto.lunes || 0),
+      "Martes": Number(producto.martes || 0),
+      "Miércoles": Number(producto.miercoles || 0),
+      "Jueves": Number(producto.jueves || 0),
+      "Viernes": Number(producto.viernes || 0),
+      "Sábado": Number(producto.sabado || 0),
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(datos);
+
+    worksheet["!cols"] = [
+      { wch: 30 },
+      { wch: 22 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+    ];
+
+    const workbook = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(
+      workbook,
+      worksheet,
+      "Productos por día"
+    );
+
+    XLSX.writeFile(
+      workbook,
       `productos_vendidos_por_dia_${new Date()
         .toISOString()
-        .slice(0, 10)}.csv`,
-      [
-        "Producto",
-        "Categoría",
-        "Domingo",
-        "Lunes",
-        "Martes",
-        "Miércoles",
-        "Jueves",
-        "Viernes",
-        "Sábado",
-      ],
-      productosVendidosPorDia.map((producto) => [
-        producto.producto || "",
-        producto.categoria || "",
+        .slice(0, 10)}.xlsx`
+    );
+  };
+
+  const exportarProductosVendidosPorDiaPdf = () => {
+    if (!productosVendidosPorDia.length) {
+      alert("No hay productos vendidos por día para exportar.");
+      return;
+    }
+
+    const limpiarPdf = (valor) =>
+      String(valor ?? "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^\x20-\x7E]/g, "")
+        .replace(/[()\\]/g, (m) => `\\${m}`);
+
+    const cortar = (valor, maximo) =>
+      String(valor ?? "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, maximo);
+
+    const fechaReporte = new Date().toLocaleString("es-EC");
+
+    const filtrosUsados = [
+      productosPorDiaFiltros.fecha_inicio
+        ? `Desde: ${productosPorDiaFiltros.fecha_inicio}`
+        : "",
+      productosPorDiaFiltros.fecha_fin
+        ? `Hasta: ${productosPorDiaFiltros.fecha_fin}`
+        : "",
+      productosPorDiaFiltros.ubicacion
+        ? `Ubicacion: ${productosPorDiaFiltros.ubicacion}`
+        : "Ubicacion: Todas",
+      productosPorDiaFiltros.comprado
+        ? `Comprado: ${productosPorDiaFiltros.comprado}`
+        : "Comprado: Todos",
+    ]
+      .filter(Boolean)
+      .join(" | ");
+
+    const lineas = [
+      "POS NUBE - REPORTE DE PRODUCTOS VENDIDOS POR DIA",
+      `Institucion: ${institucionActiva?.nombre || "POS NUBE"}`,
+      `Generado: ${fechaReporte}`,
+      filtrosUsados,
+      `Total productos: ${productosVendidosPorDia.length}`,
+      "--------------------------------------------------------------------------------------------------------------",
+      "Producto              Categoria          Dom  Lun  Mar  Mie  Jue  Vie  Sab  Total",
+      "--------------------------------------------------------------------------------------------------------------",
+    ];
+
+    let totalGeneral = 0;
+
+    productosVendidosPorDia.forEach((producto) => {
+      const dias = [
         Number(producto.domingo || 0),
         Number(producto.lunes || 0),
         Number(producto.martes || 0),
@@ -5923,8 +6005,142 @@ if (institucionIdLogin) {
         Number(producto.jueves || 0),
         Number(producto.viernes || 0),
         Number(producto.sabado || 0),
-      ])
+      ];
+
+      const totalProducto = dias.reduce(
+        (acumulado, cantidad) => acumulado + cantidad,
+        0
+      );
+
+      totalGeneral += totalProducto;
+
+      lineas.push(
+        [
+          cortar(producto.producto || "-", 21).padEnd(21, " "),
+          cortar(producto.categoria || "-", 18).padEnd(18, " "),
+          ...dias.map((cantidad) =>
+            String(cantidad).padStart(4, " ")
+          ),
+          String(totalProducto).padStart(6, " "),
+        ].join(" ")
+      );
+    });
+
+    lineas.push(
+      "--------------------------------------------------------------------------------------------------------------"
     );
+
+    lineas.push(
+      `TOTAL UNIDADES VENDIDAS: ${totalGeneral}`
+    );
+
+    const pageWidth = 792;
+    const pageHeight = 612;
+    const marginLeft = 28;
+    const startY = 578;
+    const lineHeight = 11;
+    const linesPerPage = 46;
+    const paginas = [];
+
+    for (let i = 0; i < lineas.length; i += linesPerPage) {
+      paginas.push(lineas.slice(i, i + linesPerPage));
+    }
+
+    const objetos = [];
+
+    const agregarObjeto = (contenido) => {
+      objetos.push(contenido);
+      return objetos.length;
+    };
+
+    const fontObj = agregarObjeto(
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>"
+    );
+
+    const pageRefs = [];
+
+    paginas.forEach((lineasPagina) => {
+      let stream = "BT\n/F1 8 Tf\n";
+      let y = startY;
+
+      lineasPagina.forEach((linea) => {
+        stream += `1 0 0 1 ${marginLeft} ${y} Tm (${limpiarPdf(
+          linea
+        )}) Tj\n`;
+
+        y -= lineHeight;
+      });
+
+      stream += "ET";
+
+      const streamObj = agregarObjeto(
+        `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`
+      );
+
+      const pageObj = agregarObjeto(
+        `<< /Type /Page /Parent 0 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] ` +
+          `/Resources << /Font << /F1 ${fontObj} 0 R >> >> ` +
+          `/Contents ${streamObj} 0 R >>`
+      );
+
+      pageRefs.push(pageObj);
+    });
+
+    const pagesObj = agregarObjeto(
+      `<< /Type /Pages /Kids [${pageRefs
+        .map((numero) => `${numero} 0 R`)
+        .join(" ")}] /Count ${pageRefs.length} >>`
+    );
+
+    pageRefs.forEach((pageObj) => {
+      objetos[pageObj - 1] = objetos[pageObj - 1].replace(
+        "/Parent 0 0 R",
+        `/Parent ${pagesObj} 0 R`
+      );
+    });
+
+    const catalogObj = agregarObjeto(
+      `<< /Type /Catalog /Pages ${pagesObj} 0 R >>`
+    );
+
+    let pdf = "%PDF-1.4\n";
+    const offsets = [0];
+
+    objetos.forEach((objeto, index) => {
+      offsets.push(pdf.length);
+      pdf += `${index + 1} 0 obj\n${objeto}\nendobj\n`;
+    });
+
+    const xrefOffset = pdf.length;
+
+    pdf += `xref\n0 ${objetos.length + 1}\n`;
+    pdf += "0000000000 65535 f \n";
+
+    offsets.slice(1).forEach((offset) => {
+      pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+    });
+
+    pdf +=
+      `trailer\n<< /Size ${objetos.length + 1} /Root ${catalogObj} 0 R >>\n` +
+      `startxref\n${xrefOffset}\n%%EOF`;
+
+    const blob = new Blob(
+      [pdf],
+      { type: "application/pdf" }
+    );
+
+    const url = window.URL.createObjectURL(blob);
+    const enlace = document.createElement("a");
+
+    enlace.href = url;
+    enlace.download = `productos_vendidos_por_dia_${new Date()
+      .toISOString()
+      .slice(0, 10)}.pdf`;
+
+    document.body.appendChild(enlace);
+    enlace.click();
+    document.body.removeChild(enlace);
+    window.URL.revokeObjectURL(url);
   };
 
     const crearProducto = async (e) => {
@@ -10567,7 +10783,31 @@ onClick={() => eliminarEgreso(egreso)}
           style={styles.input}
         >
           <option value="">Todas</option>
-          <option value="PRINCIPAL">PRINCIPAL</option>
+
+          {[...new Set([
+            ...(puntosOperacion || []).map((p) =>
+              String(p?.nombre || "").trim().toUpperCase()
+            ),
+            ...ventasEnriquecidas.map((venta) =>
+              String(
+                venta.ubicacion_visual ||
+                venta.ubicacion ||
+                ""
+              )
+                .trim()
+                .toUpperCase()
+            ),
+          ].filter((ubicacion) =>
+            ubicacion &&
+            ubicacion !== "PRINCIPAL"
+          ))].map((ubicacion) => (
+            <option
+              key={ubicacion}
+              value={ubicacion}
+            >
+              {ubicacion}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -10607,17 +10847,40 @@ onClick={() => eliminarEgreso(egreso)}
       </button>
 
       <button
-        style={styles.exportButton}
-        onClick={exportarProductosVendidosPorDia}
+        style={{
+          ...styles.button,
+          minWidth: 150,
+          minHeight: 52,
+          padding: "12px 26px",
+          fontSize: 18,
+          fontWeight: 800,
+          background: "#2563eb",
+          color: "#ffffff",
+          border: "1px solid #2563eb",
+          borderRadius: 12,
+          cursor: "pointer",
+        }}
+        onClick={consultarProductosPorDia}
       >
-        EXPORTAR
+        Consultar
       </button>
 
       <button
-        style={styles.button}
-        onClick={consultarProductosPorDia}
+        style={styles.exportButton}
+        onClick={exportarProductosVendidosPorDia}
       >
-        Filtrar
+        Exportar Excel
+      </button>
+
+      <button
+        style={{
+          ...styles.exportButton,
+          borderColor: "#dc2626",
+          color: "#dc2626",
+        }}
+        onClick={exportarProductosVendidosPorDiaPdf}
+      >
+        Exportar PDF
       </button>
     </div>
 
