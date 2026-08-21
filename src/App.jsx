@@ -3573,13 +3573,15 @@ const exportarVentasPDF = () => {
     .toISOString()
     .slice(0, 10)}.pdf`;
 
+  link.style.display = "none";
+  link.setAttribute("download", link.download);
   document.body.appendChild(link);
-  link.click();
+  link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
   document.body.removeChild(link);
 
   window.setTimeout(() => {
     window.URL.revokeObjectURL(url);
-  }, 1000);
+  }, 3000);
 };
 
   const agregarItemVenta = () => {
@@ -16394,8 +16396,9 @@ onClick={() => eliminarEgreso(egreso)}
         type="button"
         style={styles.exportButton}
         onClick={exportarVentasPDF}
+        title="Descarga directa en PDF"
       >
-        Exportar PDF
+        Descargar PDF
       </button>
     </div>
   </div>
