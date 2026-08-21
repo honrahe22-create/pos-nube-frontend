@@ -3376,13 +3376,21 @@ const exportarVentasPDF = () => {
     return;
   }
 
-  const escaparHtml = (valor) =>
+  const limpiarTextoPDF = (valor) =>
     String(valor ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^\x20-\x7E]/g, " ")
+      .replace(/\\/g, "\\\\")
+      .replace(/\(/g, "\\(")
+      .replace(/\)/g, "\\)");
+
+  const cortarTexto = (valor, maximo) => {
+    const texto = String(valor ?? "");
+    return texto.length > maximo
+      ? `${texto.slice(0, Math.max(0, maximo - 3))}...`
+      : texto;
+  };
 
   const formaPagoSeleccionada = (() => {
     const valor = String(ventasFiltros.metodo_pago || "todos");
@@ -3390,173 +3398,188 @@ const exportarVentasPDF = () => {
     if (valor === "EFECTIVO") return "EFECTIVO";
     if (valor === "TRANSFERENCIA") return "TRANSFERENCIA";
     if (valor === "RECARGA" || valor === "SALDO") return "SALDO";
-    if (valor === "CREDITO") return "CRÉDITO ALUMNO";
-    if (valor === "CREDITO_PROFESOR") return "CRÉDITO PROFESOR";
+    if (valor === "CREDITO") return "CREDITO ALUMNO";
+    if (valor === "CREDITO_PROFESOR") return "CREDITO PROFESOR";
     return valor;
   })();
+
+  const filas = ventasFiltradas.map((v) => [
+    `#${v.id ?? ""}`,
+    v.alumno_nombre || "",
+    v.ubicacion_visual || v.ubicacion || "PRINCIPAL",
+    formatearSoloFecha(v.fecha_base),
+    formatearSoloHora(v.fecha_base),
+    `$${Number(v.total || 0).toFixed(2)}`,
+    v.estado || "Entregada",
+    v.metodo_visual || v.metodo_pago || "",
+    v.tipo_orden || "Normal",
+  ]);
 
   const totalReporte = ventasFiltradas.reduce(
     (acumulado, venta) => acumulado + Number(venta.total || 0),
     0
   );
 
-  const filas = ventasFiltradas
-    .map(
-      (v) => `
-        <tr>
-          <td>#${escaparHtml(v.id)}</td>
-          <td>${escaparHtml(v.alumno_nombre || "")}</td>
-          <td>${escaparHtml(v.ubicacion_visual || v.ubicacion || "PRINCIPAL")}</td>
-          <td>${escaparHtml(formatearSoloFecha(v.fecha_base))}</td>
-          <td>${escaparHtml(formatearSoloHora(v.fecha_base))}</td>
-          <td class="numero">$${Number(v.total || 0).toFixed(2)}</td>
-          <td>${escaparHtml(v.estado || "Entregada")}</td>
-          <td>${escaparHtml(v.metodo_visual || v.metodo_pago || "")}</td>
-          <td>${escaparHtml(v.tipo_orden || "Normal")}</td>
-        </tr>
-      `
-    )
-    .join("");
+  const columnas = [
+    { titulo: "Orden", x: 28, max: 9 },
+    { titulo: "Usuario", x: 72, max: 23 },
+    { titulo: "Ubicacion", x: 205, max: 16 },
+    { titulo: "Fecha", x: 300, max: 11 },
+    { titulo: "Hora", x: 365, max: 6 },
+    { titulo: "Total", x: 410, max: 9 },
+    { titulo: "Estado", x: 462, max: 11 },
+    { titulo: "Forma Pago", x: 527, max: 16 },
+    { titulo: "Tipo orden", x: 630, max: 13 },
+  ];
 
-  const ventana = window.open("", "_blank", "width=1100,height=800");
+  const filasPorPagina = 31;
+  const paginasDatos = [];
 
-  if (!ventana) {
-    alert("El navegador bloqueó la ventana del PDF. Habilita ventanas emergentes e inténtalo nuevamente.");
-    return;
+  for (let i = 0; i < filas.length; i += filasPorPagina) {
+    paginasDatos.push(filas.slice(i, i + filasPorPagina));
   }
 
-  ventana.document.write(`
-    <!doctype html>
-    <html lang="es">
-      <head>
-        <meta charset="utf-8" />
-        <title>Reporte de ventas</title>
-        <style>
-          @page {
-            size: A4 landscape;
-            margin: 10mm;
-          }
+  const comandosTexto = (texto, x, y, tamano = 8, fuente = "F1") =>
+    `BT /${fuente} ${tamano} Tf 1 0 0 1 ${x} ${y} Tm (${limpiarTextoPDF(texto)}) Tj ET\n`;
 
-          * {
-            box-sizing: border-box;
-          }
+  const paginasContenido = paginasDatos.map((filasPagina, indicePagina) => {
+    let contenido = "";
 
-          body {
-            margin: 0;
-            font-family: Arial, Helvetica, sans-serif;
-            color: #111827;
-            font-size: 10px;
-          }
+    contenido += comandosTexto("REPORTE DE VENTAS", 330, 565, 16, "F2");
+    contenido += comandosTexto(
+      institucionActiva?.nombre || "POS NUBE",
+      330,
+      548,
+      9,
+      "F1"
+    );
 
-          h1 {
-            margin: 0 0 4px;
-            font-size: 20px;
-            text-align: center;
-          }
+    contenido += comandosTexto(
+      `Forma de pago: ${formaPagoSeleccionada}   Desde: ${
+        ventasFiltros.fecha_inicio || "Todas"
+      }   Hasta: ${ventasFiltros.fecha_fin || "Todas"}   Registros: ${
+        ventasFiltradas.length
+      }`,
+      28,
+      526,
+      8,
+      "F1"
+    );
 
-          .subtitulo {
-            text-align: center;
-            margin-bottom: 12px;
-            font-size: 11px;
-          }
+    contenido += "0.75 w 28 518 m 814 518 l S\n";
 
-          .filtros {
-            margin-bottom: 10px;
-            padding: 8px;
-            border: 1px solid #d1d5db;
-            border-radius: 6px;
-            background: #f9fafb;
-          }
+    columnas.forEach((columna) => {
+      contenido += comandosTexto(columna.titulo, columna.x, 502, 7.5, "F2");
+    });
 
-          .filtros strong {
-            margin-right: 4px;
-          }
+    contenido += "0.5 w 28 496 m 814 496 l S\n";
 
-          table {
-            width: 100%;
-            border-collapse: collapse;
-          }
+    let y = 481;
 
-          th,
-          td {
-            border: 1px solid #9ca3af;
-            padding: 5px 4px;
-            vertical-align: top;
-          }
+    filasPagina.forEach((fila) => {
+      fila.forEach((valor, indice) => {
+        const columna = columnas[indice];
+        contenido += comandosTexto(
+          cortarTexto(valor, columna.max),
+          columna.x,
+          y,
+          7,
+          "F1"
+        );
+      });
 
-          th {
-            background: #e5e7eb;
-            font-weight: 700;
-            text-align: left;
-          }
+      contenido += `0.2 w 28 ${y - 5} m 814 ${y - 5} l S\n`;
+      y -= 14;
+    });
 
-          .numero {
-            text-align: right;
-            white-space: nowrap;
-          }
+    if (indicePagina === paginasDatos.length - 1) {
+      contenido += comandosTexto(
+        `TOTAL REPORTE: $${totalReporte.toFixed(2)}`,
+        650,
+        28,
+        10,
+        "F2"
+      );
+    }
 
-          .total {
-            margin-top: 10px;
-            text-align: right;
-            font-size: 13px;
-            font-weight: 700;
-          }
+    contenido += comandosTexto(
+      `Pagina ${indicePagina + 1} de ${paginasDatos.length}`,
+      28,
+      28,
+      7,
+      "F1"
+    );
 
-          .pie {
-            margin-top: 8px;
-            text-align: right;
-            font-size: 9px;
-            color: #4b5563;
-          }
-        </style>
-      </head>
-      <body>
-        <h1>REPORTE DE VENTAS</h1>
-        <div class="subtitulo">${escaparHtml(institucionActiva?.nombre || "POS NUBE")}</div>
+    return contenido;
+  });
 
-        <div class="filtros">
-          <strong>Forma de pago:</strong> ${escaparHtml(formaPagoSeleccionada)}
-          &nbsp;&nbsp;
-          <strong>Desde:</strong> ${escaparHtml(ventasFiltros.fecha_inicio || "Todas")}
-          &nbsp;&nbsp;
-          <strong>Hasta:</strong> ${escaparHtml(ventasFiltros.fecha_fin || "Todas")}
-          &nbsp;&nbsp;
-          <strong>Registros:</strong> ${ventasFiltradas.length}
-        </div>
+  const objetos = [];
+  objetos[1] = "<< /Type /Catalog /Pages 2 0 R >>";
+  objetos[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
+  objetos[4] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>";
 
-        <table>
-          <thead>
-            <tr>
-              <th>Orden No</th>
-              <th>Usuario</th>
-              <th>Ubicación</th>
-              <th>Fecha</th>
-              <th>Hora</th>
-              <th>Total</th>
-              <th>Estado</th>
-              <th>Forma Pago</th>
-              <th>Tipo orden</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${filas}
-          </tbody>
-        </table>
+  const referenciasPaginas = [];
 
-        <div class="total">TOTAL REPORTE: $${totalReporte.toFixed(2)}</div>
-        <div class="pie">Generado desde POS NUBE</div>
+  paginasContenido.forEach((contenido, indice) => {
+    const paginaId = 5 + indice * 2;
+    const contenidoId = paginaId + 1;
 
-        <script>
-          window.onload = function () {
-            window.focus();
-            window.print();
-          };
-        <\/script>
-      </body>
-    </html>
-  `);
+    referenciasPaginas.push(`${paginaId} 0 R`);
 
-  ventana.document.close();
+    objetos[paginaId] =
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] ` +
+      `/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> ` +
+      `/Contents ${contenidoId} 0 R >>`;
+
+    objetos[contenidoId] =
+      `<< /Length ${contenido.length} >>\nstream\n${contenido}endstream`;
+  });
+
+  objetos[2] =
+    `<< /Type /Pages /Kids [${referenciasPaginas.join(" ")}] ` +
+    `/Count ${referenciasPaginas.length} >>`;
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+
+  for (let id = 1; id < objetos.length; id += 1) {
+    if (!objetos[id]) continue;
+
+    offsets[id] = pdf.length;
+    pdf += `${id} 0 obj\n${objetos[id]}\nendobj\n`;
+  }
+
+  const xrefOffset = pdf.length;
+  const maxId = objetos.length - 1;
+
+  pdf += `xref\n0 ${maxId + 1}\n`;
+  pdf += "0000000000 65535 f \n";
+
+  for (let id = 1; id <= maxId; id += 1) {
+    const offset = offsets[id] || 0;
+    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  }
+
+  pdf +=
+    `trailer\n<< /Size ${maxId + 1} /Root 1 0 R >>\n` +
+    `startxref\n${xrefOffset}\n%%EOF`;
+
+  const blob = new Blob([pdf], { type: "application/pdf" });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = `reporte_ventas_${new Date()
+    .toISOString()
+    .slice(0, 10)}.pdf`;
+
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  window.setTimeout(() => {
+    window.URL.revokeObjectURL(url);
+  }, 1000);
 };
 
   const agregarItemVenta = () => {
