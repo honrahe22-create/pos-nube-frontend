@@ -61,7 +61,7 @@ export default function ConfiguracionModulo({
   }, [usuario?.rol]);
 
   const rolRequiereUbicacion = (rol) =>
-    ["CAJERO", "ENCARGADO_LOCAL"].includes(
+    ["ADMIN", "CAJERO", "ENCARGADO_LOCAL"].includes(
       String(rol || "").trim().toUpperCase()
     );
 
@@ -492,21 +492,24 @@ export default function ConfiguracionModulo({
     try {
       setMensaje("");
       const token = localStorage.getItem("token");
-      const respuesta = await fetch(`${API_URL}/api/usuarios/${item.id}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          institucion_id: Number(institucionId),
-        }),
-      });
+      const respuesta = await fetch(
+        `${API_URL}/api/usuarios/${item.id}?institucion_id=${Number(institucionId)}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
-      const data = await respuesta.json();
+      const data = await respuesta.json().catch(() => ({}));
 
       if (!respuesta.ok) {
-        throw new Error(data.message || "No se pudo eliminar el usuario");
+        throw new Error(
+          data.message ||
+            data.error ||
+            `No se pudo eliminar el usuario (HTTP ${respuesta.status})`
+        );
       }
 
       if (Number(usuarioEditandoId) === Number(item.id)) {
@@ -1129,7 +1132,7 @@ export default function ConfiguracionModulo({
                 <div>✓ ADMIN puede administrar usuarios de su institución.</div>
                 <div>✓ Solo SUPER_ADMIN puede crear o modificar otro SUPER_ADMIN.</div>
                 <div>✓ Un usuario no puede desactivar ni eliminar su propia cuenta.</div>
-                <div>✓ Cajeros y encargados se asignan a una ubicación de trabajo.</div>
+                <div>✓ Administradores, cajeros y encargados se asignan a una ubicación de trabajo.</div>
                 <div>✓ Cambiar el rol requiere volver a iniciar sesión para aplicar el nuevo menú.</div>
                 <div>✓ El backend también bloquea APIs no autorizadas; no es solo ocultar botones.</div>
               </div>
