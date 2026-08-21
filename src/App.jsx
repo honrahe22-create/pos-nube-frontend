@@ -2097,7 +2097,9 @@ const cargarExistenciasInventario = async ({ reintento = true } = {}) => {
     );
 
     setLocalNuevaOrden((actual) =>
-      puntosUnicos.includes(String(actual || "").toUpperCase())
+      puntosUnicos.includes(String(jornadaActiva?.punto_nombre || "").toUpperCase())
+        ? String(jornadaActiva.punto_nombre).toUpperCase()
+        : puntosUnicos.includes(String(actual || "").toUpperCase())
         ? String(actual).toUpperCase()
         : "PRINCIPAL"
     );
@@ -3606,7 +3608,7 @@ const limpiarFormularioVenta = () => {
   setModoNuevaOrden("consumidor_final");
   setTipoUsuarioNuevaOrden("TODOS");
   setBusquedaUsuarioNuevaOrden("");
-  setLocalNuevaOrden("PRINCIPAL");
+  setLocalNuevaOrden(jornadaActiva?.punto_nombre || localNuevaOrden || "PRINCIPAL");
   setFechaNuevaOrden(new Date().toISOString().slice(0, 10));
 };
 
@@ -7320,7 +7322,7 @@ if (institucionIdLogin) {
 
       const stockDisponible = stockProductoEnPunto(
         producto.id,
-        localNuevaOrden
+        jornadaActiva?.punto_nombre || localNuevaOrden
       );
 
       if (item.cantidad > stockDisponible) {
@@ -7450,7 +7452,7 @@ Disponible: ${formatearMoneda(
         : ventaForm.metodo_pago,
       items: itemsLimpios,
       observacion:ventaForm.observacion?.trim()||"",
-      ubicacion:localNuevaOrden||"PRINCIPAL",
+      ubicacion:jornadaActiva?.punto_nombre||localNuevaOrden||"PRINCIPAL",
       jornada_id:Number(jornadaActiva?.id),
     };
 
@@ -15889,7 +15891,7 @@ onClick={() => eliminarEgreso(egreso)}
                 );
 
                 const sinStock =
-                  stockProductoEnPunto(producto.id, localNuevaOrden) <= 0;
+                  stockProductoEnPunto(producto.id, jornadaActiva?.punto_nombre || localNuevaOrden) <= 0;
 
                 return (
                   <article
@@ -16025,7 +16027,7 @@ onClick={() => eliminarEgreso(egreso)}
                             fontWeight: 800,
                           }}
                         >
-                          Stock {localNuevaOrden}: {stockProductoEnPunto(producto.id, localNuevaOrden)}
+                          Stock {jornadaActiva?.punto_nombre || localNuevaOrden}: {stockProductoEnPunto(producto.id, jornadaActiva?.punto_nombre || localNuevaOrden)}
                         </div>
                       </div>
                     </div>
@@ -16113,7 +16115,7 @@ onClick={() => eliminarEgreso(egreso)}
                             Number(
                               stockProductoEnPunto(
                                 producto.id,
-                                localNuevaOrden
+                                jornadaActiva?.punto_nombre || localNuevaOrden
                               ) || 0
                             )
                           )}
@@ -16131,7 +16133,7 @@ onClick={() => eliminarEgreso(egreso)}
                             const disponible = Number(
                               stockProductoEnPunto(
                                 producto.id,
-                                localNuevaOrden
+                                jornadaActiva?.punto_nombre || localNuevaOrden
                               ) || 0
                             );
 
@@ -17677,8 +17679,6 @@ subMenuButtonActive: {
   fontSize: 14,
 },
 };
-// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
-// CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
 // CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
 // CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
 // CONSERVA LINEA APP ACTUAL - AJUSTE RECARGAS FECHA
