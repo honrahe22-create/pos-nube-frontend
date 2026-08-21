@@ -8041,12 +8041,15 @@ Disponible: ${formatearMoneda(
     ]);
 
     // Si la venta fue iniciada desde la ficha del alumno,
-    // conservamos el comportamiento existente y regresamos a su ficha.
+    // NO regresamos a la ficha. Dejamos al mismo alumno seleccionado
+    // y la pantalla de Crear orden lista para registrar la siguiente venta.
     if (
       alumnoDetalle &&
       Number(alumnoDetalle.id) ===
         Number(ventaForm.alumno_id)
     ) {
+      const alumnoIdActual = Number(ventaForm.alumno_id);
+
       setAlumnoDetalle((prev) => {
         if (!prev) return prev;
 
@@ -8068,9 +8071,28 @@ Disponible: ${formatearMoneda(
         };
       });
 
-      setVista("alumnos");
-      setVistaAlumnoDetalle("datos");
-      limpiarFormularioVenta();
+      // Limpiamos solamente los datos de la orden.
+      // Se conserva el alumno para poder seguir vendiéndole sin volver a buscarlo.
+      setVentaItems([]);
+      setVentaForm({
+        alumno_id: String(alumnoIdActual),
+        profesor_id: "",
+        metodo_pago: "RECARGA",
+        observacion: "",
+      });
+      setCodigoBarraNuevaOrden("");
+      setBusquedaProductoNuevaOrden("");
+      setCategoriaNuevaOrden("TODOS");
+      setBusquedaUsuarioNuevaOrden("");
+      setModoNuevaOrden("identificar");
+      setTipoUsuarioNuevaOrden("ESTUDIANTE");
+      setLocalNuevaOrden(
+        jornadaActiva?.punto_nombre || localNuevaOrden || "PRINCIPAL"
+      );
+      setFechaNuevaOrden(new Date().toISOString().slice(0, 10));
+
+      setVista("ventas");
+      setVistaVentasInterna("registrar");
     } else {
       // FLUJO RÁPIDO DE CAJA:
       // después de guardar/imprimir una orden normal,
@@ -16849,8 +16871,20 @@ onClick={() => eliminarEgreso(egreso)}
                 }}
                 style={styles.input}
               >
-                <option value="EFECTIVO">Efectivo</option>
-                <option value="TRANSFERENCIA">Transferencia</option>
+                {/*
+                  Cuando la orden viene desde la ficha de un alumno,
+                  solo se permiten SALDO y CRÉDITO del alumno.
+                  En la Nueva Orden general se conservan Efectivo y Transferencia.
+                */}
+                {!(
+                  alumnoDetalle &&
+                  Number(alumnoDetalle.id) === Number(ventaForm.alumno_id)
+                ) && (
+                  <>
+                    <option value="EFECTIVO">Efectivo</option>
+                    <option value="TRANSFERENCIA">Transferencia</option>
+                  </>
+                )}
 
                 {!profesorVentaSeleccionado && (
                   <>
