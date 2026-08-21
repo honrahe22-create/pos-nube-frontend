@@ -16129,10 +16129,12 @@ onClick={() => eliminarEgreso(egreso)}
                         }
                         style={styles.input}
                       >
-                        <option value="todos">Selecciona</option>
+                        <option value="todos">Todos</option>
                         <option value="EFECTIVO">Efectivo</option>
                         <option value="TRANSFERENCIA">Transferencia</option>
-                        <option value="RECARGA">Recarga</option>
+                        <option value="RECARGA">Saldo</option>
+                        <option value="CREDITO">Crédito alumno</option>
+                        <option value="CREDITO_PROFESOR">Crédito profesor</option>
                       </select>
                     </div>
                   </div>
