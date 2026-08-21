@@ -3558,7 +3558,7 @@ const confirmarTransferenciaStock = async () => {
 useEffect(()=>{
   // Una jornada nunca se reanuda por confianza local.
   // Al abrir/actualizar, se obliga a validar nuevamente al operador.
-  localStorage.removeItem("jornadaActiva");
+  // Jornada activa se conserva y se valida contra backend.
 },[]);
 
 useEffect(()=>{
@@ -3892,8 +3892,8 @@ const exportarVentasExcel = () => {
       if(data?.id){
         // Existe una jornada abierta, pero al volver a abrir/actualizar POS NUBE
         // NO entramos automáticamente. El operador debe autenticarse otra vez.
-        localStorage.removeItem("jornadaActiva");
-        setJornadaActiva(null);
+        localStorage.setItem("jornadaActiva",JSON.stringify(data));
+        setJornadaActiva(data);
 
         const puntoExistente=puntos.find(
           (p)=>Number(p.id)===Number(data.punto_id)
@@ -3935,7 +3935,7 @@ const exportarVentasExcel = () => {
         );
         setOperadorJornadaPassword("");
         setVerPasswordOperadorJornada(false);
-        setMostrarSelectorJornada(true);
+        setMostrarSelectorJornada(false);
         return;
       }
     }catch(e){console.error(e)}
@@ -3963,7 +3963,7 @@ const exportarVentasExcel = () => {
     );
     setOperadorJornadaCorreo(String(u?.correo||""));
     setOperadorJornadaPassword("");
-    setMostrarSelectorJornada(true);
+    setMostrarSelectorJornada(!localStorage.getItem("accesoOperativo"));
   };
   const obtenerPuntosJornadaDisponibles=(lista=puntosOperacion)=>{
     const activos=(Array.isArray(lista)?lista:[])
@@ -9294,7 +9294,7 @@ if (!usuario) {
 
   return (
     <div style={styles.appShell}>
-      {mostrarSelectorJornada&&<div
+      {mostrarSelectorJornada&&!jornadaActiva?.id&&<div
         style={{
           position:"fixed",
           inset:0,
