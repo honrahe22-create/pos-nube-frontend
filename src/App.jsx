@@ -1577,8 +1577,8 @@ const exportarReporteStockPdf=()=>{
     let y=startY;
 
     lineasPagina.forEach((linea)=>{
-      stream+=`${marginLeft} ${y} Td (${escaparPdf(linea)}) Tj\n`;
-      stream+=`-${marginLeft} 0 Td\n`;
+      stream+=`1 0 0 1 ${marginLeft} ${y} Tm (${escaparPdf(linea)}) Tj\n`;
+      // Tm fija la posición absoluta de cada línea para que todas se vean en la página.
       y-=lineHeight;
     });
 
