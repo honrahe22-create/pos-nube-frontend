@@ -221,6 +221,9 @@ const [password, setPassword] = useState("");
 const [mensaje, setMensaje] = useState("");
 const [cargando, setCargando] = useState(false);
 const [loginInstitucionId, setLoginInstitucionId] = useState("");
+const [loginPuntosOperacion, setLoginPuntosOperacion] = useState([]);
+const [loginPuntoId, setLoginPuntoId] = useState("ADMIN");
+const [cargandoLoginPuntos, setCargandoLoginPuntos] = useState(false);
 
 const [verPasswordLogin, setVerPasswordLogin] = useState(false);
 const [verPasswordActual, setVerPasswordActual] = useState(false);
@@ -4071,17 +4074,133 @@ const exportarVentasExcel = () => {
     }catch(e){alert(e.message||"No se pudo cerrar la jornada")}
   };
 
+  const cargarPuntosLoginPublicos = async (institucionId) => {
+    const id = Number(institucionId || 0);
+
+    if (!id) {
+      setLoginPuntosOperacion([]);
+      setLoginPuntoId("ADMIN");
+      return [];
+    }
+
+    try {
+      setCargandoLoginPuntos(true);
+
+      const respuesta = await fetch(
+        `${API_URL}/api/jornadas/puntos-publicos?institucion_id=${id}`,
+        { cache: "no-store" }
+      );
+
+      const data = await respuesta.json();
+
+      if (!respuesta.ok) {
+        throw new Error(data.message || "No se pudieron cargar las ubicaciones");
+      }
+
+      const lista = Array.isArray(data) ? data : [];
+      setLoginPuntosOperacion(lista);
+
+      // Siempre dejamos ADMINISTRACIÓN como acceso separado.
+      // El operador escoge BAR PRINCIPAL / KIOSKO cuando va a trabajar.
+      setLoginPuntoId("ADMIN");
+      return lista;
+    } catch (error) {
+      console.error("Error cargando ubicaciones para login:", error);
+      setLoginPuntosOperacion([]);
+      setLoginPuntoId("ADMIN");
+      return [];
+    } finally {
+      setCargandoLoginPuntos(false);
+    }
+  };
+
+  const iniciarSesionOperativaPublica = async () => {
+    const institucionId = Number(loginInstitucionId || 0);
+    const puntoId = Number(loginPuntoId || 0);
+
+    if (!institucionId || !puntoId) {
+      throw new Error("Selecciona la institución y la ubicación de trabajo.");
+    }
+
+    const respuesta = await fetch(`${API_URL}/api/jornadas/abrir-publica`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        institucion_id: institucionId,
+        punto_id: puntoId,
+        operador_correo: String(correo || "").trim(),
+        operador_password: String(password || ""),
+      }),
+    });
+
+    const data = await respuesta.json();
+
+    if (!respuesta.ok) {
+      throw new Error(data.message || "No se pudo iniciar la jornada");
+    }
+
+    if (!data.token || !data.usuario || !data.jornada) {
+      throw new Error("El servidor no devolvió la sesión completa del operador.");
+    }
+
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("usuario", JSON.stringify(data.usuario));
+    localStorage.setItem(
+      "institucionSeleccionadaId",
+      String(data.usuario.institucion_id)
+    );
+
+    setUsuario(data.usuario);
+    setInstitucionSeleccionadaId(
+      normalizarInstitucionId(data.usuario.institucion_id)
+    );
+
+    aplicarVistaInicialRol(
+      data.usuario.rol,
+      setVista,
+      setVistaVentasInterna
+    );
+
+    setOperadorJornadaCorreo(data.usuario.correo || "");
+    setOperadorJornadaPassword("");
+    setVerPasswordOperadorJornada(false);
+    aplicarJornada(data.jornada);
+
+    await cargarPuntosOperacion({
+      tokenForzado: data.token,
+      institucionForzada: data.usuario.institucion_id,
+    });
+
+    await cargarExistenciasInventario();
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setMensaje("");
     setCargando(true);
 
     if (!loginInstitucionId) {
-  setMensaje("Debes seleccionar una institución");
-  setCargando(false);
-  return;
-}
+      setMensaje("Debes seleccionar una institución");
+      setCargando(false);
+      return;
+    }
+
+    if (!correo.trim() || !password) {
+      setMensaje("Correo y contraseña son obligatorios");
+      setCargando(false);
+      return;
+    }
+
     try {
+      // BAR PRINCIPAL / KIOSKO entran directamente con sus propias
+      // credenciales y abren/recuperan su jornada sin necesitar al ADMIN.
+      if (loginPuntoId && loginPuntoId !== "ADMIN") {
+        await iniciarSesionOperativaPublica();
+        setMensaje("");
+        return;
+      }
+
+      // ADMINISTRACIÓN conserva el login normal y no abre una jornada.
       const res = await fetch(`${API_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -4124,7 +4243,24 @@ if (institucionIdLogin) {
       }));
 
       aplicarVistaInicialRol(data.usuario?.rol,setVista,setVistaVentasInterna);
-      await cargarContextoJornada({tokenForzado:data.token,institucionForzada:institucionIdLogin,usuarioForzado:data.usuario});
+
+      if (["ADMIN", "SUPER_ADMIN", "AUDITOR"].includes(normalizarRol(data.usuario?.rol))) {
+        // El acceso administrativo no necesita abrir caja/jornada.
+        setMostrarSelectorJornada(false);
+        localStorage.removeItem("jornadaActiva");
+        setJornadaActiva(null);
+        await cargarPuntosOperacion({
+          tokenForzado: data.token,
+          institucionForzada: institucionIdLogin,
+        });
+      } else {
+        await cargarContextoJornada({
+          tokenForzado:data.token,
+          institucionForzada:institucionIdLogin,
+          usuarioForzado:data.usuario
+        });
+      }
+
       setMensaje("");
     } catch (error) {
       console.error("Error login:", error);
@@ -8712,6 +8848,9 @@ Disponible: ${formatearMoneda(
     setMensaje("");
     setVista("dashboard");
     setInstitucionSeleccionadaId(null);
+    setLoginPuntoId("ADMIN");
+    setLoginPuntosOperacion([]);
+    setLoginInstitucionId("");
     setVistaVentasInterna("consultar");
     setVistaRecargasInterna("lista");
     limpiarFormularioAlumno();
@@ -8745,7 +8884,12 @@ if (!usuario) {
               <label style={styles.label}>Institución</label>
               <select
                 value={loginInstitucionId}
-                onChange={(e) => setLoginInstitucionId(e.target.value)}
+                onChange={async (e) => {
+                  const valor = e.target.value;
+                  setLoginInstitucionId(valor);
+                  setLoginPuntoId("ADMIN");
+                  await cargarPuntosLoginPublicos(valor);
+                }}
                 style={styles.input}
                 required
               >
@@ -8756,6 +8900,39 @@ if (!usuario) {
                   </option>
                 ))}
               </select>
+
+              <label style={styles.label}>Acceso / ubicación</label>
+              <select
+                value={loginPuntoId}
+                onChange={(e) => setLoginPuntoId(e.target.value)}
+                style={styles.input}
+                disabled={!loginInstitucionId || cargandoLoginPuntos}
+                required
+              >
+                <option value="ADMIN">ADMINISTRACIÓN</option>
+                {loginPuntosOperacion.map((punto) => (
+                  <option key={punto.id} value={punto.id}>
+                    {punto.nombre}
+                  </option>
+                ))}
+              </select>
+
+              {loginInstitucionId && (
+                <div
+                  style={{
+                    padding: 10,
+                    borderRadius: 9,
+                    background: loginPuntoId === "ADMIN" ? "#eff6ff" : "#f0fdf4",
+                    color: loginPuntoId === "ADMIN" ? "#1e40af" : "#166534",
+                    fontSize: 13,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {loginPuntoId === "ADMIN"
+                    ? "Acceso administrativo: configuración, usuarios, reportes y supervisión. No abre jornada."
+                    : "Acceso operativo: valida las credenciales del operador y abre o continúa la jornada de esta ubicación."}
+                </div>
+              )}
 
               <label style={styles.label}>Correo electrónico</label>
               <input
@@ -8810,7 +8987,11 @@ if (!usuario) {
               </div>
 
               <button type="submit" style={styles.button} disabled={cargando}>
-                {cargando ? "Ingresando..." : "Iniciar sesión"}
+                {cargando
+                  ? "Ingresando..."
+                  : loginPuntoId === "ADMIN"
+                  ? "Ingresar a administración"
+                  : "Ingresar y abrir jornada"}
               </button>
             </form>
 

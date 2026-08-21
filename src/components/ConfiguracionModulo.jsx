@@ -30,9 +30,7 @@ export default function ConfiguracionModulo({
 
   const [usuariosSistema, setUsuariosSistema] = useState([]);
   const [cargandoUsuarios, setCargandoUsuarios] = useState(false);
-  const [padresVinculables, setPadresVinculables] = useState([]);
-  const [alumnosVinculables, setAlumnosVinculables] = useState([]);
-
+  const [puntosOperacionUsuarios, setPuntosOperacionUsuarios] = useState([]);
   const [guardandoUsuario, setGuardandoUsuario] = useState(false);
   const [usuarioEditandoId, setUsuarioEditandoId] = useState(null);
   const [usuarioForm, setUsuarioForm] = useState({
@@ -41,8 +39,7 @@ export default function ConfiguracionModulo({
     password: "",
     rol: "CAJERO",
     estado: true,
-    padre_id: "",
-    alumno_id: "",
+    punto_id: "",
   });
 
   const rolesDisponibles = useMemo(() => {
@@ -51,8 +48,6 @@ export default function ConfiguracionModulo({
       { value: "ENCARGADO_LOCAL", label: "Encargado de local" },
       { value: "CAJERO", label: "Cajero" },
       { value: "AUDITOR", label: "Auditor / Consulta" },
-      { value: "PADRE", label: "Padre / Representante" },
-      { value: "ESTUDIANTE", label: "Estudiante" },
     ];
 
     if (String(usuario?.rol || "").toUpperCase() === "SUPER_ADMIN") {
@@ -64,6 +59,11 @@ export default function ConfiguracionModulo({
 
     return base;
   }, [usuario?.rol]);
+
+  const rolRequiereUbicacion = (rol) =>
+    ["CAJERO", "ENCARGADO_LOCAL"].includes(
+      String(rol || "").trim().toUpperCase()
+    );
 
   const [estadoRespaldos, setEstadoRespaldos] = useState(null);
   const [respaldosHistoricos, setRespaldosHistoricos] = useState([]);
@@ -286,33 +286,39 @@ export default function ConfiguracionModulo({
       password: "",
       rol: "CAJERO",
       estado: true,
-      padre_id: "",
-      alumno_id: "",
+      punto_id: "",
     });
   };
 
 
-  const cargarCatalogosVinculacion = async () => {
-    if (!institucionId || !esAdministrador) return;
+  const cargarPuntosOperacionUsuarios = async () => {
+    if (!institucionId || !esAdministrador) return [];
 
     try {
       const token = localStorage.getItem("token");
       const respuesta = await fetch(
-        `${API_URL}/api/usuarios/catalogos-vinculacion?institucion_id=${institucionId}`,
+        `${API_URL}/api/puntos?institucion_id=${institucionId}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const data = await respuesta.json();
 
       if (!respuesta.ok) {
-        throw new Error(data.message || "No se pudieron cargar padres y estudiantes");
+        throw new Error(data.message || "No se pudieron cargar las ubicaciones");
       }
 
-      setPadresVinculables(Array.isArray(data.padres) ? data.padres : []);
-      setAlumnosVinculables(Array.isArray(data.alumnos) ? data.alumnos : []);
+      const activos = (Array.isArray(data) ? data : []).filter(
+        (p) => p?.activo !== false
+      );
+      const reales = activos.filter(
+        (p) => String(p?.nombre || "").trim().toUpperCase() !== "PRINCIPAL"
+      );
+      const lista = reales.length ? reales : activos;
+      setPuntosOperacionUsuarios(lista);
+      return lista;
     } catch (error) {
-      console.error("Error cargando vínculos de portal:", error);
-      setPadresVinculables([]);
-      setAlumnosVinculables([]);
+      console.error("Error cargando ubicaciones de usuarios:", error);
+      setPuntosOperacionUsuarios([]);
+      return [];
     }
   };
 
@@ -333,7 +339,7 @@ export default function ConfiguracionModulo({
       }
 
       setUsuariosSistema(Array.isArray(data) ? data : []);
-      await cargarCatalogosVinculacion();
+      await cargarPuntosOperacionUsuarios();
     } catch (error) {
       console.error("Error cargando usuarios:", error);
       setUsuariosSistema([]);
@@ -352,13 +358,11 @@ export default function ConfiguracionModulo({
       return;
     }
 
-    if (usuarioForm.rol === "PADRE" && !usuarioForm.padre_id) {
-      setMensaje("Selecciona el padre / representante que usará esta cuenta.");
-      return;
-    }
-
-    if (usuarioForm.rol === "ESTUDIANTE" && !usuarioForm.alumno_id) {
-      setMensaje("Selecciona el estudiante que usará esta cuenta.");
+    if (
+      rolRequiereUbicacion(usuarioForm.rol) &&
+      !usuarioForm.punto_id
+    ) {
+      setMensaje("Selecciona la ubicación de trabajo del operador.");
       return;
     }
 
@@ -381,14 +385,11 @@ export default function ConfiguracionModulo({
         correo: usuarioForm.correo.trim().toLowerCase(),
         rol: usuarioForm.rol,
         estado: usuarioForm.estado !== false,
-        padre_id:
-          usuarioForm.rol === "PADRE"
-            ? Number(usuarioForm.padre_id || 0) || null
-            : null,
-        alumno_id:
-          usuarioForm.rol === "ESTUDIANTE"
-            ? Number(usuarioForm.alumno_id || 0) || null
-            : null,
+        padre_id: null,
+        alumno_id: null,
+        punto_id: rolRequiereUbicacion(usuarioForm.rol)
+          ? Number(usuarioForm.punto_id || 0) || null
+          : null,
       };
 
       if (!editando) payload.password = usuarioForm.password;
@@ -429,8 +430,7 @@ export default function ConfiguracionModulo({
       password: "",
       rol: String(item.rol || "CAJERO").toUpperCase(),
       estado: item.estado !== false,
-      padre_id: item.padre_id ? String(item.padre_id) : "",
-      alumno_id: item.alumno_id ? String(item.alumno_id) : "",
+      punto_id: item.punto_id ? String(item.punto_id) : "",
     });
     setVistaInterna("usuarios");
   };
@@ -470,6 +470,53 @@ export default function ConfiguracionModulo({
       await cargarUsuariosSistema();
     } catch (error) {
       setMensaje(error.message || "No se pudo cambiar el estado del usuario.");
+    }
+  };
+
+  const eliminarUsuarioSistema = async (item) => {
+    const esYo = Number(item.id) === Number(usuario?.id);
+
+    if (esYo) {
+      setMensaje("No puedes eliminar la cuenta con la que tienes la sesión abierta.");
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `¿Eliminar definitivamente el usuario ${item.nombre || item.correo}?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setMensaje("");
+      const token = localStorage.getItem("token");
+      const respuesta = await fetch(`${API_URL}/api/usuarios/${item.id}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          institucion_id: Number(institucionId),
+        }),
+      });
+
+      const data = await respuesta.json();
+
+      if (!respuesta.ok) {
+        throw new Error(data.message || "No se pudo eliminar el usuario");
+      }
+
+      if (Number(usuarioEditandoId) === Number(item.id)) {
+        limpiarUsuarioForm();
+      }
+
+      setMensaje(data.message || "Usuario eliminado correctamente.");
+      await cargarUsuariosSistema();
+    } catch (error) {
+      setMensaje(error.message || "No se pudo eliminar el usuario.");
     }
   };
 
@@ -998,11 +1045,9 @@ export default function ConfiguracionModulo({
                         setUsuarioForm({
                           ...usuarioForm,
                           rol: e.target.value,
-                          padre_id: e.target.value === "PADRE" ? usuarioForm.padre_id : "",
-                          alumno_id:
-                            e.target.value === "ESTUDIANTE"
-                              ? usuarioForm.alumno_id
-                              : "",
+                          punto_id: rolRequiereUbicacion(e.target.value)
+                            ? usuarioForm.punto_id
+                            : "",
                         })
                       }
                     >
@@ -1014,50 +1059,24 @@ export default function ConfiguracionModulo({
                     </select>
                   </label>
 
-                  {usuarioForm.rol === "PADRE" && (
+                  {rolRequiereUbicacion(usuarioForm.rol) && (
                     <label style={ui.label}>
-                      Padre / representante vinculado *
+                      Ubicación de trabajo *
                       <select
                         style={ui.input}
-                        value={usuarioForm.padre_id}
+                        value={usuarioForm.punto_id}
                         onChange={(e) =>
                           setUsuarioForm({
                             ...usuarioForm,
-                            padre_id: e.target.value,
+                            punto_id: e.target.value,
                           })
                         }
                         required
                       >
-                        <option value="">Seleccionar padre</option>
-                        {padresVinculables.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.nombres} {p.apellidos}
-                            {p.cedula ? ` · ${p.cedula}` : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
-
-                  {usuarioForm.rol === "ESTUDIANTE" && (
-                    <label style={ui.label}>
-                      Estudiante vinculado *
-                      <select
-                        style={ui.input}
-                        value={usuarioForm.alumno_id}
-                        onChange={(e) =>
-                          setUsuarioForm({
-                            ...usuarioForm,
-                            alumno_id: e.target.value,
-                          })
-                        }
-                        required
-                      >
-                        <option value="">Seleccionar estudiante</option>
-                        {alumnosVinculables.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.nombres} {a.apellidos}
-                            {a.curso ? ` · ${a.curso} ${a.paralelo || ""}` : ""}
+                        <option value="">Seleccionar ubicación</option>
+                        {puntosOperacionUsuarios.map((punto) => (
+                          <option key={punto.id} value={punto.id}>
+                            {punto.nombre}
                           </option>
                         ))}
                       </select>
@@ -1109,7 +1128,8 @@ export default function ConfiguracionModulo({
               <div style={ui.securityList}>
                 <div>✓ ADMIN puede administrar usuarios de su institución.</div>
                 <div>✓ Solo SUPER_ADMIN puede crear o modificar otro SUPER_ADMIN.</div>
-                <div>✓ Un usuario no puede desactivar su propia cuenta.</div>
+                <div>✓ Un usuario no puede desactivar ni eliminar su propia cuenta.</div>
+                <div>✓ Cajeros y encargados se asignan a una ubicación de trabajo.</div>
                 <div>✓ Cambiar el rol requiere volver a iniciar sesión para aplicar el nuevo menú.</div>
                 <div>✓ El backend también bloquea APIs no autorizadas; no es solo ocultar botones.</div>
               </div>
@@ -1125,7 +1145,7 @@ export default function ConfiguracionModulo({
                     <th style={ui.th}>Nombre</th>
                     <th style={ui.th}>Correo</th>
                     <th style={ui.th}>Rol</th>
-                    <th style={ui.th}>Vinculado a</th>
+                    <th style={ui.th}>Ubicación</th>
                     <th style={ui.th}>Estado</th>
                     <th style={ui.th}>Acciones</th>
                   </tr>
@@ -1157,7 +1177,7 @@ export default function ConfiguracionModulo({
                           <td style={ui.td}>
                             <span style={ui.badge}>{item.rol || "-"}</span>
                           </td>
-                          <td style={ui.td}>{item.vinculado_nombre || "-"}</td>
+                          <td style={ui.td}>{item.punto_nombre || "-"}</td>
                           <td style={ui.td}>
                             <span
                               style={item.estado === false ? ui.badgeDanger : ui.badgeSuccess}
@@ -1190,6 +1210,14 @@ export default function ConfiguracionModulo({
                                 disabled={bloqueado || esYo}
                               >
                                 {item.estado === false ? "Activar" : "Desactivar"}
+                              </button>
+                              <button
+                                type="button"
+                                style={ui.dangerButton}
+                                onClick={() => eliminarUsuarioSistema(item)}
+                                disabled={bloqueado || esYo}
+                              >
+                                Eliminar
                               </button>
                             </div>
                           </td>
