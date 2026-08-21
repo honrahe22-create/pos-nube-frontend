@@ -23,6 +23,7 @@ const fechaHace30 = () => {
 const ui = {
   page: { padding: 28, background: "#f5f7fb", minHeight: "100%", color: "#1f2937" },
   top: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap", marginBottom: 20 },
+  topActions: { display: "flex", gap: 10, flexWrap: "wrap" },
   title: { margin: 0, fontSize: 32, fontWeight: 800 },
   sub: { margin: "6px 0 0", color: "#697386" },
   box: { background: "#fff", border: "1px solid #e6e9ef", borderRadius: 14, padding: 18, marginBottom: 18 },
@@ -33,6 +34,7 @@ const ui = {
   btn: { border: 0, borderRadius: 9, padding: "11px 16px", background: "#3154c6", color: "#fff", fontWeight: 800, cursor: "pointer" },
   btn2: { border: "1px solid #d6dce8", borderRadius: 9, padding: "10px 14px", background: "#fff", color: "#334155", fontWeight: 700, cursor: "pointer" },
   export: { border: "1px solid #9dd8b2", borderRadius: 9, padding: "10px 14px", background: "#f3fff7", color: "#16713b", fontWeight: 800, cursor: "pointer" },
+  exportPdf: { border: "1px solid #ef4444", borderRadius: 9, padding: "10px 14px", background: "#fff7f7", color: "#b91c1c", fontWeight: 800, cursor: "pointer" },
   tableWrap: { overflowX: "auto", background: "#fff", border: "1px solid #e6e9ef", borderRadius: 14 },
   table: { width: "100%", borderCollapse: "collapse", minWidth: 850 },
   th: { textAlign: "left", padding: "12px 14px", fontSize: 12, color: "#64748b", background: "#f3f6ff", borderBottom: "1px solid #e6e9ef", whiteSpace: "nowrap" },
@@ -83,6 +85,11 @@ export default function ProductosMasVendidosModulo({ API_URL, token, institucion
     [datos]
   );
 
+  const totalMonto = useMemo(
+    () => datos.reduce((a, r) => a + Number(r.monto_vendido || 0), 0),
+    [datos]
+  );
+
   const exportar = () => {
     if (!datos.length) return alert("No hay datos para exportar.");
     const filas = datos.map((r, i) => ({
@@ -94,9 +101,160 @@ export default function ProductosMasVendidosModulo({ API_URL, token, institucion
       "Monto vendido": Number(r.monto_vendido || 0),
     }));
     const ws = XLSX.utils.json_to_sheet(filas);
+    ws["!cols"] = [
+      { wch: 10 },
+      { wch: 30 },
+      { wch: 40 },
+      { wch: 12 },
+      { wch: 22 },
+      { wch: 18 },
+    ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Productos más vendidos");
     XLSX.writeFile(wb, `productos_mas_vendidos_${filtros.fecha_inicio}_${filtros.fecha_fin}.xlsx`);
+  };
+
+  const exportarPdf = () => {
+    if (!datos.length) return alert("No hay datos para exportar.");
+
+    const limpiarPdf = (valor) =>
+      String(valor ?? "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^\x20-\x7E]/g, "")
+        .replace(/[()\\]/g, (m) => `\\${m}`);
+
+    const cortar = (valor, maximo) =>
+      String(valor ?? "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, maximo);
+
+    const lineas = [
+      "POS NUBE - PRODUCTOS MAS VENDIDOS",
+      `Institucion: ${institucionNombre || "POS NUBE"}`,
+      `Fecha inicial: ${filtros.fecha_inicio || "-"}`,
+      `Fecha final: ${filtros.fecha_fin || "-"}`,
+      `Ubicacion: ${filtros.ubicacion || "Todas"}`,
+      `Busqueda: ${filtros.texto || "Sin filtro"}`,
+      "--------------------------------------------------------------------------------------",
+      "#   Nombre                    Precio    Unidades      Monto vendido",
+      "--------------------------------------------------------------------------------------",
+    ];
+
+    datos.forEach((r, i) => {
+      lineas.push(
+        [
+          String(i + 1).padStart(2, " "),
+          cortar(r.nombre || "-", 24).padEnd(24, " "),
+          dinero(r.precio).padStart(9, " "),
+          String(Number(r.total_unidades || 0)).padStart(10, " "),
+          dinero(r.monto_vendido).padStart(16, " "),
+        ].join(" ")
+      );
+
+      if (r.descripcion) {
+        lineas.push(`    Descripcion: ${cortar(r.descripcion, 65)}`);
+      }
+    });
+
+    lineas.push("--------------------------------------------------------------------------------------");
+    lineas.push(`TOTAL UNIDADES: ${totalUnidades}`);
+    lineas.push(`TOTAL MONTO VENDIDO: ${dinero(totalMonto)}`);
+
+    const pageWidth = 792;
+    const pageHeight = 612;
+    const marginLeft = 30;
+    const startY = 575;
+    const lineHeight = 11;
+    const linesPerPage = 46;
+    const paginas = [];
+
+    for (let i = 0; i < lineas.length; i += linesPerPage) {
+      paginas.push(lineas.slice(i, i + linesPerPage));
+    }
+
+    const objetos = [];
+    const agregarObjeto = (contenido) => {
+      objetos.push(contenido);
+      return objetos.length;
+    };
+
+    const fontObj = agregarObjeto(
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>"
+    );
+
+    const pageRefs = [];
+
+    paginas.forEach((lineasPagina) => {
+      let stream = "BT\n/F1 8 Tf\n";
+      let y = startY;
+
+      lineasPagina.forEach((linea) => {
+        stream += `1 0 0 1 ${marginLeft} ${y} Tm (${limpiarPdf(linea)}) Tj\n`;
+        y -= lineHeight;
+      });
+
+      stream += "ET";
+
+      const streamObj = agregarObjeto(
+        `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`
+      );
+
+      const pageObj = agregarObjeto(
+        `<< /Type /Page /Parent 0 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] ` +
+        `/Resources << /Font << /F1 ${fontObj} 0 R >> >> /Contents ${streamObj} 0 R >>`
+      );
+
+      pageRefs.push(pageObj);
+    });
+
+    const pagesObj = agregarObjeto(
+      `<< /Type /Pages /Kids [${pageRefs.map((n) => `${n} 0 R`).join(" ")}] /Count ${pageRefs.length} >>`
+    );
+
+    pageRefs.forEach((pageObj) => {
+      objetos[pageObj - 1] = objetos[pageObj - 1].replace(
+        "/Parent 0 0 R",
+        `/Parent ${pagesObj} 0 R`
+      );
+    });
+
+    const catalogObj = agregarObjeto(
+      `<< /Type /Catalog /Pages ${pagesObj} 0 R >>`
+    );
+
+    let pdf = "%PDF-1.4\n";
+    const offsets = [0];
+
+    objetos.forEach((objeto, index) => {
+      offsets.push(pdf.length);
+      pdf += `${index + 1} 0 obj\n${objeto}\nendobj\n`;
+    });
+
+    const xrefOffset = pdf.length;
+    pdf += `xref\n0 ${objetos.length + 1}\n`;
+    pdf += "0000000000 65535 f \n";
+
+    offsets.slice(1).forEach((offset) => {
+      pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+    });
+
+    pdf +=
+      `trailer\n<< /Size ${objetos.length + 1} /Root ${catalogObj} 0 R >>\n` +
+      `startxref\n${xrefOffset}\n%%EOF`;
+
+    const blob = new Blob([pdf], { type: "application/pdf" });
+    const url = window.URL.createObjectURL(blob);
+    const enlace = document.createElement("a");
+
+    enlace.href = url;
+    enlace.download = `productos_mas_vendidos_${filtros.fecha_inicio}_${filtros.fecha_fin}.pdf`;
+
+    document.body.appendChild(enlace);
+    enlace.click();
+    document.body.removeChild(enlace);
+    window.URL.revokeObjectURL(url);
   };
 
   return (
@@ -106,7 +264,16 @@ export default function ProductosMasVendidosModulo({ API_URL, token, institucion
           <h1 style={ui.title}>Productos más vendidos</h1>
           <p style={ui.sub}>Ranking real de productos vendidos · {institucionNombre}</p>
         </div>
-        <button style={ui.export} onClick={exportar}>Exportar Excel</button>
+
+        <div style={ui.topActions}>
+          <button style={ui.export} onClick={exportar}>
+            Exportar Excel
+          </button>
+
+          <button style={ui.exportPdf} onClick={exportarPdf}>
+            Exportar PDF
+          </button>
+        </div>
       </div>
 
       <div style={ui.box}>
@@ -115,21 +282,32 @@ export default function ProductosMasVendidosModulo({ API_URL, token, institucion
             <input type="date" style={ui.input} value={filtros.fecha_inicio}
               onChange={(e)=>setFiltros({...filtros,fecha_inicio:e.target.value})}/>
           </label>
+
           <label style={ui.field}><span style={ui.label}>Fecha final</span>
             <input type="date" style={ui.input} value={filtros.fecha_fin}
               onChange={(e)=>setFiltros({...filtros,fecha_fin:e.target.value})}/>
           </label>
+
           <label style={ui.field}><span style={ui.label}>Ubicación</span>
-            <select style={ui.input} value={filtros.ubicacion}
-              onChange={(e)=>setFiltros({...filtros,ubicacion:e.target.value})}>
-              <option value="">Todas</option><option value="PRINCIPAL">PRINCIPAL</option>
+            <select
+              style={ui.input}
+              value={filtros.ubicacion}
+              onChange={(e)=>setFiltros({...filtros,ubicacion:e.target.value})}
+            >
+              <option value="">Todas</option>
+              <option value="BAR PRINCIPAL">BAR PRINCIPAL</option>
+              <option value="KIOSKO">KIOSKO</option>
             </select>
           </label>
+
           <label style={ui.field}><span style={ui.label}>Buscar</span>
             <input style={ui.input} placeholder="Nombre, código o descripción"
               value={filtros.texto} onChange={(e)=>setFiltros({...filtros,texto:e.target.value})}/>
           </label>
-          <button style={ui.btn} onClick={consultar}>{cargando ? "Consultando..." : "Consultar"}</button>
+
+          <button style={ui.btn} onClick={consultar}>
+            {cargando ? "Consultando..." : "Consultar"}
+          </button>
         </div>
       </div>
 
