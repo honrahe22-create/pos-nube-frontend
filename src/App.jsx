@@ -7895,16 +7895,9 @@ if (institucionIdLogin) {
     // una hoja larga con gran espacio blanco debajo del comprobante.
     // ============================================================
     const cantidadProductosTicket = Math.max(1, items.length);
-    const altoTicketMm = "auto";
-    // El rollo térmico no debe llevar un alto fijo desde el navegador.
-    // La EC-PM-5890X debe avanzar únicamente lo que ocupa el contenido.
-    // Conservamos estas líneas para no alterar la estructura general del archivo.
-    // El ancho real se mantiene en 58 mm.
-    // El corte/avance final depende del controlador de la ticketera.
-    // No se fuerza tamaño Carta/A4 ni una longitud predeterminada.
-    // Esto evita generar una página térmica artificialmente larga.
-    // La impresión sigue usando el mismo flujo existente del POS.
-    // Ajuste exclusivo para impresión de tickets desde PC.
+    // El alto final se calcula DESPUÉS de renderizar el ticket en el iframe.
+    // Así evitamos que Chrome lo divida en dos páginas y también evitamos
+    // desperdiciar una tira larga de papel en blanco.
 
     const html = `
       <!doctype html>
@@ -7920,7 +7913,7 @@ if (institucionIdLogin) {
                - Sin longitud fija impuesta por el navegador.
                ============================================================ */
             @page {
-              size: 58mm auto;
+              size: 58mm 180mm;
               margin: 0;
             }
 
@@ -8162,6 +8155,60 @@ if (institucionIdLogin) {
 
     const ejecutarImpresion = () => {
       try {
+        const ticketElemento = documento.querySelector(".ticket");
+
+        if (ticketElemento) {
+          // Chrome trabaja aproximadamente a 96 dpi:
+          // 1 mm = 96 / 25.4 px = 3.7795 px.
+          const altoPx = Math.ceil(ticketElemento.getBoundingClientRect().height);
+          const altoContenidoMm = altoPx / 3.7795275591;
+
+          // Dejamos un pequeño margen de seguridad al final para que
+          // TOTAL / forma de pago / pie nunca queden en una segunda hoja.
+          const altoPaginaMm = Math.max(
+            85,
+            Math.ceil(altoContenidoMm + 10)
+          );
+
+          const estiloPagina = documento.createElement("style");
+          estiloPagina.setAttribute("data-pos-ticket-page", "true");
+          estiloPagina.textContent = `
+            @page {
+              size: 58mm ${altoPaginaMm}mm !important;
+              margin: 0 !important;
+            }
+
+            html,
+            body {
+              width: 58mm !important;
+              min-width: 58mm !important;
+              max-width: 58mm !important;
+              height: ${altoPaginaMm}mm !important;
+              min-height: ${altoPaginaMm}mm !important;
+              max-height: ${altoPaginaMm}mm !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              overflow: hidden !important;
+            }
+
+            .ticket {
+              page-break-inside: avoid !important;
+              break-inside: avoid-page !important;
+            }
+          `;
+
+          documento.head.appendChild(estiloPagina);
+
+          console.log(
+            "Ticket PC preparado:",
+            {
+              productos: cantidadProductosTicket,
+              altoContenidoMm: Number(altoContenidoMm.toFixed(1)),
+              altoPaginaMm,
+            }
+          );
+        }
+
         iframe.contentWindow.focus();
         iframe.contentWindow.print();
       } catch (error) {
@@ -8174,11 +8221,11 @@ if (institucionIdLogin) {
           if (document.body.contains(iframe)) {
             document.body.removeChild(iframe);
           }
-        }, 2500);
+        }, 3500);
       }
     };
 
-    window.setTimeout(ejecutarImpresion, 650);
+    window.setTimeout(ejecutarImpresion, 900);
   };
 
   const obtenerTicketVenta = async (ventaId) => {
