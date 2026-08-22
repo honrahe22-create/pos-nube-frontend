@@ -7609,7 +7609,7 @@ if (institucionIdLogin) {
                 html,
                 body {
                   width: auto !important;
-                  height: ${altoTicketMm}mm !important;
+                  height: auto !important;
                   overflow: visible !important;
                 }
 
@@ -7895,16 +7895,16 @@ if (institucionIdLogin) {
     // una hoja larga con gran espacio blanco debajo del comprobante.
     // ============================================================
     const cantidadProductosTicket = Math.max(1, items.length);
-    const altoTicketMm = Math.min(
-      180,
-      Math.max(
-        68,
-        54 +
-          cantidadProductosTicket * 6 +
-          (mostrarSaldo ? 8 : 0) +
-          (ticket.observacion ? 8 : 0)
-      )
-    );
+    const altoTicketMm = "auto";
+    // El rollo térmico no debe llevar un alto fijo desde el navegador.
+    // La EC-PM-5890X debe avanzar únicamente lo que ocupa el contenido.
+    // Conservamos estas líneas para no alterar la estructura general del archivo.
+    // El ancho real se mantiene en 58 mm.
+    // El corte/avance final depende del controlador de la ticketera.
+    // No se fuerza tamaño Carta/A4 ni una longitud predeterminada.
+    // Esto evita generar una página térmica artificialmente larga.
+    // La impresión sigue usando el mismo flujo existente del POS.
+    // Ajuste exclusivo para impresión de tickets desde PC.
 
     const html = `
       <!doctype html>
@@ -7916,11 +7916,11 @@ if (institucionIdLogin) {
             /* ============================================================
                TICKET PC 58 MM
                - Ancho real para la ticketera EC-PM-5890X.
-               - Alto calculado según el contenido de la venta.
-               - Sin espacio blanco gigante al final.
+               - Alto libre según el contenido real de la venta.
+               - Sin longitud fija impuesta por el navegador.
                ============================================================ */
             @page {
-              size: 58mm ${altoTicketMm}mm;
+              size: 58mm auto;
               margin: 0;
             }
 
@@ -7929,16 +7929,16 @@ if (institucionIdLogin) {
               width: 58mm !important;
               min-width: 58mm !important;
               max-width: 58mm !important;
-              height: ${altoTicketMm}mm !important;
-              min-height: ${altoTicketMm}mm !important;
-              max-height: ${altoTicketMm}mm !important;
+              height: auto !important;
+              min-height: 0 !important;
+              max-height: none !important;
               margin: 0 !important;
               padding: 0 !important;
               background: #ffffff;
               color: #000000;
               font-family: Arial, Helvetica, sans-serif;
               font-size: 9px;
-              overflow: hidden !important;
+              overflow: visible !important;
             }
 
             * {
