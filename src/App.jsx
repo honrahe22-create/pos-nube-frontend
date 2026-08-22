@@ -31,8 +31,7 @@ const MENU_POR_ROL = {
   SUPER_ADMIN: ["*"],
   ADMIN: ["*"],
   ENCARGADO_LOCAL: [
-    /* dashboard oculto */,
-    "consultar_ventas",
+    /* dashboard y módulo Ventas ocultos */,
     "nueva_orden",
     "alumnos",
     "profesores",
@@ -43,7 +42,6 @@ const MENU_POR_ROL = {
     "cierre_caja",
   ],
   CAJERO: [
-    "consultar_ventas",
     "nueva_orden",
     "alumnos",
     "profesores",
@@ -68,7 +66,7 @@ const MENU_POR_ROL = {
 const VISTA_INICIAL_POR_ROL = {
   SUPER_ADMIN: { vista: "dashboard" },
   ADMIN: { vista: "dashboard" },
-  ENCARGADO_LOCAL: { vista: "ventas", ventas: "consultar" },
+  ENCARGADO_LOCAL: { vista: "ventas", ventas: "registrar" },
   CAJERO: { vista: "ventas", ventas: "registrar" },
   AUDITOR: { vista: "reporte_cierre" },
   PADRE: { vista: "portal" },
@@ -7904,7 +7902,7 @@ if (institucionIdLogin) {
                - Compatible con impresoras térmicas 80 mm.
                ============================================================ */
             @page {
-              size: 80mm auto;
+              size: 80mm 200mm;
               margin: 0;
             }
 
@@ -7919,7 +7917,7 @@ if (institucionIdLogin) {
               color: #000000;
               font-family: Arial, Helvetica, sans-serif;
               font-size: 11px;
-              overflow: visible !important;
+              overflow: hidden !important;
             }
 
             * {
@@ -8003,17 +8001,20 @@ if (institucionIdLogin) {
                 max-width: 80mm !important;
                 margin: 0 !important;
                 padding: 0 !important;
-                overflow: visible !important;
+                overflow: hidden !important;
+                height: auto !important;
               }
 
               .ticket {
                 width: 76mm !important;
                 max-width: 76mm !important;
                 margin: 0 auto !important;
-                page-break-after: auto !important;
-                break-after: auto !important;
-                page-break-before: auto !important;
-                break-before: auto !important;
+                page-break-after: avoid !important;
+                break-after: avoid-page !important;
+                page-break-before: avoid !important;
+                break-before: avoid-page !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid-page !important;
               }
             }
           </style>
@@ -16650,81 +16651,6 @@ onClick={guardarEgreso}
           </div>
         </div>
 
-        {ventaForm.metodo_pago === "EFECTIVO" && (
-          <>
-            <div
-              style={{
-                minWidth: 135,
-                padding: "10px 14px",
-                borderRadius: 10,
-                background: "#ffffff",
-                color: "#111827",
-                textAlign: "center",
-              }}
-            >
-              <div style={{ fontSize: 12, fontWeight: 700 }}>Recibido</div>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={efectivoRecibidoNuevaOrden}
-                onChange={(e) => setEfectivoRecibidoNuevaOrden(e.target.value)}
-                placeholder="0.00"
-                style={{
-                  width: 100,
-                  marginTop: 3,
-                  border: "1px solid #cbd5e1",
-                  borderRadius: 7,
-                  padding: "5px 7px",
-                  fontSize: 18,
-                  fontWeight: 900,
-                  textAlign: "center",
-                }}
-              />
-            </div>
-
-            <div
-              style={{
-                minWidth: 145,
-                padding: "10px 14px",
-                borderRadius: 10,
-                background: "#fef3c7",
-                color: "#111827",
-                textAlign: "center",
-              }}
-            >
-              <div style={{ fontSize: 12, fontWeight: 700 }}>Vuelto a entregar</div>
-              <div style={{ fontSize: 24, fontWeight: 900 }}>
-                {formatearMoneda(
-                  Math.max(
-                    0,
-                    Number(efectivoRecibidoNuevaOrden || 0) -
-                      Number(totalVentaCalculado || 0)
-                  )
-                )}
-              </div>
-            </div>
-          </>
-        )}
-
-        <div
-          style={{
-            minWidth: 125,
-            padding: "10px 14px",
-            borderRadius: 10,
-            background: "#d9f4df",
-            color: "#111827",
-            textAlign: "center",
-          }}
-        >
-          <div style={{ fontSize: 12, fontWeight: 700 }}>Saldo</div>
-          <div style={{ fontSize: 24, fontWeight: 900 }}>
-            {formatearMoneda(
-              alumnoVentaSeleccionado?.saldo ||
-                profesorVentaSeleccionado?.saldo ||
-                0
-            )}
-          </div>
         </div>
       </div>
     </div>
@@ -16950,7 +16876,7 @@ onClick={guardarEgreso}
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
+              gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
               gap: 8,
             }}
           >
@@ -17023,19 +16949,37 @@ onClick={guardarEgreso}
                       }
 
                       e.preventDefault();
+                      e.stopPropagation();
                       ventaRapidaBloqueadaRef.current = true;
 
-                      // El primer clic del doble clic conserva el comportamiento actual:
-                      // agrega el producto. El segundo clic confirma la orden completa.
-                      // crearVenta ya imprime automáticamente SOLO después de que
-                      // el backend confirma que la venta fue registrada.
+                      // DOBLE CLIC DE CAJA:
+                      // garantizamos que el producto esté en la orden antes de enviarla.
+                      setVentaItems((prev) => {
+                        const lista = Array.isArray(prev) ? prev : [];
+                        const existe = lista.some(
+                          (item) => String(item.producto_id) === String(producto.id)
+                        );
+
+                        if (existe) return lista;
+
+                        return [
+                          ...lista,
+                          {
+                            producto_id: String(producto.id),
+                            cantidad: "1",
+                          },
+                        ];
+                      });
+
+                      // Esperamos a que React pinte el producto/cantidad y luego
+                      // usamos exactamente el mismo flujo seguro de "Crear orden".
                       window.setTimeout(() => {
                         if (formNuevaOrdenRef.current) {
                           formNuevaOrdenRef.current.requestSubmit();
                         } else {
                           ventaRapidaBloqueadaRef.current = false;
                         }
-                      }, 80);
+                      }, 250);
                     }}
                     title="1 clic: agregar producto · Doble clic: cobrar e imprimir"
                     onKeyDown={(e) => {
@@ -17599,6 +17543,103 @@ onClick={guardarEgreso}
                 <div style={{ fontSize: 13 }}>Total de la orden</div>
                 <div style={{ fontSize: 30, fontWeight: 900 }}>
                   {formatearMoneda(totalVentaCalculado)}
+                </div>
+              </div>
+
+              {/* RECIBIDO / VUELTO / SALDO - debajo del total */}
+              <div
+                style={{
+                  marginTop: 12,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                  gap: 10,
+                  alignItems: "stretch",
+                }}
+              >
+                <div
+                  style={{
+                    minWidth: 0,
+                    padding: "10px 8px",
+                    borderRadius: 10,
+                    background: "#ffffff",
+                    border: "1px solid #cbd5e1",
+                    color: "#111827",
+                    textAlign: "center",
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 800 }}>Recibido</div>
+                  {ventaForm.metodo_pago === "EFECTIVO" ? (
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={efectivoRecibidoNuevaOrden}
+                      onChange={(e) => setEfectivoRecibidoNuevaOrden(e.target.value)}
+                      placeholder="0.00"
+                      style={{
+                        width: "100%",
+                        boxSizing: "border-box",
+                        marginTop: 5,
+                        border: "1px solid #94a3b8",
+                        borderRadius: 7,
+                        padding: "7px 5px",
+                        fontSize: 18,
+                        fontWeight: 900,
+                        textAlign: "center",
+                        background: "#ffffff",
+                      }}
+                    />
+                  ) : (
+                    <div style={{ marginTop: 7, fontSize: 20, fontWeight: 900 }}>
+                      -
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    minWidth: 0,
+                    padding: "10px 8px",
+                    borderRadius: 10,
+                    background: "#fef3c7",
+                    border: "1px solid #fde68a",
+                    color: "#111827",
+                    textAlign: "center",
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 800 }}>Vuelto</div>
+                  <div style={{ marginTop: 7, fontSize: 20, fontWeight: 900 }}>
+                    {ventaForm.metodo_pago === "EFECTIVO"
+                      ? formatearMoneda(
+                          Math.max(
+                            0,
+                            Number(efectivoRecibidoNuevaOrden || 0) -
+                              Number(totalVentaCalculado || 0)
+                          )
+                        )
+                      : "-"}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    minWidth: 0,
+                    padding: "10px 8px",
+                    borderRadius: 10,
+                    background: "#d9f4df",
+                    border: "1px solid #bbf7d0",
+                    color: "#111827",
+                    textAlign: "center",
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 800 }}>Saldo</div>
+                  <div style={{ marginTop: 7, fontSize: 20, fontWeight: 900 }}>
+                    {formatearMoneda(
+                      alumnoVentaSeleccionado?.saldo ||
+                        profesorVentaSeleccionado?.saldo ||
+                        0
+                    )}
+                  </div>
                 </div>
               </div>
               <button
