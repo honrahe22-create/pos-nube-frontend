@@ -7904,7 +7904,7 @@ if (institucionIdLogin) {
       <html>
         <head>
           <meta charset="utf-8" />
-          <title>Ticket #${escaparHtmlTicket(ticket.id)}</title>
+          <title></title>
           <style>
             /* ============================================================
                TICKET PC 58 MM
@@ -7913,7 +7913,7 @@ if (institucionIdLogin) {
                - Sin longitud fija impuesta por el navegador.
                ============================================================ */
             @page {
-              size: 58mm 180mm;
+              size: 58mm 120mm;
               margin: 0;
             }
 
@@ -8155,6 +8155,7 @@ if (institucionIdLogin) {
 
     const ejecutarImpresion = () => {
       try {
+        documento.title = "";
         const ticketElemento = documento.querySelector(".ticket");
 
         if (ticketElemento) {
@@ -8166,8 +8167,8 @@ if (institucionIdLogin) {
           // Dejamos un pequeño margen de seguridad al final para que
           // TOTAL / forma de pago / pie nunca queden en una segunda hoja.
           const altoPaginaMm = Math.max(
-            85,
-            Math.ceil(altoContenidoMm + 10)
+            72,
+            Math.ceil(altoContenidoMm + 5)
           );
 
           const estiloPagina = documento.createElement("style");
@@ -17211,10 +17212,11 @@ onClick={guardarEgreso}
                       <div
                         style={{
                           marginTop: 10,
-                          display: "grid",
-                          gridTemplateColumns: "90px minmax(0, 1fr)",
-                          gap: 8,
-                          alignItems: "center",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 6,
+                          alignItems: "stretch",
+                          width: "100%",
                         }}
                       >
                         <label
@@ -17222,6 +17224,8 @@ onClick={guardarEgreso}
                             fontSize: 13,
                             fontWeight: 800,
                             color: "#334155",
+                            textAlign: "center",
+                            display: "block",
                           }}
                         >
                           Cantidad
@@ -17324,11 +17328,12 @@ onClick={guardarEgreso}
                           style={{
                             width: "100%",
                             minWidth: 0,
+                            height: 44,
                             boxSizing: "border-box",
-                            border: "1px solid #94a3b8",
+                            border: "2px solid #64748b",
                             borderRadius: 8,
-                            padding: "10px 12px",
-                            fontSize: 16,
+                            padding: "8px 10px",
+                            fontSize: 18,
                             fontWeight: 900,
                             textAlign: "center",
                             background: "#ffffff",
