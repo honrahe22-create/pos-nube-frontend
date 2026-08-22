@@ -717,10 +717,13 @@ const [egresoForm, setEgresoForm] = useState({
   usuario: "",
   fecha: "",
   nombre_egreso: "",
+  proveedor_id: "",
+  proveedor_nombre: "",
   total: "",
   descripcion: "",
   estado: "ACTIVO",
   numero_factura: "",
+  tipo_documento: "FACTURA",
   tipo_egreso: "Efectivo",
 });
 
@@ -8710,7 +8713,12 @@ Disponible: ${formatearMoneda(
       const total = Number(egresoForm.total || 0);
       if (!institucionId || !token) throw new Error("Sesión inválida");
       if (!egresoForm.fecha || !egresoForm.nombre_egreso || total <= 0) {
-        alert("Fecha, nombre del egreso y total mayor a cero son obligatorios.");
+        alert("Fecha, proveedor y total mayor a cero son obligatorios.");
+        return;
+      }
+
+      if (!egresoForm.tipo_documento) {
+        alert("Selecciona el tipo de documento.");
         return;
       }
 
@@ -8727,14 +8735,18 @@ Disponible: ${formatearMoneda(
           ...egresoForm,
           institucion_id: Number(institucionId),
           total,
+          // Los egresos de caja siempre afectan efectivo.
+          tipo_egreso: "Efectivo",
         }),
       });
       const data = await respuesta.json();
       if (!respuesta.ok) throw new Error(data.message || data.error || "No se pudo guardar el egreso");
 
       setEgresoForm({
-        negocio: "", usuario: "", fecha: "", nombre_egreso: "", total: "",
-        descripcion: "", estado: "ACTIVO", numero_factura: "", tipo_egreso: "Efectivo",
+        negocio: "", usuario: "", fecha: "", nombre_egreso: "",
+        proveedor_id: "", proveedor_nombre: "", total: "",
+        descripcion: "", estado: "ACTIVO", numero_factura: "",
+        tipo_documento: "FACTURA", tipo_egreso: "Efectivo",
       });
       setEditandoEgresoId(null);
       setMostrarCrearEgreso(false);
@@ -10965,10 +10977,16 @@ if (!usuario) {
           onClick={() => {
             const abrir = !mostrarCrearEgreso;
 
+            if (abrir) {
+              cargarProveedoresStock();
+            }
+
             if (abrir && !editandoEgresoId) {
               setEgresoForm((actual) => ({
                 ...actual,
                 fecha: actual.fecha || obtenerFechaEcuadorISO(),
+                tipo_documento: actual.tipo_documento || "FACTURA",
+                tipo_egreso: "Efectivo",
               }));
             }
 
@@ -11022,16 +11040,68 @@ if (!usuario) {
           </div>
 
           <div style={styles.filterField}>
-            <label style={styles.label}>Nombre del egreso</label>
-            <input
-              type="text"
-              value={egresoForm.nombre_egreso}
-              onChange={(e) =>
-                setEgresoForm({ ...egresoForm, nombre_egreso: e.target.value })
-              }
+            <label style={styles.label}>Nombre del proveedor</label>
+            <select
+              value={egresoForm.proveedor_id}
+              onChange={(e) => {
+                const proveedorId = e.target.value;
+                const proveedor = proveedoresStock.find(
+                  (item) => Number(item.id) === Number(proveedorId)
+                );
+
+                setEgresoForm({
+                  ...egresoForm,
+                  proveedor_id: proveedorId,
+                  proveedor_nombre: proveedor?.nombre || "",
+                  // Se conserva nombre_egreso por compatibilidad con cierres/reportes existentes.
+                  nombre_egreso: proveedor?.nombre || "",
+                });
+              }}
               style={styles.input}
-              placeholder="Ej. MERCADILLO"
-            />
+            >
+              <option value="">Seleccionar proveedor</option>
+              {proveedoresStock.map((proveedor) => (
+                <option key={proveedor.id} value={proveedor.id}>
+                  {proveedor.nombre}
+                  {proveedor.ruc ? ` - ${proveedor.ruc}` : ""}
+                </option>
+              ))}
+            </select>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+              <button
+                type="button"
+                style={styles.outlineButton}
+                onClick={() =>
+                  document.getElementById("importar-proveedores-egresos")?.click()
+                }
+                disabled={importandoProveedoresStock}
+              >
+                {importandoProveedoresStock
+                  ? "Importando..."
+                  : "Importar proveedores"}
+              </button>
+
+              <button
+                type="button"
+                style={styles.outlineButton}
+                onClick={descargarPlantillaProveedoresStock}
+              >
+                Descargar plantilla
+              </button>
+
+              <input
+                id="importar-proveedores-egresos"
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={importarProveedoresStockExcel}
+                style={{ display: "none" }}
+              />
+            </div>
+
+            <div style={{ fontSize: 12, color: "#64748b", marginTop: 6 }}>
+              Excel: NOMBRE | RUC_CEDULA
+            </div>
           </div>
 
           <div style={styles.filterField}>
@@ -11065,17 +11135,34 @@ if (!usuario) {
           </div>
 
           <div style={styles.filterField}>
-            <label style={styles.label}>Tipo de egreso</label>
+            <label style={styles.label}>Tipo de documento</label>
             <select
-              value={egresoForm.tipo_egreso}
+              value={egresoForm.tipo_documento}
               onChange={(e) =>
-                setEgresoForm({ ...egresoForm, tipo_egreso: e.target.value })
+                setEgresoForm({
+                  ...egresoForm,
+                  tipo_documento: e.target.value,
+                  tipo_egreso: "Efectivo",
+                })
               }
               style={styles.input}
             >
-              <option value="Efectivo">Efectivo</option>
-              <option value="Transferencia">Transferencia</option>
+              <option value="FACTURA">FACTURA</option>
+              <option value="NOTA_DE_VENTA">NOTA DE VENTA</option>
+              <option value="RECIBO_SIMPLE">RECIBO SIMPLE</option>
+              <option value="ANTICIPO_SUELDO">ANTICIPO SUELDO</option>
+              <option value="PROVISIONAL">PROVISIONAL</option>
             </select>
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.label}>Tipo de egreso</label>
+            <input
+              type="text"
+              value="Efectivo"
+              readOnly
+              style={{ ...styles.input, background: "#f1f5f9", color: "#334155" }}
+            />
           </div>
 
           <div style={styles.filterField}>
@@ -11191,11 +11278,12 @@ onClick={guardarEgreso}
             <th style={styles.th}>Negocio</th>
             <th style={styles.th}>Usuario</th>
             <th style={styles.th}>Fecha</th>
-            <th style={styles.th}>Nombre del egreso</th>
+            <th style={styles.th}>Nombre del proveedor</th>
             <th style={styles.th}>Total</th>
             <th style={styles.th}>Descripción</th>
             <th style={styles.th}>Estado</th>
-            <th style={styles.th}>Número de factura</th>
+            <th style={styles.th}>Número de documento</th>
+            <th style={styles.th}>Tipo de documento</th>
             <th style={styles.th}>Tipo de egreso</th>
             <th style={styles.th}>Acciones</th>
           </tr>
@@ -11233,7 +11321,10 @@ onClick={guardarEgreso}
                 <td style={styles.td}>{egreso.descripcion}</td>
                 <td style={styles.td}>{egreso.estado}</td>
                 <td style={styles.td}>{egreso.numero_factura}</td>
-                <td style={styles.td}>{egreso.tipo_egreso}</td>
+                <td style={styles.td}>
+                  {String(egreso.tipo_documento || "FACTURA").replaceAll("_", " ")}
+                </td>
+                <td style={styles.td}>{egreso.tipo_egreso || "Efectivo"}</td>
                 <td style={styles.td}>
                   {puede("egresos.gestionar") ? (
                     <div style={{ display: "flex", gap: 8 }}>
@@ -11244,12 +11335,23 @@ onClick={guardarEgreso}
                             negocio: egreso.negocio || "",
                             usuario: egreso.usuario || "",
                             fecha: normalizarFechaISO(egreso.fecha) || "",
-                            nombre_egreso: egreso.nombre_egreso || "",
+                            nombre_egreso:
+                              egreso.proveedor_nombre ||
+                              egreso.nombre_egreso ||
+                              "",
+                            proveedor_id: egreso.proveedor_id
+                              ? String(egreso.proveedor_id)
+                              : "",
+                            proveedor_nombre:
+                              egreso.proveedor_nombre ||
+                              egreso.nombre_egreso ||
+                              "",
                             total: egreso.total || "",
                             descripcion: egreso.descripcion || "",
                             estado: egreso.estado || "ACTIVO",
                             numero_factura: egreso.numero_factura || "",
-                            tipo_egreso: egreso.tipo_egreso || "Efectivo",
+                            tipo_documento: egreso.tipo_documento || "FACTURA",
+                            tipo_egreso: "Efectivo",
                           });
                           setEditandoEgresoId(egreso.id);
                           setMostrarCrearEgreso(true);
