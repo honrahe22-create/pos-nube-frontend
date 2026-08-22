@@ -7896,13 +7896,13 @@ if (institucionIdLogin) {
     // ============================================================
     const cantidadProductosTicket = Math.max(1, items.length);
     const altoTicketMm = Math.min(
-      260,
+      180,
       Math.max(
-        78,
-        60 +
-          cantidadProductosTicket * 7 +
-          (mostrarSaldo ? 10 : 0) +
-          (ticket.observacion ? 10 : 0)
+        68,
+        54 +
+          cantidadProductosTicket * 6 +
+          (mostrarSaldo ? 8 : 0) +
+          (ticket.observacion ? 8 : 0)
       )
     );
 
@@ -7929,12 +7929,15 @@ if (institucionIdLogin) {
               width: 58mm !important;
               min-width: 58mm !important;
               max-width: 58mm !important;
+              height: ${altoTicketMm}mm !important;
+              min-height: ${altoTicketMm}mm !important;
+              max-height: ${altoTicketMm}mm !important;
               margin: 0 !important;
               padding: 0 !important;
               background: #ffffff;
               color: #000000;
               font-family: Arial, Helvetica, sans-serif;
-              font-size: 9.5px;
+              font-size: 9px;
               overflow: hidden !important;
             }
 
@@ -7943,10 +7946,10 @@ if (institucionIdLogin) {
             }
 
             .ticket {
-              width: 54mm !important;
-              max-width: 54mm !important;
+              width: 56mm !important;
+              max-width: 56mm !important;
               margin: 0 auto !important;
-              padding: 2mm 1.5mm 2.5mm !important;
+              padding: 1.5mm 1.2mm 1.5mm !important;
               break-inside: avoid;
               page-break-inside: avoid;
             }
@@ -7956,19 +7959,19 @@ if (institucionIdLogin) {
             }
 
             .titulo {
-              font-size: 14px;
+              font-size: 12px;
               font-weight: 800;
               margin-bottom: 1px;
             }
 
             .institucion {
-              font-size: 10.5px;
+              font-size: 10px;
               font-weight: 700;
             }
 
             .separador {
               border-top: 1px dashed #000;
-              margin: 4px 0;
+              margin: 3px 0;
             }
 
             .datos {
@@ -7982,7 +7985,7 @@ if (institucionIdLogin) {
 
             td {
               vertical-align: top;
-              padding: 1.5px 0;
+              padding: 1px 0;
             }
 
             .producto {
@@ -8001,12 +8004,12 @@ if (institucionIdLogin) {
             }
 
             .total {
-              font-size: 13px;
+              font-size: 12px;
               font-weight: 800;
             }
 
             .pie {
-              margin-top: 5px;
+              margin-top: 3px;
               text-align: center;
               line-height: 1.25;
             }
