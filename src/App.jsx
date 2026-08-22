@@ -31,7 +31,7 @@ const MENU_POR_ROL = {
   SUPER_ADMIN: ["*"],
   ADMIN: ["*"],
   ENCARGADO_LOCAL: [
-    "dashboard",
+    /* dashboard oculto */,
     "consultar_ventas",
     "nueva_orden",
     "alumnos",
@@ -68,7 +68,7 @@ const MENU_POR_ROL = {
 const VISTA_INICIAL_POR_ROL = {
   SUPER_ADMIN: { vista: "dashboard" },
   ADMIN: { vista: "dashboard" },
-  ENCARGADO_LOCAL: { vista: "dashboard" },
+  ENCARGADO_LOCAL: { vista: "ventas", ventas: "consultar" },
   CAJERO: { vista: "ventas", ventas: "registrar" },
   AUDITOR: { vista: "reporte_cierre" },
   PADRE: { vista: "portal" },
@@ -575,6 +575,9 @@ const [localNuevaOrden, setLocalNuevaOrden] = useState("PRINCIPAL");
 const [fechaNuevaOrden, setFechaNuevaOrden] = useState(
   new Date().toISOString().slice(0, 10)
 );
+const [efectivoRecibidoNuevaOrden, setEfectivoRecibidoNuevaOrden] = useState("");
+const formNuevaOrdenRef = useRef(null);
+const ventaRapidaBloqueadaRef = useRef(false);
 
 //////////////////////////////
 // PROFESORES
@@ -8555,10 +8558,13 @@ Disponible: ${formatearMoneda(
       setTipoUsuarioNuevaOrden("TODOS");
     }
 
+    setEfectivoRecibidoNuevaOrden("");
     alert("Venta registrada correctamente. Nueva orden lista.");
   } catch (error) {
     console.error("Error creando venta:", error);
     alert("No se pudo registrar la venta");
+  } finally {
+    ventaRapidaBloqueadaRef.current = false;
   }
 };
 
@@ -16480,6 +16486,22 @@ onClick={guardarEgreso}
   >
     Consultar ventas
   </button>
+
+  {vistaVentasInterna === "registrar" && (
+    <input
+      type="text"
+      value={busquedaProductoNuevaOrden}
+      onChange={(e) => setBusquedaProductoNuevaOrden(e.target.value)}
+      placeholder="Buscar producto..."
+      style={{
+        ...styles.input,
+        width: 260,
+        maxWidth: "100%",
+        marginLeft: 8,
+        background: "#ffffff",
+      }}
+    />
+  )}
 </div>
 
           {vistaVentasInterna === "registrar" && (
@@ -16598,6 +16620,63 @@ onClick={guardarEgreso}
             {formatearMoneda(totalVentaCalculado)}
           </div>
         </div>
+
+        {ventaForm.metodo_pago === "EFECTIVO" && (
+          <>
+            <div
+              style={{
+                minWidth: 135,
+                padding: "10px 14px",
+                borderRadius: 10,
+                background: "#ffffff",
+                color: "#111827",
+                textAlign: "center",
+              }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 700 }}>Recibido</div>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={efectivoRecibidoNuevaOrden}
+                onChange={(e) => setEfectivoRecibidoNuevaOrden(e.target.value)}
+                placeholder="0.00"
+                style={{
+                  width: 100,
+                  marginTop: 3,
+                  border: "1px solid #cbd5e1",
+                  borderRadius: 7,
+                  padding: "5px 7px",
+                  fontSize: 18,
+                  fontWeight: 900,
+                  textAlign: "center",
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                minWidth: 145,
+                padding: "10px 14px",
+                borderRadius: 10,
+                background: "#fef3c7",
+                color: "#111827",
+                textAlign: "center",
+              }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 700 }}>Vuelto a entregar</div>
+              <div style={{ fontSize: 24, fontWeight: 900 }}>
+                {formatearMoneda(
+                  Math.max(
+                    0,
+                    Number(efectivoRecibidoNuevaOrden || 0) -
+                      Number(totalVentaCalculado || 0)
+                  )
+                )}
+              </div>
+            </div>
+          </>
+        )}
 
         <div
           style={{
@@ -16789,165 +16868,14 @@ onClick={guardarEgreso}
     )}
 
     {/* CONTENIDO PRINCIPAL */}
-    <form onSubmit={crearVenta}>
+    <form ref={formNuevaOrdenRef} onSubmit={crearVenta}>
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "280px minmax(0, 1fr)",
+          gridTemplateColumns: "minmax(0, 1fr)",
           minHeight: 650,
         }}
       >
-        {/* LATERAL */}
-        <aside
-          style={{
-            background: "#eef4ff",
-            borderRight: "1px solid #dbe3f0",
-            padding: 16,
-          }}
-        >
-          <label style={{ ...styles.label, fontSize: 13 }}>
-            Escanea el código de barras
-          </label>
-          <input
-            type="text"
-            value={codigoBarraNuevaOrden}
-            onChange={(e) => setCodigoBarraNuevaOrden(e.target.value)}
-            placeholder="Código de barras"
-            style={{
-              ...styles.input,
-              background: "#ffffff",
-              marginBottom: 14,
-            }}
-          />
-
-          <input
-            type="text"
-            value={busquedaProductoNuevaOrden}
-            onChange={(e) => setBusquedaProductoNuevaOrden(e.target.value)}
-            placeholder="Buscar productos"
-            style={{
-              ...styles.input,
-              background: "#ffffff",
-              marginBottom: 18,
-            }}
-          />
-
-          <div
-            style={{
-              textAlign: "center",
-              fontSize: 20,
-              fontWeight: 900,
-              color: "#1623a7",
-              marginBottom: 12,
-            }}
-          >
-            Categorías
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setCategoriaNuevaOrden("TODOS")}
-            style={{
-              width: "100%",
-              border:
-                categoriaNuevaOrden === "TODOS"
-                  ? "2px solid #2536db"
-                  : "1px solid #d1d5db",
-              background:
-                categoriaNuevaOrden === "TODOS" ? "#dbe7ff" : "#ffffff",
-              color: "#1726a4",
-              borderRadius: 8,
-              padding: "14px 12px",
-              marginBottom: 8,
-              fontWeight: 800,
-              cursor: "pointer",
-            }}
-          >
-            TODOS
-          </button>
-
-          {[
-            ...new Set(
-              productosActivos
-                .map((p) => String(p.categoria || "").trim())
-                .filter(Boolean)
-            ),
-          ].map((categoria) => (
-            <button
-              type="button"
-              key={categoria}
-              onClick={() => setCategoriaNuevaOrden(categoria)}
-              style={{
-                width: "100%",
-                border:
-                  categoriaNuevaOrden === categoria
-                    ? "2px solid #2536db"
-                    : "1px solid #d1d5db",
-                background:
-                  categoriaNuevaOrden === categoria ? "#dbe7ff" : "#ffffff",
-                color: "#1726a4",
-                borderRadius: 8,
-                padding: "14px 12px",
-                marginBottom: 8,
-                fontWeight: 800,
-                cursor: "pointer",
-                textTransform: "uppercase",
-              }}
-            >
-              {categoria}
-            </button>
-          ))}
-
-          <div style={{ marginTop: 22 }}>
-            <button
-              type="button"
-              onClick={() => setModoNuevaOrden("identificar")}
-              style={{
-                width: "100%",
-                border: "1px solid #2536db",
-                background: "#ffffff",
-                color: "#2536db",
-                borderRadius: 8,
-                padding: "12px 10px",
-                fontWeight: 800,
-                cursor: "pointer",
-                marginBottom: 8,
-              }}
-            >
-              Identificar usuario
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setModoNuevaOrden("consumidor_final");
-                setVentaForm((prev) => ({
-                  ...prev,
-                  alumno_id: "",
-                  profesor_id: "",
-                  metodo_pago: "EFECTIVO",
-
-
-
-
-                }));
-              }}
-              style={{
-                width: "100%",
-                border: "1px solid #94a3b8",
-                background: "#ffffff",
-                color: "#334155",
-                borderRadius: 8,
-                padding: "12px 10px",
-                fontWeight: 800,
-                cursor: "pointer",
-              }}
-            >
-              Consumidor final
-            </button>
-          </div>
-        </aside>
-
         {/* ÁREA DE PRODUCTOS */}
         <section style={{ padding: 20, minWidth: 0 }}>
           <div
@@ -16993,8 +16921,8 @@ onClick={guardarEgreso}
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(245px, 1fr))",
-              gap: 16,
+              gridTemplateColumns: "repeat(auto-fill, minmax(165px, 1fr))",
+              gap: 10,
             }}
           >
             {productosActivos
@@ -17057,6 +16985,30 @@ onClick={guardarEgreso}
                         },
                       ]);
                     }}
+                    onDoubleClick={(e) => {
+                      if (sinStock || ventaRapidaBloqueadaRef.current) return;
+
+                      const tag = String(e?.target?.tagName || "").toUpperCase();
+                      if (["INPUT", "BUTTON", "SELECT", "TEXTAREA", "LABEL"].includes(tag)) {
+                        return;
+                      }
+
+                      e.preventDefault();
+                      ventaRapidaBloqueadaRef.current = true;
+
+                      // El primer clic del doble clic conserva el comportamiento actual:
+                      // agrega el producto. El segundo clic confirma la orden completa.
+                      // crearVenta ya imprime automáticamente SOLO después de que
+                      // el backend confirma que la venta fue registrada.
+                      window.setTimeout(() => {
+                        if (formNuevaOrdenRef.current) {
+                          formNuevaOrdenRef.current.requestSubmit();
+                        } else {
+                          ventaRapidaBloqueadaRef.current = false;
+                        }
+                      }, 80);
+                    }}
+                    title="1 clic: agregar producto · Doble clic: cobrar e imprimir"
                     onKeyDown={(e) => {
                       if (
                         sinStock ||
@@ -17082,7 +17034,7 @@ onClick={guardarEgreso}
                         : "1px solid #e5e7eb",
                       borderRadius: 14,
                       background: "#ffffff",
-                      padding: 14,
+                      padding: 10,
                       boxShadow: "0 8px 18px rgba(15,23,42,0.08)",
                       cursor: sinStock
                         ? "not-allowed"
@@ -17097,24 +17049,20 @@ onClick={guardarEgreso}
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "105px 1fr",
-                        gap: 14,
+                        gridTemplateColumns: producto.imagen ? "64px 1fr" : "1fr",
+                        gap: 9,
                         alignItems: "center",
                       }}
                     >
-                      <div
-                        style={{
-                          height: 95,
-                          borderRadius: 12,
-                          overflow: "hidden",
-                          background: "#dbe7ff",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontSize: 42,
-                        }}
-                      >
-                        {producto.imagen ? (
+                      {producto.imagen && (
+                        <div
+                          style={{
+                            height: 58,
+                            borderRadius: 9,
+                            overflow: "hidden",
+                            background: "#eef2ff",
+                          }}
+                        >
                           <img
                             src={producto.imagen}
                             alt={producto.nombre || "Producto"}
@@ -17124,15 +17072,13 @@ onClick={guardarEgreso}
                               objectFit: "cover",
                             }}
                           />
-                        ) : (
-                          "🍽️"
-                        )}
-                      </div>
+                        </div>
+                      )}
 
                       <div>
                         <div
                           style={{
-                            fontSize: 18,
+                            fontSize: 15,
                             fontWeight: 900,
                             color: "#111827",
                             textTransform: "uppercase",
@@ -17143,8 +17089,8 @@ onClick={guardarEgreso}
 
                         <div
                           style={{
-                            marginTop: 8,
-                            fontSize: 15,
+                            marginTop: 5,
+                            fontSize: 14,
                             fontWeight: 700,
                           }}
                         >
@@ -17196,10 +17142,10 @@ onClick={guardarEgreso}
                       }}
                       style={{
                         width: "100%",
-                        marginTop: 14,
+                        marginTop: 8,
                         border: "none",
                         borderRadius: 8,
-                        padding: "12px 10px",
+                        padding: "9px 8px",
                         background: sinStock
                           ? "#cbd5e1"
                           : itemExistente
