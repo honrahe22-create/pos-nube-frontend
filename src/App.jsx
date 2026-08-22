@@ -6590,25 +6590,48 @@ if (institucionIdLogin) {
       const token = localStorage.getItem("token");
       const institucionId = obtenerInstitucionActivaId();
 
-      if (!token || !institucionId || !editandoProductoId) {
+      // La pantalla nueva de Menú Cafetería trabaja con productoEditando.
+      // Se conserva editandoProductoId como respaldo para no romper flujos antiguos.
+      const productoId = Number(
+        productoEditando?.id || editandoProductoId || 0
+      );
+
+      if (!token || !institucionId || !productoId) {
         alert("No se puede actualizar el producto");
         return;
       }
 
-      const productoActual = productos.find((p) => p.id === editandoProductoId);
+      const productoActual =
+        productos.find((p) => Number(p.id) === productoId) ||
+        productoEditando ||
+        null;
 
+      const precioNuevo = Number(productoForm.precio);
+
+      if (!String(productoForm.nombre || "").trim()) {
+        alert("El nombre del producto es obligatorio");
+        return;
+      }
+
+      if (!Number.isFinite(precioNuevo) || precioNuevo < 0) {
+        alert("Ingresa un precio válido");
+        return;
+      }
+
+      // IMPORTANTE:
+      // Desde Menú Cafetería se actualizan únicamente los datos comerciales.
+      // NO enviamos stock ni stock_minimo para no alterar las existencias
+      // de BAR PRINCIPAL, KIOSKO u otros puntos.
       const payload = {
         institucion_id: Number(institucionId),
-        nombre: productoForm.nombre,
-        descripcion: productoForm.descripcion,
-        precio: Number(productoForm.precio || 0),
-        stock: Number(productoForm.stock || 0),
-        stock_minimo: Number(productoForm.stock_minimo || 0),
-        categoria: productoForm.categoria,
+        nombre: String(productoForm.nombre || "").trim(),
+        codigo: String(productoForm.codigo || "").trim() || null,
+        precio: precioNuevo,
+        categoria: String(productoForm.categoria || "").trim() || null,
         activo: productoActual?.activo ?? true,
       };
 
-      const res = await fetch(`${API_URL}/api/productos/${editandoProductoId}`, {
+      const res = await fetch(`${API_URL}/api/productos/${productoId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -6617,21 +6640,38 @@ if (institucionIdLogin) {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        alert(data.message || "Error actualizando producto");
+        alert(data.error || data.message || "Error actualizando producto");
         return;
       }
 
-      limpiarFormularioProducto();
-      await cargarProductos();
+      setProductoEditando(null);
+      setEditandoProductoId(null);
+      setMostrarFormularioProducto(false);
+      setProductoForm({
+        nombre: "",
+        codigo: "",
+        precio: "",
+        categoria: "",
+        stock: "",
+        imagen: "",
+        activo: true,
+      });
+
+      await Promise.all([
+        cargarProductos(),
+        cargarExistenciasInventario(),
+      ]);
+
       alert("Producto actualizado correctamente");
     } catch (error) {
       console.error("Error actualizando producto:", error);
-      alert("No se pudo actualizar el producto");
+      alert(error?.message || "No se pudo actualizar el producto");
     }
   };
+
 
   const eliminarProducto = async (producto) => {
     const confirmado = window.confirm(
