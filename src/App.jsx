@@ -16921,8 +16921,8 @@ onClick={guardarEgreso}
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(165px, 1fr))",
-              gap: 10,
+              gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
+              gap: 8,
             }}
           >
             {productosActivos
@@ -16963,7 +16963,7 @@ onClick={guardarEgreso}
                     role="button"
                     tabIndex={sinStock ? -1 : 0}
                     onClick={(e) => {
-                      if (sinStock || itemExistente) return;
+                      if (sinStock || itemExistente || Number(e?.detail || 0) > 1) return;
 
                       const tag = String(
                         e?.target?.tagName || ""
