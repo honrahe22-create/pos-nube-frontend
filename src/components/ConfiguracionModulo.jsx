@@ -392,9 +392,16 @@ export default function ConfiguracionModulo({
         estado: usuarioForm.estado !== false,
         padre_id: null,
         alumno_id: null,
-        punto_id: rolRequiereUbicacion(usuarioForm.rol)
-          ? Number(usuarioForm.punto_id || 0) || null
-          : null,
+        punto_id:
+          rolRequiereUbicacion(usuarioForm.rol) && usuarioForm.punto_id !== "TODAS"
+            ? Number(usuarioForm.punto_id || 0) || null
+            : null,
+        punto_ids:
+          rolRequiereUbicacion(usuarioForm.rol) && usuarioForm.punto_id === "TODAS"
+            ? puntosOperacionUsuarios.map((p) => Number(p.id)).filter((id) => id > 0)
+            : rolRequiereUbicacion(usuarioForm.rol) && usuarioForm.punto_id
+              ? [Number(usuarioForm.punto_id)].filter((id) => id > 0)
+              : [],
       };
 
       if (!editando) payload.password = usuarioForm.password;
@@ -414,9 +421,10 @@ export default function ConfiguracionModulo({
       }
 
       setMensaje(
-        editando
-          ? "Usuario actualizado correctamente."
-          : "Usuario creado correctamente."
+        data.message ||
+          (editando
+            ? "Usuario actualizado correctamente."
+            : "Usuario creado correctamente.")
       );
       limpiarUsuarioForm();
       await cargarUsuariosSistema();
@@ -435,7 +443,14 @@ export default function ConfiguracionModulo({
       password: "",
       rol: String(item.rol || "CAJERO").toUpperCase(),
       estado: item.estado !== false,
-      punto_id: item.punto_id ? String(item.punto_id) : "",
+      punto_id:
+        Array.isArray(item.punto_ids) && item.punto_ids.length > 1
+          ? "TODAS"
+          : item.punto_id
+            ? String(item.punto_id)
+            : Array.isArray(item.punto_ids) && item.punto_ids.length === 1
+              ? String(item.punto_ids[0])
+              : "",
     });
     setVistaInterna("usuarios");
   };
@@ -1133,6 +1148,9 @@ export default function ConfiguracionModulo({
                         required
                       >
                         <option value="">Seleccionar ubicación</option>
+                        {puntosOperacionUsuarios.length > 1 && (
+                          <option value="TODAS">BAR PRINCIPAL + KIOSKO / TODAS</option>
+                        )}
                         {puntosOperacionUsuarios.map((punto) => (
                           <option key={punto.id} value={punto.id}>
                             {punto.nombre}
@@ -1241,7 +1259,7 @@ export default function ConfiguracionModulo({
                               String(item.rol || "").toUpperCase()
                             )
                               ? `ADMINISTRACIÓN - ${nombreInstitucion}`
-                              : item.punto_nombre || "-"}
+                              : item.puntos_nombres || item.punto_nombre || "-"}
                           </td>
                           <td style={ui.td}>
                             <span
