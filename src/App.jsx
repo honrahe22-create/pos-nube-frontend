@@ -16651,7 +16651,6 @@ onClick={guardarEgreso}
           </div>
         </div>
 
-        </div>
       </div>
     </div>
 
