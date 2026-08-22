@@ -7609,7 +7609,7 @@ if (institucionIdLogin) {
                 html,
                 body {
                   width: auto !important;
-                  height: auto !important;
+                  height: ${altoTicketMm}mm !important;
                   overflow: visible !important;
                 }
 
@@ -7888,6 +7888,24 @@ if (institucionIdLogin) {
       ticket.saldo_anterior !== null &&
       ticket.saldo_anterior !== undefined;
 
+    // ============================================================
+    // TAMAÑO REAL DEL TICKET EN PC
+    // La impresora EC-PM-5890X trabaja como ticketera térmica de 58 mm.
+    // Calculamos también el alto aproximado para que Chrome NO genere
+    // una hoja larga con gran espacio blanco debajo del comprobante.
+    // ============================================================
+    const cantidadProductosTicket = Math.max(1, items.length);
+    const altoTicketMm = Math.min(
+      260,
+      Math.max(
+        78,
+        60 +
+          cantidadProductosTicket * 7 +
+          (mostrarSaldo ? 10 : 0) +
+          (ticket.observacion ? 10 : 0)
+      )
+    );
+
     const html = `
       <!doctype html>
       <html>
@@ -7896,27 +7914,27 @@ if (institucionIdLogin) {
           <title>Ticket #${escaparHtmlTicket(ticket.id)}</title>
           <style>
             /* ============================================================
-               TICKET PC 80 MM
-               - Una sola tira continua.
-               - Sin margen extra del navegador.
-               - Compatible con impresoras térmicas 80 mm.
+               TICKET PC 58 MM
+               - Ancho real para la ticketera EC-PM-5890X.
+               - Alto calculado según el contenido de la venta.
+               - Sin espacio blanco gigante al final.
                ============================================================ */
             @page {
-              size: 80mm 200mm;
+              size: 58mm ${altoTicketMm}mm;
               margin: 0;
             }
 
             html,
             body {
-              width: 80mm !important;
-              min-width: 80mm !important;
-              max-width: 80mm !important;
+              width: 58mm !important;
+              min-width: 58mm !important;
+              max-width: 58mm !important;
               margin: 0 !important;
               padding: 0 !important;
               background: #ffffff;
               color: #000000;
               font-family: Arial, Helvetica, sans-serif;
-              font-size: 11px;
+              font-size: 9.5px;
               overflow: hidden !important;
             }
 
@@ -7925,10 +7943,10 @@ if (institucionIdLogin) {
             }
 
             .ticket {
-              width: 76mm !important;
-              max-width: 76mm !important;
+              width: 54mm !important;
+              max-width: 54mm !important;
               margin: 0 auto !important;
-              padding: 3mm 2mm 5mm !important;
+              padding: 2mm 1.5mm 2.5mm !important;
               break-inside: avoid;
               page-break-inside: avoid;
             }
@@ -7938,23 +7956,23 @@ if (institucionIdLogin) {
             }
 
             .titulo {
-              font-size: 18px;
+              font-size: 14px;
               font-weight: 800;
-              margin-bottom: 2px;
+              margin-bottom: 1px;
             }
 
             .institucion {
-              font-size: 14px;
+              font-size: 10.5px;
               font-weight: 700;
             }
 
             .separador {
               border-top: 1px dashed #000;
-              margin: 7px 0;
+              margin: 4px 0;
             }
 
             .datos {
-              line-height: 1.45;
+              line-height: 1.25;
             }
 
             table {
@@ -7964,7 +7982,7 @@ if (institucionIdLogin) {
 
             td {
               vertical-align: top;
-              padding: 3px 0;
+              padding: 1.5px 0;
             }
 
             .producto {
@@ -7973,7 +7991,7 @@ if (institucionIdLogin) {
             }
 
             .cantidad {
-              font-size: 10px;
+              font-size: 8.5px;
             }
 
             .valor {
@@ -7983,22 +8001,22 @@ if (institucionIdLogin) {
             }
 
             .total {
-              font-size: 18px;
+              font-size: 13px;
               font-weight: 800;
             }
 
             .pie {
-              margin-top: 8px;
+              margin-top: 5px;
               text-align: center;
-              line-height: 1.4;
+              line-height: 1.25;
             }
 
             @media print {
               html,
               body {
-                width: 80mm !important;
-                min-width: 80mm !important;
-                max-width: 80mm !important;
+                width: 58mm !important;
+                min-width: 58mm !important;
+                max-width: 58mm !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 overflow: hidden !important;
@@ -8006,8 +8024,8 @@ if (institucionIdLogin) {
               }
 
               .ticket {
-                width: 76mm !important;
-                max-width: 76mm !important;
+                width: 54mm !important;
+                max-width: 54mm !important;
                 margin: 0 auto !important;
                 page-break-after: avoid !important;
                 break-after: avoid-page !important;
