@@ -7897,19 +7897,29 @@ if (institucionIdLogin) {
           <meta charset="utf-8" />
           <title>Ticket #${escaparHtmlTicket(ticket.id)}</title>
           <style>
+            /* ============================================================
+               TICKET PC 80 MM
+               - Una sola tira continua.
+               - Sin margen extra del navegador.
+               - Compatible con impresoras térmicas 80 mm.
+               ============================================================ */
             @page {
               size: 80mm auto;
-              margin: 2mm;
+              margin: 0;
             }
 
-            html, body {
-              width: 76mm;
-              margin: 0;
-              padding: 0;
+            html,
+            body {
+              width: 80mm !important;
+              min-width: 80mm !important;
+              max-width: 80mm !important;
+              margin: 0 !important;
+              padding: 0 !important;
               background: #ffffff;
               color: #000000;
               font-family: Arial, Helvetica, sans-serif;
-              font-size: 12px;
+              font-size: 11px;
+              overflow: visible !important;
             }
 
             * {
@@ -7917,9 +7927,12 @@ if (institucionIdLogin) {
             }
 
             .ticket {
-              width: 72mm;
-              margin: 0 auto;
-              padding: 2mm 1mm 8mm;
+              width: 76mm !important;
+              max-width: 76mm !important;
+              margin: 0 auto !important;
+              padding: 3mm 2mm 5mm !important;
+              break-inside: avoid;
+              page-break-inside: avoid;
             }
 
             .centrado {
@@ -7983,8 +7996,24 @@ if (institucionIdLogin) {
             }
 
             @media print {
+              html,
+              body {
+                width: 80mm !important;
+                min-width: 80mm !important;
+                max-width: 80mm !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: visible !important;
+              }
+
               .ticket {
-                page-break-after: always;
+                width: 76mm !important;
+                max-width: 76mm !important;
+                margin: 0 auto !important;
+                page-break-after: auto !important;
+                break-after: auto !important;
+                page-break-before: auto !important;
+                break-before: auto !important;
               }
             }
           </style>
@@ -8127,7 +8156,7 @@ if (institucionIdLogin) {
       }
     };
 
-    window.setTimeout(ejecutarImpresion, 450);
+    window.setTimeout(ejecutarImpresion, 650);
   };
 
   const obtenerTicketVenta = async (ventaId) => {
