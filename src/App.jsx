@@ -4417,8 +4417,38 @@ const exportarVentasExcel = () => {
       }
 
       if(data?.estado_operativo==="CIERRE_PENDIENTE"){
+        const jornadaPendiente = data?.jornada || null;
+
+        const fechaPendiente = normalizarFechaISO(
+          jornadaPendiente?.fecha_operativa_texto ||
+          jornadaPendiente?.fecha_operativa
+        );
+
+        if(jornadaPendiente?.id){
+          setJornadaActiva(jornadaPendiente);
+          localStorage.setItem(
+            "jornadaActiva",
+            JSON.stringify(jornadaPendiente)
+          );
+        }
+
+        if(fechaPendiente){
+          setCierreForm((actual)=>({
+            ...actual,
+            fecha: fechaPendiente,
+          }));
+        }
+
         setMostrarSelectorJornada(false);
         setVista("reporte_cierre");
+        setMostrarCrearCierre(true);
+
+        if(fechaPendiente && jornadaPendiente?.id){
+          await cargarResumenCierre(
+            fechaPendiente,
+            jornadaPendiente
+          );
+        }
       }
 
       return data;
@@ -9893,13 +9923,31 @@ Disponible: ${formatearMoneda(
     }
   };
 
-  const cargarResumenCierre = async (fecha = cierreForm.fecha) => {
+  const cargarResumenCierre = async (
+    fecha = cierreForm.fecha,
+    jornadaForzada = null
+  ) => {
     if (!fecha) return;
+
     try {
       const token = localStorage.getItem("token");
       const institucionId = obtenerInstitucionActivaId();
+
+      const jornadaPendiente =
+        estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE"
+          ? estadoOperativoCaja?.jornada
+          : null;
+
+      const jornadaObjetivo =
+        jornadaForzada ||
+        jornadaPendiente ||
+        jornadaActiva ||
+        null;
+
+      const jornadaId = Number(jornadaObjetivo?.id || 0);
+
       const respuesta = await fetch(
-        `${API_URL}/api/cierres/resumen?institucion_id=${institucionId}&fecha=${fecha}&jornada_id=${Number(jornadaActiva?.id || 0)}`,
+        `${API_URL}/api/cierres/resumen?institucion_id=${institucionId}&fecha=${fecha}&jornada_id=${jornadaId}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const data = await respuesta.json();
@@ -11278,15 +11326,40 @@ if (!usuario) {
         <button
           style={styles.button}
           onClick={async () => {
-            const fechaEcuador = obtenerFechaEcuadorISO();
+            const jornadaPendiente =
+              estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE"
+                ? estadoOperativoCaja?.jornada
+                : null;
+
+            const fechaPendiente = normalizarFechaISO(
+              jornadaPendiente?.fecha_operativa_texto ||
+              jornadaPendiente?.fecha_operativa
+            );
+
+            const fechaObjetivo =
+              fechaPendiente ||
+              normalizarFechaISO(jornadaActiva?.fecha_operativa) ||
+              obtenerFechaEcuadorISO();
+
+            if(jornadaPendiente?.id){
+              setJornadaActiva(jornadaPendiente);
+              localStorage.setItem(
+                "jornadaActiva",
+                JSON.stringify(jornadaPendiente)
+              );
+            }
 
             setCierreForm((actual) => ({
               ...actual,
-              fecha: fechaEcuador,
+              fecha: fechaObjetivo,
             }));
 
             setMostrarCrearCierre(true);
-            await cargarResumenCierre(fechaEcuador);
+
+            await cargarResumenCierre(
+              fechaObjetivo,
+              jornadaPendiente || jornadaActiva
+            );
           }}
         >
           Crear cierre de caja
@@ -11318,16 +11391,18 @@ if (!usuario) {
       </div>
     </div>
 
-    <div style={styles.box}>
-      <div style={styles.filtersGridPaymon}>
-        <div style={styles.filterField}><label style={styles.filterLabelTop}>Fecha inicial</label><input type="date" value={cierreCajaFiltros.fecha_inicio} onChange={(e)=>setCierreCajaFiltros({...cierreCajaFiltros,fecha_inicio:e.target.value})} style={styles.input}/></div>
-        <div style={styles.filterField}><label style={styles.filterLabelTop}>Fecha final</label><input type="date" value={cierreCajaFiltros.fecha_fin} onChange={(e)=>setCierreCajaFiltros({...cierreCajaFiltros,fecha_fin:e.target.value})} style={styles.input}/></div>
+    {estadoOperativoCaja?.estado_operativo !== "CIERRE_PENDIENTE" && (
+      <div style={styles.box}>
+        <div style={styles.filtersGridPaymon}>
+          <div style={styles.filterField}><label style={styles.filterLabelTop}>Fecha inicial</label><input type="date" value={cierreCajaFiltros.fecha_inicio} onChange={(e)=>setCierreCajaFiltros({...cierreCajaFiltros,fecha_inicio:e.target.value})} style={styles.input}/></div>
+          <div style={styles.filterField}><label style={styles.filterLabelTop}>Fecha final</label><input type="date" value={cierreCajaFiltros.fecha_fin} onChange={(e)=>setCierreCajaFiltros({...cierreCajaFiltros,fecha_fin:e.target.value})} style={styles.input}/></div>
+        </div>
+        <div style={styles.filterButtons}>
+          <button type="button" style={styles.button} onClick={cargarCierres}>Consultar</button>
+          <button type="button" style={styles.outlineButton} onClick={() => { limpiarFiltrosCierreCaja(); setTimeout(cargarCierres, 0); }}>Borrar filtros</button>
+        </div>
       </div>
-      <div style={styles.filterButtons}>
-        <button type="button" style={styles.button} onClick={cargarCierres}>Consultar</button>
-        <button type="button" style={styles.outlineButton} onClick={() => { limpiarFiltrosCierreCaja(); setTimeout(cargarCierres, 0); }}>Borrar filtros</button>
-      </div>
-    </div>
+    )}
 
     {mostrarReporteCierres && ["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
       <>
@@ -11491,17 +11566,67 @@ if (!usuario) {
     {mostrarCrearCierre && createPortal((
       <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, width:"100vw", height:"100dvh", minHeight:"100vh", background:"rgba(15,23,42,.65)", zIndex:99999, padding:"8px", boxSizing:"border-box", overflow:"hidden", display:"flex", alignItems:"stretch", justifyContent:"center" }}>
         <div style={{ width:"100%", maxWidth:900, minWidth:0, height:"calc(100dvh - 16px)", maxHeight:"calc(100dvh - 16px)", margin:"0 auto", background:"white", borderRadius:14, boxSizing:"border-box", overflow:"hidden", display:"flex", flexDirection:"column" }}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",padding:"14px",borderBottom:"1px solid #e5e7eb",flex:"0 0 auto",background:"#fff",position:"relative",zIndex:2}}><h2 style={{margin:"0",fontSize:"clamp(22px,4vw,32px)"}}>Nuevo cierre de caja</h2><button style={{...styles.outlineButton,flexShrink:0}} onClick={()=>setMostrarCrearCierre(false)}>Cerrar</button></div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",padding:"14px",borderBottom:"1px solid #e5e7eb",flex:"0 0 auto",background:"#fff",position:"relative",zIndex:2}}>
+            <div>
+              <h2 style={{margin:"0",fontSize:"clamp(22px,4vw,32px)"}}>
+                {estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE"
+                  ? "Caja pendiente de cierre"
+                  : "Nuevo cierre de caja"}
+              </h2>
+              {estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE" && (
+                <div style={{marginTop:6,color:"#b91c1c",fontWeight:900}}>
+                  Debes cerrar esta jornada antes de continuar.
+                </div>
+              )}
+            </div>
+
+            {estadoOperativoCaja?.estado_operativo !== "CIERRE_PENDIENTE" && (
+              <button
+                style={{...styles.outlineButton,flexShrink:0}}
+                onClick={()=>setMostrarCrearCierre(false)}
+              >
+                Cerrar
+              </button>
+            )}
+          </div>
           <div style={{flex:"1 1 auto",minHeight:0,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",touchAction:"pan-y",overscrollBehaviorY:"contain",padding:"14px",boxSizing:"border-box"}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,220px),1fr))",gap:16,marginTop:18,width:"100%",minWidth:0}}>
-            <div style={styles.filterField}><label style={styles.label}>Fecha de cierre</label><input type="date" style={styles.input} value={cierreForm.fecha} onChange={async(e)=>{const fecha=e.target.value;setCierreForm({...cierreForm,fecha});await cargarResumenCierre(fecha);}}/></div>
+            <div style={styles.filterField}>
+              <label style={styles.label}>Fecha de cierre</label>
+              <input
+                type="date"
+                style={{
+                  ...styles.input,
+                  background:
+                    estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE"
+                      ? "#f1f5f9"
+                      : undefined,
+                }}
+                value={cierreForm.fecha}
+                disabled={estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE"}
+                onChange={async(e)=>{
+                  const fecha=e.target.value;
+                  setCierreForm({...cierreForm,fecha});
+                  await cargarResumenCierre(fecha);
+                }}
+              />
+              {estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE" && (
+                <small style={{display:"block",marginTop:6,color:"#b45309",fontWeight:800}}>
+                  Fecha fijada automáticamente por la jornada pendiente.
+                </small>
+              )}
+            </div>
             <div style={styles.filterField}>
               <label style={styles.label}>Operador</label>
               <input
                 style={styles.input}
                 value={
-                  jornadaActiva?.usuario_nombre ||
-                  jornadaActiva?.usuario_correo ||
+                  (estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE"
+                    ? estadoOperativoCaja?.jornada?.usuario_nombre
+                    : jornadaActiva?.usuario_nombre) ||
+                  (estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE"
+                    ? estadoOperativoCaja?.jornada?.usuario_correo
+                    : jornadaActiva?.usuario_correo) ||
                   usuario?.nombre ||
                   usuario?.correo ||
                   "Operador"
