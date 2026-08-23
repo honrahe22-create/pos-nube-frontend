@@ -1969,6 +1969,16 @@ const importarStockArchivo = (event) => {
       return;
     }
 
+    // Para crear productos nuevos el backend exige una jornada abierta.
+    // Si todos fueran productos existentes, podrían actualizarse sin crear;
+    // pero para una matriz general es mejor detenerse y avisar claramente.
+    if (!jornadaActiva?.id) {
+      alert(
+        "Debes tener una jornada abierta antes de importar productos nuevos."
+      );
+      return;
+    }
+
     const normalizar = (valor) =>
       String(valor || "")
         .trim()
@@ -1996,6 +2006,23 @@ const importarStockArchivo = (event) => {
       try {
         const payload = {
           institucion_id: Number(institucionId),
+
+          // IMPORTANTE:
+          // El backend exige una jornada abierta cuando se CREA un producto.
+          // Antes la importación flexible no enviaba jornada_id, aunque el
+          // administrador sí tuviera una jornada abierta en pantalla.
+          ...(existente
+            ? {}
+            : {
+                jornada_id: Number(jornadaActiva?.id || 0),
+                ubicacion_inicial:
+                  jornadaActiva?.punto_nombre ||
+                  puntoInventarioSeleccionado ||
+                  "PRINCIPAL",
+                concepto_inicial: "COMPRA",
+                observacion_inicial: "Producto creado mediante importación masiva",
+              }),
+
           nombre: fila.nombre,
           codigo: fila.codigo || existente?.codigo || "",
           descripcion:
@@ -2032,8 +2059,8 @@ const importarStockArchivo = (event) => {
 
         if (!res.ok) {
           throw new Error(
-            data?.message ||
-              data?.error ||
+            data?.error ||
+              data?.message ||
               `Error ${existente ? "actualizando" : "creando"} ${fila.nombre}`
           );
         }
