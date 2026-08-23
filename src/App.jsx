@@ -575,7 +575,41 @@ const [fechaNuevaOrden, setFechaNuevaOrden] = useState(
 );
 const [efectivoRecibidoNuevaOrden, setEfectivoRecibidoNuevaOrden] = useState("");
 const formNuevaOrdenRef = useRef(null);
+const cabeceraNuevaOrdenRef = useRef(null);
+const [topPanelPagoNuevaOrden, setTopPanelPagoNuevaOrden] = useState(176);
 const ventaRapidaBloqueadaRef = useRef(false);
+
+useEffect(() => {
+  const actualizarTopPanelPago = () => {
+    const cabecera = cabeceraNuevaOrdenRef.current;
+
+    if (!cabecera) {
+      setTopPanelPagoNuevaOrden(176);
+      return;
+    }
+
+    const rect = cabecera.getBoundingClientRect();
+
+    // Mientras el bloque azul BAR PRINCIPAL / FECHA está más abajo,
+    // el panel baja/sube junto con él. Cuando llega a 176px,
+    // queda fijado allí y nunca invade la parte superior.
+    const topCalculado = Math.max(176, Math.round(rect.bottom + 12));
+
+    setTopPanelPagoNuevaOrden((anterior) =>
+      anterior === topCalculado ? anterior : topCalculado
+    );
+  };
+
+  actualizarTopPanelPago();
+
+  window.addEventListener("scroll", actualizarTopPanelPago, { passive: true });
+  window.addEventListener("resize", actualizarTopPanelPago);
+
+  return () => {
+    window.removeEventListener("scroll", actualizarTopPanelPago);
+    window.removeEventListener("resize", actualizarTopPanelPago);
+  };
+}, [vista, vistaVentasInterna]);
 
 //////////////////////////////
 // PROFESORES
@@ -17654,6 +17688,7 @@ onClick={guardarEgreso}
           </div>
 
           <div
+            ref={cabeceraNuevaOrdenRef}
             style={{
               border: "2px solid #2637d9",
               borderRadius: 10,
@@ -18127,18 +18162,17 @@ onClick={guardarEgreso}
           {/* RESUMEN DE LA ORDEN */}
           <div
             style={{
-              // PANEL FLOTANTE REAL:
-              // queda visible aunque el usuario siga bajando por cientos de productos.
-              // PANEL LATERAL STICKY:
-              // acompaña el scroll de los productos, pero cuando llega
-              // al borde inferior del bloque azul BAR PRINCIPAL / FECHA,
-              // se queda allí y NO continúa subiendo.
-              position: "sticky",
-              top: 176,
+              // PANEL FLOTANTE CON LÍMITE:
+              // permanece visible mientras se recorren los productos.
+              // Su posición sigue el borde inferior del bloque azul;
+              // al llegar a 176px queda fijado y no sube más.
+              position: "fixed",
+              top: topPanelPagoNuevaOrden,
+              right: 24,
               zIndex: 80,
-              width: "100%",
+              width: "min(390px, calc(100vw - 330px))",
               maxWidth: 390,
-              maxHeight: "calc(100vh - 190px)",
+              maxHeight: `calc(100vh - ${topPanelPagoNuevaOrden + 14}px)`,
               overflowY: "auto",
               boxSizing: "border-box",
               pointerEvents: "auto",
