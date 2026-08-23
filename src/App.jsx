@@ -17617,22 +17617,441 @@ onClick={guardarEgreso}
             </div>
           </div>
 
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1fr) minmax(330px, 390px)",
+              gap: 18,
+              alignItems: "start",
+              position: "relative",
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+              gap: 8,
+            }}
+          >
+            {productosActivos
+              .filter((p) => {
+                const texto = busquedaProductoNuevaOrden
+                  .trim()
+                  .toLowerCase();
+
+                const coincideTexto =
+                  !texto ||
+                  String(p.nombre || "")
+                    .toLowerCase()
+                    .includes(texto) ||
+                  String(p.codigo || "")
+                    .toLowerCase()
+                    .includes(texto);
+
+                const coincideCategoria =
+                  categoriaNuevaOrden === "TODOS" ||
+                  String(p.categoria || "") === categoriaNuevaOrden;
+
+                return coincideTexto && coincideCategoria;
+              })
+              .map((producto) => {
+                const itemExistente = (
+                  Array.isArray(ventaItems) ? ventaItems : []
+                ).find(
+                  (item) =>
+                    String(item.producto_id) === String(producto.id)
+                );
+
+                const sinStock =
+                  stockProductoEnPunto(producto.id, jornadaActiva?.punto_nombre || localNuevaOrden) <= 0;
+
+                return (
+                  <article
+                    key={producto.id}
+                    role="button"
+                    tabIndex={sinStock ? -1 : 0}
+                    onClick={(e) => {
+                      if (sinStock || itemExistente || Number(e?.detail || 0) > 1) return;
+
+                      const tag = String(
+                        e?.target?.tagName || ""
+                      ).toUpperCase();
+
+                      if (
+                        ["INPUT", "BUTTON", "SELECT", "TEXTAREA", "LABEL"].includes(
+                          tag
+                        )
+                      ) {
+                        return;
+                      }
+
+                      setVentaItems((prev) => [
+                        ...(Array.isArray(prev) ? prev : []),
+                        {
+                          producto_id: String(producto.id),
+                          cantidad: "1",
+                        },
+                      ]);
+                    }}
+                    onDoubleClick={(e) => {
+                      if (sinStock || ventaRapidaBloqueadaRef.current) return;
+
+                      const tag = String(e?.target?.tagName || "").toUpperCase();
+                      if (["INPUT", "BUTTON", "SELECT", "TEXTAREA", "LABEL"].includes(tag)) {
+                        return;
+                      }
+
+                      e.preventDefault();
+                      e.stopPropagation();
+                      ventaRapidaBloqueadaRef.current = true;
+
+                      // DOBLE CLIC DE CAJA:
+                      // garantizamos que el producto esté en la orden antes de enviarla.
+                      setVentaItems((prev) => {
+                        const lista = Array.isArray(prev) ? prev : [];
+                        const existe = lista.some(
+                          (item) => String(item.producto_id) === String(producto.id)
+                        );
+
+                        if (existe) return lista;
+
+                        return [
+                          ...lista,
+                          {
+                            producto_id: String(producto.id),
+                            cantidad: "1",
+                          },
+                        ];
+                      });
+
+                      // Esperamos a que React pinte el producto/cantidad y luego
+                      // usamos exactamente el mismo flujo seguro de "Crear orden".
+                      window.setTimeout(() => {
+                        if (formNuevaOrdenRef.current) {
+                          formNuevaOrdenRef.current.requestSubmit();
+                        } else {
+                          ventaRapidaBloqueadaRef.current = false;
+                        }
+                      }, 250);
+                    }}
+                    title="1 clic: agregar producto · Doble clic: cobrar e imprimir"
+                    onKeyDown={(e) => {
+                      if (
+                        sinStock ||
+                        itemExistente ||
+                        !["Enter", " "].includes(e.key)
+                      ) {
+                        return;
+                      }
+
+                      e.preventDefault();
+
+                      setVentaItems((prev) => [
+                        ...(Array.isArray(prev) ? prev : []),
+                        {
+                          producto_id: String(producto.id),
+                          cantidad: "1",
+                        },
+                      ]);
+                    }}
+                    style={{
+                      border: itemExistente
+                        ? "2px solid #2536db"
+                        : "1px solid #e5e7eb",
+                      borderRadius: 14,
+                      background: "#ffffff",
+                      padding: 10,
+                      boxShadow: "0 8px 18px rgba(15,23,42,0.08)",
+                      cursor: sinStock
+                        ? "not-allowed"
+                        : itemExistente
+                        ? "default"
+                        : "pointer",
+                      userSelect: "none",
+                      WebkitTapHighlightColor: "transparent",
+                      touchAction: "manipulation",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: producto.imagen ? "64px 1fr" : "1fr",
+                        gap: 9,
+                        alignItems: "center",
+                      }}
+                    >
+                      {producto.imagen && (
+                        <div
+                          style={{
+                            height: 58,
+                            borderRadius: 9,
+                            overflow: "hidden",
+                            background: "#eef2ff",
+                          }}
+                        >
+                          <img
+                            src={producto.imagen}
+                            alt={producto.nombre || "Producto"}
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 15,
+                            fontWeight: 900,
+                            color: "#111827",
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          {producto.nombre}
+                        </div>
+
+                        <div
+                          style={{
+                            marginTop: 5,
+                            fontSize: 14,
+                            fontWeight: 700,
+                          }}
+                        >
+                          Costo: {formatearMoneda(producto.precio)}
+                        </div>
+
+                        <div
+                          style={{
+                            display: "inline-block",
+                            marginTop: 8,
+                            padding: "4px 12px",
+                            borderRadius: 999,
+                            background: sinStock ? "#fee2e2" : "#dcfce7",
+                            color: sinStock ? "#b91c1c" : "#166534",
+                            fontSize: 12,
+                            fontWeight: 800,
+                          }}
+                        >
+                          Stock {jornadaActiva?.punto_nombre || localNuevaOrden}: {stockProductoEnPunto(producto.id, jornadaActiva?.punto_nombre || localNuevaOrden)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={sinStock}
+                      onClick={() => {
+                        if (itemExistente) {
+                          const indice = ventaItems.findIndex(
+                            (item) =>
+                              String(item.producto_id) ===
+                              String(producto.id)
+                          );
+
+                          if (indice >= 0) {
+                            eliminarItemVenta(indice);
+                          }
+
+                          return;
+                        }
+
+                        setVentaItems((prev) => [
+                          ...(Array.isArray(prev) ? prev : []),
+                          {
+                            producto_id: String(producto.id),
+                            cantidad: "1",
+                          },
+                        ]);
+                      }}
+                      style={{
+                        width: "100%",
+                        marginTop: 8,
+                        border: "none",
+                        borderRadius: 8,
+                        padding: "9px 8px",
+                        background: sinStock
+                          ? "#cbd5e1"
+                          : itemExistente
+                          ? "#fee2e2"
+                          : "#bcd0ff",
+                        color: sinStock
+                          ? "#64748b"
+                          : itemExistente
+                          ? "#b91c1c"
+                          : "#1726a4",
+                        fontWeight: 900,
+                        cursor: sinStock ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {sinStock
+                        ? "Sin stock"
+                        : itemExistente
+                        ? "Quitar producto"
+                        : "Agregar producto"}
+                    </button>
+
+                    {itemExistente && (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 6,
+                          alignItems: "stretch",
+                          width: "100%",
+                        }}
+                      >
+                        <label
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 800,
+                            color: "#334155",
+                            textAlign: "center",
+                            display: "block",
+                          }}
+                        >
+                          Cantidad
+                        </label>
+
+                        <input
+                          type="number"
+                          min="1"
+                          onClick={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          max={Math.max(
+                            1,
+                            Number(
+                              stockProductoEnPunto(
+                                producto.id,
+                                jornadaActiva?.punto_nombre || localNuevaOrden
+                              ) || 0
+                            )
+                          )}
+                          step="1"
+                          value={String(itemExistente.cantidad ?? "")}
+                          onChange={(e) => {
+                            const indice = ventaItems.findIndex(
+                              (item) =>
+                                String(item.producto_id) ===
+                                String(producto.id)
+                            );
+
+                            if (indice < 0) return;
+
+                            const disponible = Number(
+                              stockProductoEnPunto(
+                                producto.id,
+                                jornadaActiva?.punto_nombre || localNuevaOrden
+                              ) || 0
+                            );
+
+                            const texto = String(e.target.value || "")
+                              .replace(/[^0-9]/g, "")
+                              .slice(0, 4);
+
+                            if (!texto) {
+                              actualizarItemVenta(
+                                indice,
+                                "cantidad",
+                                ""
+                              );
+                              return;
+                            }
+
+                            const cantidad = Number(texto);
+
+                            if (cantidad <= 0) {
+                              actualizarItemVenta(
+                                indice,
+                                "cantidad",
+                                ""
+                              );
+                              return;
+                            }
+
+                            if (cantidad > disponible) {
+                              alert(
+                                `No puedes superar el stock disponible: ${disponible}`
+                              );
+
+                              actualizarItemVenta(
+                                indice,
+                                "cantidad",
+                                String(disponible)
+                              );
+                              return;
+                            }
+
+                            actualizarItemVenta(
+                              indice,
+                              "cantidad",
+                              String(cantidad)
+                            );
+                          }}
+                          onBlur={(e) => {
+                            const indice = ventaItems.findIndex(
+                              (item) =>
+                                String(item.producto_id) ===
+                                String(producto.id)
+                            );
+
+                            if (indice < 0) return;
+
+                            const cantidad = Number(e.target.value || 0);
+
+                            if (!Number.isInteger(cantidad) || cantidad <= 0) {
+                              actualizarItemVenta(
+                                indice,
+                                "cantidad",
+                                ""
+                              );
+                            }
+                          }}
+                          style={{
+                            width: "100%",
+                            minWidth: 0,
+                            height: 44,
+                            boxSizing: "border-box",
+                            border: "2px solid #64748b",
+                            borderRadius: 8,
+                            padding: "8px 10px",
+                            fontSize: 18,
+                            fontWeight: 900,
+                            textAlign: "center",
+                            background: "#ffffff",
+                          }}
+                          placeholder="0"
+                        />
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+          </div>
+
+
+            </div>
+
+            <aside
+              style={{
+                minWidth: 0,
+                alignSelf: "stretch",
+              }}
+            >
           {/* RESUMEN DE LA ORDEN */}
           <div
             style={{
               position: "sticky",
-              top: 12,
-              zIndex: 40,
-              marginTop: 0,
-              marginBottom: 18,
-              padding: "10px 0 12px",
-              display: "grid",
-              gridTemplateColumns: "minmax(280px, 480px)",
-              justifyContent: "end",
-              gap: 20,
-              background: "rgba(255,255,255,0.98)",
-              borderBottom: "1px solid #e5e7eb",
-              boxShadow: "0 8px 18px rgba(15,23,42,0.06)",
+              top: 86,
+              zIndex: 30,
+              alignSelf: "start",
+              width: "100%",
+              maxWidth: 390,
+              marginLeft: "auto",
             }}
           >
             <div
@@ -18078,412 +18497,9 @@ onClick={guardarEgreso}
           </div>
 
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-              gap: 8,
-            }}
-          >
-            {productosActivos
-              .filter((p) => {
-                const texto = busquedaProductoNuevaOrden
-                  .trim()
-                  .toLowerCase();
 
-                const coincideTexto =
-                  !texto ||
-                  String(p.nombre || "")
-                    .toLowerCase()
-                    .includes(texto) ||
-                  String(p.codigo || "")
-                    .toLowerCase()
-                    .includes(texto);
-
-                const coincideCategoria =
-                  categoriaNuevaOrden === "TODOS" ||
-                  String(p.categoria || "") === categoriaNuevaOrden;
-
-                return coincideTexto && coincideCategoria;
-              })
-              .map((producto) => {
-                const itemExistente = (
-                  Array.isArray(ventaItems) ? ventaItems : []
-                ).find(
-                  (item) =>
-                    String(item.producto_id) === String(producto.id)
-                );
-
-                const sinStock =
-                  stockProductoEnPunto(producto.id, jornadaActiva?.punto_nombre || localNuevaOrden) <= 0;
-
-                return (
-                  <article
-                    key={producto.id}
-                    role="button"
-                    tabIndex={sinStock ? -1 : 0}
-                    onClick={(e) => {
-                      if (sinStock || itemExistente || Number(e?.detail || 0) > 1) return;
-
-                      const tag = String(
-                        e?.target?.tagName || ""
-                      ).toUpperCase();
-
-                      if (
-                        ["INPUT", "BUTTON", "SELECT", "TEXTAREA", "LABEL"].includes(
-                          tag
-                        )
-                      ) {
-                        return;
-                      }
-
-                      setVentaItems((prev) => [
-                        ...(Array.isArray(prev) ? prev : []),
-                        {
-                          producto_id: String(producto.id),
-                          cantidad: "1",
-                        },
-                      ]);
-                    }}
-                    onDoubleClick={(e) => {
-                      if (sinStock || ventaRapidaBloqueadaRef.current) return;
-
-                      const tag = String(e?.target?.tagName || "").toUpperCase();
-                      if (["INPUT", "BUTTON", "SELECT", "TEXTAREA", "LABEL"].includes(tag)) {
-                        return;
-                      }
-
-                      e.preventDefault();
-                      e.stopPropagation();
-                      ventaRapidaBloqueadaRef.current = true;
-
-                      // DOBLE CLIC DE CAJA:
-                      // garantizamos que el producto esté en la orden antes de enviarla.
-                      setVentaItems((prev) => {
-                        const lista = Array.isArray(prev) ? prev : [];
-                        const existe = lista.some(
-                          (item) => String(item.producto_id) === String(producto.id)
-                        );
-
-                        if (existe) return lista;
-
-                        return [
-                          ...lista,
-                          {
-                            producto_id: String(producto.id),
-                            cantidad: "1",
-                          },
-                        ];
-                      });
-
-                      // Esperamos a que React pinte el producto/cantidad y luego
-                      // usamos exactamente el mismo flujo seguro de "Crear orden".
-                      window.setTimeout(() => {
-                        if (formNuevaOrdenRef.current) {
-                          formNuevaOrdenRef.current.requestSubmit();
-                        } else {
-                          ventaRapidaBloqueadaRef.current = false;
-                        }
-                      }, 250);
-                    }}
-                    title="1 clic: agregar producto · Doble clic: cobrar e imprimir"
-                    onKeyDown={(e) => {
-                      if (
-                        sinStock ||
-                        itemExistente ||
-                        !["Enter", " "].includes(e.key)
-                      ) {
-                        return;
-                      }
-
-                      e.preventDefault();
-
-                      setVentaItems((prev) => [
-                        ...(Array.isArray(prev) ? prev : []),
-                        {
-                          producto_id: String(producto.id),
-                          cantidad: "1",
-                        },
-                      ]);
-                    }}
-                    style={{
-                      border: itemExistente
-                        ? "2px solid #2536db"
-                        : "1px solid #e5e7eb",
-                      borderRadius: 14,
-                      background: "#ffffff",
-                      padding: 10,
-                      boxShadow: "0 8px 18px rgba(15,23,42,0.08)",
-                      cursor: sinStock
-                        ? "not-allowed"
-                        : itemExistente
-                        ? "default"
-                        : "pointer",
-                      userSelect: "none",
-                      WebkitTapHighlightColor: "transparent",
-                      touchAction: "manipulation",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: producto.imagen ? "64px 1fr" : "1fr",
-                        gap: 9,
-                        alignItems: "center",
-                      }}
-                    >
-                      {producto.imagen && (
-                        <div
-                          style={{
-                            height: 58,
-                            borderRadius: 9,
-                            overflow: "hidden",
-                            background: "#eef2ff",
-                          }}
-                        >
-                          <img
-                            src={producto.imagen}
-                            alt={producto.nombre || "Producto"}
-                            style={{
-                              width: "100%",
-                              height: "100%",
-                              objectFit: "cover",
-                            }}
-                          />
-                        </div>
-                      )}
-
-                      <div>
-                        <div
-                          style={{
-                            fontSize: 15,
-                            fontWeight: 900,
-                            color: "#111827",
-                            textTransform: "uppercase",
-                          }}
-                        >
-                          {producto.nombre}
-                        </div>
-
-                        <div
-                          style={{
-                            marginTop: 5,
-                            fontSize: 14,
-                            fontWeight: 700,
-                          }}
-                        >
-                          Costo: {formatearMoneda(producto.precio)}
-                        </div>
-
-                        <div
-                          style={{
-                            display: "inline-block",
-                            marginTop: 8,
-                            padding: "4px 12px",
-                            borderRadius: 999,
-                            background: sinStock ? "#fee2e2" : "#dcfce7",
-                            color: sinStock ? "#b91c1c" : "#166534",
-                            fontSize: 12,
-                            fontWeight: 800,
-                          }}
-                        >
-                          Stock {jornadaActiva?.punto_nombre || localNuevaOrden}: {stockProductoEnPunto(producto.id, jornadaActiva?.punto_nombre || localNuevaOrden)}
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      disabled={sinStock}
-                      onClick={() => {
-                        if (itemExistente) {
-                          const indice = ventaItems.findIndex(
-                            (item) =>
-                              String(item.producto_id) ===
-                              String(producto.id)
-                          );
-
-                          if (indice >= 0) {
-                            eliminarItemVenta(indice);
-                          }
-
-                          return;
-                        }
-
-                        setVentaItems((prev) => [
-                          ...(Array.isArray(prev) ? prev : []),
-                          {
-                            producto_id: String(producto.id),
-                            cantidad: "1",
-                          },
-                        ]);
-                      }}
-                      style={{
-                        width: "100%",
-                        marginTop: 8,
-                        border: "none",
-                        borderRadius: 8,
-                        padding: "9px 8px",
-                        background: sinStock
-                          ? "#cbd5e1"
-                          : itemExistente
-                          ? "#fee2e2"
-                          : "#bcd0ff",
-                        color: sinStock
-                          ? "#64748b"
-                          : itemExistente
-                          ? "#b91c1c"
-                          : "#1726a4",
-                        fontWeight: 900,
-                        cursor: sinStock ? "not-allowed" : "pointer",
-                      }}
-                    >
-                      {sinStock
-                        ? "Sin stock"
-                        : itemExistente
-                        ? "Quitar producto"
-                        : "Agregar producto"}
-                    </button>
-
-                    {itemExistente && (
-                      <div
-                        style={{
-                          marginTop: 10,
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 6,
-                          alignItems: "stretch",
-                          width: "100%",
-                        }}
-                      >
-                        <label
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 800,
-                            color: "#334155",
-                            textAlign: "center",
-                            display: "block",
-                          }}
-                        >
-                          Cantidad
-                        </label>
-
-                        <input
-                          type="number"
-                          min="1"
-                          onClick={(e) => e.stopPropagation()}
-                          onTouchStart={(e) => e.stopPropagation()}
-                          max={Math.max(
-                            1,
-                            Number(
-                              stockProductoEnPunto(
-                                producto.id,
-                                jornadaActiva?.punto_nombre || localNuevaOrden
-                              ) || 0
-                            )
-                          )}
-                          step="1"
-                          value={String(itemExistente.cantidad ?? "")}
-                          onChange={(e) => {
-                            const indice = ventaItems.findIndex(
-                              (item) =>
-                                String(item.producto_id) ===
-                                String(producto.id)
-                            );
-
-                            if (indice < 0) return;
-
-                            const disponible = Number(
-                              stockProductoEnPunto(
-                                producto.id,
-                                jornadaActiva?.punto_nombre || localNuevaOrden
-                              ) || 0
-                            );
-
-                            const texto = String(e.target.value || "")
-                              .replace(/[^0-9]/g, "")
-                              .slice(0, 4);
-
-                            if (!texto) {
-                              actualizarItemVenta(
-                                indice,
-                                "cantidad",
-                                ""
-                              );
-                              return;
-                            }
-
-                            const cantidad = Number(texto);
-
-                            if (cantidad <= 0) {
-                              actualizarItemVenta(
-                                indice,
-                                "cantidad",
-                                ""
-                              );
-                              return;
-                            }
-
-                            if (cantidad > disponible) {
-                              alert(
-                                `No puedes superar el stock disponible: ${disponible}`
-                              );
-
-                              actualizarItemVenta(
-                                indice,
-                                "cantidad",
-                                String(disponible)
-                              );
-                              return;
-                            }
-
-                            actualizarItemVenta(
-                              indice,
-                              "cantidad",
-                              String(cantidad)
-                            );
-                          }}
-                          onBlur={(e) => {
-                            const indice = ventaItems.findIndex(
-                              (item) =>
-                                String(item.producto_id) ===
-                                String(producto.id)
-                            );
-
-                            if (indice < 0) return;
-
-                            const cantidad = Number(e.target.value || 0);
-
-                            if (!Number.isInteger(cantidad) || cantidad <= 0) {
-                              actualizarItemVenta(
-                                indice,
-                                "cantidad",
-                                ""
-                              );
-                            }
-                          }}
-                          style={{
-                            width: "100%",
-                            minWidth: 0,
-                            height: 44,
-                            boxSizing: "border-box",
-                            border: "2px solid #64748b",
-                            borderRadius: 8,
-                            padding: "8px 10px",
-                            fontSize: 18,
-                            fontWeight: 900,
-                            textAlign: "center",
-                            background: "#ffffff",
-                          }}
-                          placeholder="0"
-                        />
-                      </div>
-                    )}
-                  </article>
-                );
-              })}
+            </aside>
           </div>
-
         </section>
       </div>
     </form>
