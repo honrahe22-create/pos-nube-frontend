@@ -7913,7 +7913,7 @@ if (institucionIdLogin) {
                - Sin longitud fija impuesta por el navegador.
                ============================================================ */
             @page {
-              size: 58mm 130mm;
+              size: 58mm 100mm;
               margin: 0;
             }
 
@@ -7942,7 +7942,11 @@ if (institucionIdLogin) {
               width: 50mm !important;
               max-width: 50mm !important;
               margin: 0 auto !important;
-              padding: 1.5mm 1mm 1.5mm !important;
+              padding: 0.8mm 1mm 0.8mm !important;
+              position: relative !important;
+              top: 0 !important;
+              left: 0 !important;
+              transform: none !important;
               break-inside: avoid;
               page-break-inside: avoid;
             }
@@ -8166,18 +8170,25 @@ if (institucionIdLogin) {
           const altoPx = Math.ceil(ticketElemento.getBoundingClientRect().height);
           const altoContenidoMm = altoPx / 3.7795275591;
 
-          // Dejamos un pequeño margen de seguridad al final para que
-          // TOTAL / forma de pago / pie nunca queden en una segunda hoja.
-          const altoPaginaMm = Math.max(
-            130,
-            Math.ceil(altoContenidoMm + 6)
-          );
+          // ============================================================
+          // IMPRESIÓN PC ZKTECO / POS-58
+          // El formulario configurado en Windows es TICKET POS 58X100.
+          // Debemos usar exactamente el mismo alto aquí.
+          //
+          // Antes se calculaba un alto distinto (96/120/130 mm). Chrome
+          // intentaba adaptar esa página al formulario físico de 100 mm,
+          // desplazando el ticket hacia abajo y cortando TOTAL / pie.
+          //
+          // Ahora la página web y el driver usan exactamente 58 x 100 mm
+          // y el contenido se ancla al borde superior del papel.
+          // ============================================================
+          const altoPaginaMm = 100;
 
           const estiloPagina = documento.createElement("style");
           estiloPagina.setAttribute("data-pos-ticket-page", "true");
           estiloPagina.textContent = `
             @page {
-              size: 58mm ${altoPaginaMm}mm !important;
+              size: 58mm 100mm !important;
               margin: 0 !important;
             }
 
@@ -8186,15 +8197,33 @@ if (institucionIdLogin) {
               width: 58mm !important;
               min-width: 58mm !important;
               max-width: 58mm !important;
-              height: auto !important;
-              min-height: 0 !important;
-              max-height: none !important;
+              height: 100mm !important;
+              min-height: 100mm !important;
+              max-height: 100mm !important;
               margin: 0 !important;
               padding: 0 !important;
               overflow: hidden !important;
+              position: relative !important;
+            }
+
+            body {
+              display: block !important;
             }
 
             .ticket {
+              width: 50mm !important;
+              max-width: 50mm !important;
+              margin: 0 auto !important;
+              padding-top: 0.8mm !important;
+              padding-bottom: 0.8mm !important;
+              position: absolute !important;
+              top: 0 !important;
+              left: 4mm !important;
+              transform: none !important;
+              page-break-before: avoid !important;
+              break-before: avoid-page !important;
+              page-break-after: avoid !important;
+              break-after: avoid-page !important;
               page-break-inside: avoid !important;
               break-inside: avoid-page !important;
             }
