@@ -757,8 +757,9 @@ const [cierreForm, setCierreForm] = useState({
 });
 
 const [egresoForm, setEgresoForm] = useState({
-  negocio: "",
-  usuario: "",
+  // "negocio" se conserva internamente por compatibilidad con backend,
+  // pero en pantalla se maneja como LOCAL.
+  negocio: "PENSIONADO",
   fecha: "",
   nombre_egreso: "",
   proveedor_id: "",
@@ -9850,6 +9851,228 @@ Disponible: ${formatearMoneda(
     }
   };
 
+  const obtenerEgresosFiltrados = () => {
+    const texto = String(egresosFiltros.texto || "").toLowerCase();
+
+    return egresosDiarios.filter((egreso) => {
+      const fechaISO = normalizarFechaISO(egreso.fecha);
+
+      const cumpleInicio =
+        !egresosFiltros.fecha_inicio ||
+        (fechaISO && fechaISO >= egresosFiltros.fecha_inicio);
+
+      const cumpleFin =
+        !egresosFiltros.fecha_fin ||
+        (fechaISO && fechaISO <= egresosFiltros.fecha_fin);
+
+      const cumpleTexto =
+        !texto ||
+        String(egreso.negocio || "").toLowerCase().includes(texto) ||
+        String(egreso.nombre_egreso || "").toLowerCase().includes(texto) ||
+        String(egreso.descripcion || "").toLowerCase().includes(texto) ||
+        String(egreso.numero_factura || "").toLowerCase().includes(texto) ||
+        String(egreso.tipo_documento || "").toLowerCase().includes(texto) ||
+        String(egreso.tipo_egreso || "").toLowerCase().includes(texto);
+
+      return cumpleInicio && cumpleFin && cumpleTexto;
+    });
+  };
+
+  const exportarEgresosExcel = () => {
+    try {
+      const filas = obtenerEgresosFiltrados();
+
+      if (!filas.length) {
+        alert("No hay egresos para exportar con los filtros actuales.");
+        return;
+      }
+
+      // Cada dato sale en su propia columna.
+      const datos = filas.map((egreso) => ({
+        LOCAL: egreso.negocio || "",
+        FECHA: formatearSoloFecha(egreso.fecha),
+        PROVEEDOR: egreso.nombre_egreso || "",
+        TOTAL: Number(egreso.total || 0),
+        DESCRIPCION: egreso.descripcion || "",
+        ESTADO: egreso.estado || "",
+        NUMERO_DOCUMENTO: egreso.numero_factura || "",
+        TIPO_DOCUMENTO: String(
+          egreso.tipo_documento || "FACTURA"
+        ).replaceAll("_", " "),
+        TIPO_EGRESO: egreso.tipo_egreso || "Efectivo",
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(datos);
+
+      worksheet["!cols"] = [
+        { wch: 16 }, // LOCAL
+        { wch: 13 }, // FECHA
+        { wch: 30 }, // PROVEEDOR
+        { wch: 12 }, // TOTAL
+        { wch: 36 }, // DESCRIPCION
+        { wch: 12 }, // ESTADO
+        { wch: 24 }, // NUMERO DOCUMENTO
+        { wch: 22 }, // TIPO DOCUMENTO
+        { wch: 16 }, // TIPO EGRESO
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Egresos");
+
+      const desde = egresosFiltros.fecha_inicio || "todos";
+      const hasta = egresosFiltros.fecha_fin || "todos";
+
+      XLSX.writeFile(
+        workbook,
+        `egresos_${desde}_${hasta}.xlsx`
+      );
+    } catch (error) {
+      console.error("Error exportando egresos a Excel:", error);
+      alert("No se pudo exportar el archivo Excel.");
+    }
+  };
+
+  const exportarEgresosPDF = () => {
+    try {
+      const filas = obtenerEgresosFiltrados();
+
+      if (!filas.length) {
+        alert("No hay egresos para exportar con los filtros actuales.");
+        return;
+      }
+
+      const escapar = (valor) =>
+        String(valor ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+
+      const totalGeneral = filas.reduce(
+        (suma, egreso) => suma + Number(egreso.total || 0),
+        0
+      );
+
+      const filasHtml = filas
+        .map(
+          (egreso) => `
+            <tr>
+              <td>${escapar(egreso.negocio || "")}</td>
+              <td>${escapar(formatearSoloFecha(egreso.fecha))}</td>
+              <td>${escapar(egreso.nombre_egreso || "")}</td>
+              <td class="num">$${Number(egreso.total || 0).toFixed(2)}</td>
+              <td>${escapar(egreso.descripcion || "")}</td>
+              <td>${escapar(egreso.estado || "")}</td>
+              <td>${escapar(egreso.numero_factura || "")}</td>
+              <td>${escapar(
+                String(egreso.tipo_documento || "FACTURA").replaceAll("_", " ")
+              )}</td>
+              <td>${escapar(egreso.tipo_egreso || "Efectivo")}</td>
+            </tr>
+          `
+        )
+        .join("");
+
+      const ventana = window.open("", "_blank", "width=1200,height=800");
+
+      if (!ventana) {
+        alert(
+          "El navegador bloqueó la ventana del PDF. Habilita ventanas emergentes para POS NUBE."
+        );
+        return;
+      }
+
+      ventana.document.write(`
+        <!doctype html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <title>Reporte de egresos</title>
+            <style>
+              @page { size: A4 landscape; margin: 10mm; }
+              * { box-sizing: border-box; }
+              body {
+                font-family: Arial, sans-serif;
+                color: #111827;
+                margin: 0;
+                font-size: 10px;
+              }
+              h1 { margin: 0 0 6px; font-size: 20px; }
+              .meta { margin-bottom: 12px; color: #475569; }
+              table {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+              }
+              th, td {
+                border: 1px solid #cbd5e1;
+                padding: 5px;
+                vertical-align: top;
+                overflow-wrap: anywhere;
+              }
+              th {
+                background: #f1f5f9;
+                font-weight: 700;
+              }
+              .num { text-align: right; white-space: nowrap; }
+              .total {
+                margin-top: 10px;
+                text-align: right;
+                font-size: 13px;
+                font-weight: 700;
+              }
+              @media print {
+                body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              }
+            </style>
+          </head>
+          <body>
+            <h1>Reporte de Egresos Diarios</h1>
+            <div class="meta">
+              Fecha inicial: ${escapar(egresosFiltros.fecha_inicio || "Todas")}
+              &nbsp;&nbsp;|&nbsp;&nbsp;
+              Fecha final: ${escapar(egresosFiltros.fecha_fin || "Todas")}
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Local</th>
+                  <th>Fecha</th>
+                  <th>Proveedor</th>
+                  <th>Total</th>
+                  <th>Descripción</th>
+                  <th>Estado</th>
+                  <th>N.º documento</th>
+                  <th>Tipo documento</th>
+                  <th>Tipo egreso</th>
+                </tr>
+              </thead>
+              <tbody>${filasHtml}</tbody>
+            </table>
+
+            <div class="total">
+              TOTAL EGRESOS: $${totalGeneral.toFixed(2)}
+            </div>
+
+            <script>
+              window.onload = function () {
+                setTimeout(function () {
+                  window.print();
+                }, 250);
+              };
+            </script>
+          </body>
+        </html>
+      `);
+
+      ventana.document.close();
+    } catch (error) {
+      console.error("Error preparando PDF de egresos:", error);
+      alert("No se pudo preparar el reporte PDF.");
+    }
+  };
+
   const guardarEgreso = async () => {
     try {
       const token = localStorage.getItem("token");
@@ -9887,7 +10110,7 @@ Disponible: ${formatearMoneda(
       if (!respuesta.ok) throw new Error(data.message || data.error || "No se pudo guardar el egreso");
 
       setEgresoForm({
-        negocio: "", usuario: "", fecha: "", nombre_egreso: "",
+        negocio: "PENSIONADO", fecha: "", nombre_egreso: "",
         proveedor_id: "", proveedor_nombre: "", total: "",
         descripcion: "", estado: "ACTIVO", numero_factura: "",
         tipo_documento: "FACTURA", tipo_egreso: "Efectivo",
@@ -12302,29 +12525,24 @@ if (!usuario) {
       <div style={{ ...styles.box, marginBottom: 20, padding: 20 }}>
         <div style={styles.filtersGrid}>
           <div style={styles.filterField}>
-            <label style={styles.label}>Negocio</label>
-            <input
-              type="text"
+            <label style={styles.label}>Local</label>
+            <select
               value={egresoForm.negocio}
               onChange={(e) =>
-                setEgresoForm({ ...egresoForm, negocio: e.target.value })
+                setEgresoForm({
+                  ...egresoForm,
+                  negocio: e.target.value,
+                })
               }
               style={styles.input}
-              placeholder="Ej. KIDSFOOD by GRUPO ZAZ"
-            />
-          </div>
-
-          <div style={styles.filterField}>
-            <label style={styles.label}>Usuario</label>
-            <input
-              type="text"
-              value={egresoForm.usuario}
-              onChange={(e) =>
-                setEgresoForm({ ...egresoForm, usuario: e.target.value })
-              }
-              style={styles.input}
-              placeholder="Ej. SAMUEL"
-            />
+            >
+              <option value="PENSIONADO">PENSIONADO</option>
+              <option value="FEUE">FEUE</option>
+              <option value="MARISTA">MARISTA</option>
+              <option value="CIPRES">CIPRES</option>
+              <option value="EVENTO">EVENTO</option>
+              <option value="OTROS">OTROS</option>
+            </select>
           </div>
 
           <div style={styles.filterField}>
@@ -12568,15 +12786,28 @@ onClick={guardarEgreso}
         Borrar filtros
       </button>
 
-      <button style={styles.exportButton}>EXPORTAR</button>
+      <button
+        type="button"
+        style={styles.exportButton}
+        onClick={exportarEgresosExcel}
+      >
+        EXPORTAR EXCEL
+      </button>
+
+      <button
+        type="button"
+        style={styles.outlineButton}
+        onClick={exportarEgresosPDF}
+      >
+        EXPORTAR PDF
+      </button>
     </div>
 
     <div style={{ marginTop: 20, overflowX: "auto" }}>
       <table style={styles.table}>
         <thead>
           <tr>
-            <th style={styles.th}>Negocio</th>
-            <th style={styles.th}>Usuario</th>
+            <th style={styles.th}>Local</th>
             <th style={styles.th}>Fecha</th>
             <th style={styles.th}>Nombre del proveedor</th>
             <th style={styles.th}>Total</th>
@@ -12604,7 +12835,6 @@ onClick={guardarEgreso}
               const cumpleTexto =
                 !texto ||
                 String(egreso.negocio || "").toLowerCase().includes(texto) ||
-                String(egreso.usuario || "").toLowerCase().includes(texto) ||
                 String(egreso.nombre_egreso || "").toLowerCase().includes(texto) ||
                 String(egreso.descripcion || "").toLowerCase().includes(texto) ||
                 String(egreso.numero_factura || "").toLowerCase().includes(texto);
@@ -12614,7 +12844,6 @@ onClick={guardarEgreso}
             .map((egreso) => (
               <tr key={egreso.id}>
                 <td style={styles.td}>{egreso.negocio}</td>
-                <td style={styles.td}>{egreso.usuario}</td>
                 <td style={styles.td}>{formatearSoloFecha(egreso.fecha)}</td>
                 <td style={styles.td}>{egreso.nombre_egreso}</td>
                 <td style={styles.td}>${Number(egreso.total || 0).toFixed(2)}</td>
