@@ -4406,6 +4406,33 @@ const exportarVentasExcel = () => {
     setLocalNuevaOrden(punto);
     setMostrarSelectorJornada(false);
   };
+  const volverAlLoginOperativoSinJornada = (mensaje = "") => {
+    // El modal antiguo "Iniciar jornada" queda eliminado.
+    // Si ENCARGADO_LOCAL/CAJERO no tiene jornada, vuelve al login normal
+    // donde selecciona BAR PRINCIPAL / KIOSKO e ingresa sus credenciales.
+    localStorage.removeItem("token");
+    localStorage.removeItem("usuario");
+    localStorage.removeItem("accesoOperativo");
+    localStorage.removeItem("jornadaActiva");
+
+    setJornadaActiva(null);
+    setMostrarSelectorJornada(false);
+    setUsuario(null);
+
+    setVentaItems([]);
+    setAlumnoDetalle(null);
+    setProfesorDetalle(null);
+    setOrdenDetalleAlumno(null);
+
+    setCorreo("");
+    setPassword("");
+    setLoginPuntoId("ADMIN");
+
+    if (mensaje) {
+      setMensaje(mensaje);
+    }
+  };
+
   const cargarEstadoOperativoCaja=async({
     tokenForzado=null,
     institucionForzada=null,
@@ -4480,7 +4507,11 @@ const exportarVentasExcel = () => {
       }
 
       if(data?.estado_operativo==="SIN_JORNADA"){
-        setMostrarSelectorJornada(true);
+        volverAlLoginOperativoSinJornada(
+          data?.message ||
+          "La caja está cerrada. Selecciona tu ubicación e inicia sesión para abrir una nueva jornada."
+        );
+        return data;
       }
 
       if(data?.estado_operativo==="CIERRE_PENDIENTE"){
@@ -4649,11 +4680,16 @@ const exportarVentasExcel = () => {
     );
     setOperadorJornadaCorreo(String(u?.correo||""));
     setOperadorJornadaPassword("");
-    setMostrarSelectorJornada(
-      estado?.estado_operativo==="SIN_JORNADA"
-        ? true
-        : !localStorage.getItem("accesoOperativo")
-    );
+
+    // Nunca volver a mostrar el modal antiguo.
+    setMostrarSelectorJornada(false);
+
+    if(estado?.estado_operativo==="SIN_JORNADA"){
+      volverAlLoginOperativoSinJornada(
+        estado?.message ||
+        "La caja está cerrada. Selecciona tu ubicación e inicia sesión para abrir una nueva jornada."
+      );
+    }
   };
   const obtenerPuntosJornadaDisponibles=(lista=puntosOperacion)=>{
     const activos=(Array.isArray(lista)?lista:[])
@@ -4804,7 +4840,9 @@ const exportarVentasExcel = () => {
       });
       setOperadorJornadaPassword("");
       setPuntoJornadaSeleccionado("");
-      setMostrarSelectorJornada(true);
+      volverAlLoginOperativoSinJornada(
+        "La jornada fue cerrada. Selecciona tu ubicación e inicia sesión para abrir una nueva jornada."
+      );
     }catch(e){alert(e.message||"No se pudo cerrar la jornada")}
   };
 
@@ -10375,11 +10413,16 @@ Disponible: ${formatearMoneda(
         message:
           "Cierre realizado. Abre una nueva caja/jornada antes de continuar.",
       });
-      setMostrarSelectorJornada(true);
+      setMostrarSelectorJornada(false);
 
       await cargarCierres();
+
       alert(
-        "Cierre de caja guardado correctamente. Debes abrir una nueva jornada para continuar operando."
+        "Cierre de caja guardado correctamente. Debes iniciar sesión nuevamente en tu ubicación para abrir una nueva jornada."
+      );
+
+      volverAlLoginOperativoSinJornada(
+        "Caja cerrada. Selecciona BAR PRINCIPAL o KIOSKO e inicia sesión para abrir la nueva jornada."
       );
     } catch (error) {
       console.error("Error guardando cierre:", error);
@@ -10964,325 +11007,9 @@ if (!usuario) {
         </div>
       )}
 
-      {mostrarSelectorJornada &&
-       !jornadaActiva?.id &&
-       ["ENCARGADO_LOCAL","CAJERO"].includes(rolActual) && <div
-        style={{
-          position:"fixed",
-          inset:0,
-          zIndex:200000,
-          background:"rgba(15,23,42,.72)",
-          display:"flex",
-          alignItems:"center",
-          justifyContent:"center",
-          padding:20,
-          overflowY:"auto",
-        }}
-      >
-        <div
-          style={{
-            width:"min(600px,96vw)",
-            background:"#fff",
-            borderRadius:18,
-            padding:28,
-            boxShadow:"0 25px 70px rgba(0,0,0,.35)",
-            maxHeight:"94vh",
-            overflowY:"auto",
-          }}
-        >
-          <h2 style={{margin:0,fontSize:28}}>Iniciar jornada</h2>
-
-          <p style={{color:"#64748b",lineHeight:1.5}}>
-            Selecciona la ubicación e identifica al <strong>operador que
-            realmente trabajará en este punto</strong>. Debe ingresar su propio
-            usuario/correo y contraseña.
-          </p>
-
-          <div
-            style={{
-              marginTop:12,
-              padding:12,
-              borderRadius:10,
-              background:"#fff7ed",
-              color:"#9a3412",
-              fontSize:13,
-              lineHeight:1.5,
-            }}
-          >
-            La caja está cerrada. Para realizar ventas, movimientos de stock,
-            recargas, egresos u otras operaciones debes abrir una jornada.
-            Si existe una jornada anterior pendiente, primero debes cerrarla.
-          </div>
-
-          <div style={{...styles.filterField,marginTop:18}}>
-            <label style={styles.label}>Punto de trabajo *</label>
-            <select
-              style={{...styles.input,marginTop:8}}
-              value={puntoJornadaSeleccionado}
-              onChange={(e)=>setPuntoJornadaSeleccionado(e.target.value)}
-            >
-              <option value="">Seleccionar punto</option>
-              {obtenerPuntosJornadaDisponibles()
-                .map((p)=>(
-                  <option key={p.id} value={p.id}>
-                    {p.nombre}
-                  </option>
-                ))}
-            </select>
-          </div>
-
-          <div style={{...styles.filterField,marginTop:14}}>
-            <label style={styles.label}>Usuario / correo del operador *</label>
-            <input
-              type="email"
-              style={styles.input}
-              value={operadorJornadaCorreo}
-              onChange={(e)=>setOperadorJornadaCorreo(e.target.value)}
-              placeholder="operador@institucion.com"
-              autoComplete="username"
-            />
-          </div>
-
-          <div style={{...styles.filterField,marginTop:14}}>
-            <label style={styles.label}>Contraseña del operador *</label>
-
-            <div style={styles.passwordWrap}>
-              <input
-                type={verPasswordOperadorJornada?"text":"password"}
-                style={styles.inputPassword}
-                value={operadorJornadaPassword}
-                onChange={(e)=>setOperadorJornadaPassword(e.target.value)}
-                placeholder="Contraseña"
-                autoComplete="current-password"
-                onKeyDown={(e)=>{
-                  if(e.key==="Enter"){
-                    e.preventDefault();
-                    abrirJornada();
-                  }
-                }}
-              />
-
-              <button
-                type="button"
-                style={styles.eyeButton}
-                onClick={()=>setVerPasswordOperadorJornada((v)=>!v)}
-              >
-                {verPasswordOperadorJornada?"Ocultar":"Ver"}
-              </button>
-            </div>
-          </div>
-
-          <div
-            style={{
-              display:"flex",
-              gap:10,
-              marginTop:12,
-              flexWrap:"wrap",
-            }}
-          >
-            <button
-              type="button"
-              style={styles.linkButton}
-              onClick={()=>{
-                setOperadorJornadaCorreo("");
-                setOperadorJornadaPassword("");
-              }}
-            >
-              Cambiar operador
-            </button>
-
-            <button
-              type="button"
-              style={styles.linkButton}
-              onClick={()=>{
-                setCambiarAccesoForm({
-                  institucion_id:String(obtenerInstitucionActivaId()||""),
-                  correo_actual:operadorJornadaCorreo||"",
-                  password_actual:"",
-                  nuevo_correo:operadorJornadaCorreo||"",
-                  nueva_password:"",
-                  confirmar_password:"",
-                });
-                setMostrarEditarAccesoJornada((v)=>!v);
-              }}
-            >
-              Cambiar usuario / contraseña
-            </button>
-
-            {["SUPER_ADMIN","ADMIN"].includes(rolActual)&&(
-              <button
-                type="button"
-                style={styles.linkButton}
-                onClick={()=>{
-                  setMostrarSelectorJornada(false);
-                  setVista("configuracion");
-                }}
-              >
-                Administrar usuarios
-              </button>
-            )}
-          </div>
-
-          {mostrarEditarAccesoJornada&&(
-            <form
-              onSubmit={async(e)=>{
-                await handleCambiarAcceso(e);
-              }}
-              style={{
-                marginTop:18,
-                padding:16,
-                border:"1px solid #dbeafe",
-                borderRadius:12,
-                background:"#f8fbff",
-              }}
-            >
-              <h3 style={{margin:"0 0 12px"}}>Cambiar acceso del operador</h3>
-
-              <input
-                type="hidden"
-                value={cambiarAccesoForm.institucion_id}
-                readOnly
-              />
-
-              <div style={styles.filterField}>
-                <label style={styles.label}>Correo actual</label>
-                <input
-                  type="email"
-                  style={styles.input}
-                  value={cambiarAccesoForm.correo_actual}
-                  onChange={(e)=>
-                    setCambiarAccesoForm((p)=>({
-                      ...p,
-                      correo_actual:e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div style={{...styles.filterField,marginTop:10}}>
-                <label style={styles.label}>Contraseña actual</label>
-                <input
-                  type="password"
-                  style={styles.input}
-                  value={cambiarAccesoForm.password_actual}
-                  onChange={(e)=>
-                    setCambiarAccesoForm((p)=>({
-                      ...p,
-                      password_actual:e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div style={{...styles.filterField,marginTop:10}}>
-                <label style={styles.label}>Nuevo correo</label>
-                <input
-                  type="email"
-                  style={styles.input}
-                  value={cambiarAccesoForm.nuevo_correo}
-                  onChange={(e)=>
-                    setCambiarAccesoForm((p)=>({
-                      ...p,
-                      nuevo_correo:e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div style={{...styles.filterField,marginTop:10}}>
-                <label style={styles.label}>Nueva contraseña</label>
-                <input
-                  type="password"
-                  style={styles.input}
-                  value={cambiarAccesoForm.nueva_password}
-                  onChange={(e)=>
-                    setCambiarAccesoForm((p)=>({
-                      ...p,
-                      nueva_password:e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div style={{...styles.filterField,marginTop:10}}>
-                <label style={styles.label}>Confirmar nueva contraseña</label>
-                <input
-                  type="password"
-                  style={styles.input}
-                  value={cambiarAccesoForm.confirmar_password}
-                  onChange={(e)=>
-                    setCambiarAccesoForm((p)=>({
-                      ...p,
-                      confirmar_password:e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              {mensajeCambiarAcceso&&(
-                <div style={{marginTop:10,color:"#334155"}}>
-                  {mensajeCambiarAcceso}
-                </div>
-              )}
-
-              <div style={{display:"flex",gap:10,marginTop:14}}>
-                <button
-                  type="submit"
-                  style={styles.button}
-                  disabled={cargandoCambiarAcceso}
-                >
-                  {cargandoCambiarAcceso?"Guardando...":"Guardar nuevo acceso"}
-                </button>
-
-                <button
-                  type="button"
-                  style={styles.outlineButton}
-                  onClick={()=>setMostrarEditarAccesoJornada(false)}
-                >
-                  Cancelar
-                </button>
-              </div>
-            </form>
-          )}
-
-          <button
-            type="button"
-            style={{
-              ...styles.button,
-              width:"100%",
-              marginTop:20,
-            }}
-            onClick={abrirJornada}
-            disabled={
-              cargandoJornada||
-              !puntoJornadaSeleccionado||
-              !String(operadorJornadaCorreo||"").trim()||
-              !operadorJornadaPassword
-            }
-          >
-            {cargandoJornada
-              ?"Validando operador..."
-              :"Validar operador e iniciar jornada"}
-          </button>
-
-          <div
-            style={{
-              marginTop:16,
-              padding:12,
-              borderRadius:10,
-              background:"#f1f5f9",
-              color:"#475569",
-              fontSize:13,
-              lineHeight:1.5,
-            }}
-          >
-            <strong>Importante:</strong> al validar las credenciales, POS NUBE
-            cambia la sesión activa al operador indicado. Desde ese instante,
-            sus ventas y movimientos quedan registrados con su usuario,
-            ubicación y jornada.
-          </div>
-        </div>
-      </div>}
+      {/* Modal antiguo "Iniciar jornada" eliminado.
+          La apertura de BAR PRINCIPAL / KIOSKO se realiza únicamente
+          desde el login operativo actual. */}
 
       <aside style={styles.sidebar}>
         <div>
