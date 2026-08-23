@@ -7913,7 +7913,7 @@ if (institucionIdLogin) {
                - Sin longitud fija impuesta por el navegador.
                ============================================================ */
             @page {
-              size: 58mm 120mm;
+              size: 58mm 130mm;
               margin: 0;
             }
 
@@ -8169,7 +8169,7 @@ if (institucionIdLogin) {
           // Dejamos un pequeño margen de seguridad al final para que
           // TOTAL / forma de pago / pie nunca queden en una segunda hoja.
           const altoPaginaMm = Math.max(
-            96,
+            130,
             Math.ceil(altoContenidoMm + 6)
           );
 
