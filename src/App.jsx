@@ -7947,8 +7947,8 @@ if (institucionIdLogin) {
         .map(
           ([etiqueta, valor]) => `
             <div class="dato">
-              <div class="etiqueta">${escaparHtml(etiqueta)}</div>
-              <div class="valor">${escaparHtml(valor)}</div>
+              <div class="etiqueta">${escaparHtmlTicket(etiqueta)}</div>
+              <div class="valor">${escaparHtmlTicket(valor)}</div>
             </div>
           `
         )
@@ -7963,7 +7963,7 @@ if (institucionIdLogin) {
           (d) => `
             <tr>
               <td>${Number(d.denominacion || 0).toFixed(2)}</td>
-              <td>${escaparHtml(d.tipo || "")}</td>
+              <td>${escaparHtmlTicket(d.tipo || "")}</td>
               <td>${Number(d.cantidad || 0)}</td>
               <td>${moneda(d.total)}</td>
             </tr>
@@ -7979,14 +7979,14 @@ if (institucionIdLogin) {
         .map(
           (e) => `
             <tr>
-              <td>${escaparHtml(formatearSoloFecha(e.fecha))}</td>
-              <td>${escaparHtml(
+              <td>${escaparHtmlTicket(formatearSoloFecha(e.fecha))}</td>
+              <td>${escaparHtmlTicket(
                 e.nombre_egreso || e.nombre || "Egreso"
               )}</td>
-              <td>${escaparHtml(e.tipo_egreso || "")}</td>
-              <td>${escaparHtml(e.numero_factura || "-")}</td>
+              <td>${escaparHtmlTicket(e.tipo_egreso || "")}</td>
+              <td>${escaparHtmlTicket(e.numero_factura || "-")}</td>
               <td>${moneda(e.total)}</td>
-              <td>${escaparHtml(
+              <td>${escaparHtmlTicket(
                 e.usuario || e.usuario_nombre || "-"
               )}</td>
             </tr>
@@ -8013,7 +8013,7 @@ if (institucionIdLogin) {
         <html lang="es">
           <head>
             <meta charset="utf-8" />
-            <title>Cierre de caja - ${escaparHtml(
+            <title>Cierre de caja - ${escaparHtmlTicket(
               formatearSoloFecha(cierre.fecha)
             )}</title>
             <style>
@@ -18087,12 +18087,15 @@ onClick={guardarEgreso}
               // PANEL FLOTANTE REAL:
               // queda visible aunque el usuario siga bajando por cientos de productos.
               position: "fixed",
-              top: 86,
+              // Límite superior visual: debajo del bloque azul
+              // "BAR PRINCIPAL / Fecha de la orden".
+              // El panel continúa acompañando el scroll, pero no sube más.
+              top: 176,
               right: 24,
               zIndex: 80,
               width: "min(390px, calc(100vw - 330px))",
               maxWidth: 390,
-              maxHeight: "calc(100vh - 105px)",
+              maxHeight: "calc(100vh - 190px)",
               overflowY: "auto",
               boxSizing: "border-box",
               pointerEvents: "auto",
