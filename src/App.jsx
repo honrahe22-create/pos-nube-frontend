@@ -7904,7 +7904,7 @@ if (institucionIdLogin) {
       <html>
         <head>
           <meta charset="utf-8" />
-          <title></title>
+          <title> </title>
           <style>
             /* ============================================================
                TICKET PC 58 MM
@@ -7939,10 +7939,10 @@ if (institucionIdLogin) {
             }
 
             .ticket {
-              width: 56mm !important;
-              max-width: 56mm !important;
+              width: 50mm !important;
+              max-width: 50mm !important;
               margin: 0 auto !important;
-              padding: 1.5mm 1.2mm 1.5mm !important;
+              padding: 1.5mm 1mm 1.5mm !important;
               break-inside: avoid;
               page-break-inside: avoid;
             }
@@ -7982,8 +7982,9 @@ if (institucionIdLogin) {
             }
 
             .producto {
-              width: 74%;
-              padding-right: 5px;
+              width: 68%;
+              padding-right: 3px;
+              overflow-wrap: anywhere;
             }
 
             .cantidad {
@@ -7991,9 +7992,10 @@ if (institucionIdLogin) {
             }
 
             .valor {
-              width: 26%;
+              width: 32%;
               text-align: right;
               white-space: nowrap;
+              padding-right: 1mm;
             }
 
             .total {
@@ -8020,8 +8022,8 @@ if (institucionIdLogin) {
               }
 
               .ticket {
-                width: 54mm !important;
-                max-width: 54mm !important;
+                width: 50mm !important;
+                max-width: 50mm !important;
                 margin: 0 auto !important;
                 page-break-after: avoid !important;
                 break-after: avoid-page !important;
@@ -8167,8 +8169,8 @@ if (institucionIdLogin) {
           // Dejamos un pequeño margen de seguridad al final para que
           // TOTAL / forma de pago / pie nunca queden en una segunda hoja.
           const altoPaginaMm = Math.max(
-            72,
-            Math.ceil(altoContenidoMm + 5)
+            96,
+            Math.ceil(altoContenidoMm + 6)
           );
 
           const estiloPagina = documento.createElement("style");
@@ -8184,9 +8186,9 @@ if (institucionIdLogin) {
               width: 58mm !important;
               min-width: 58mm !important;
               max-width: 58mm !important;
-              height: ${altoPaginaMm}mm !important;
-              min-height: ${altoPaginaMm}mm !important;
-              max-height: ${altoPaginaMm}mm !important;
+              height: auto !important;
+              min-height: 0 !important;
+              max-height: none !important;
               margin: 0 !important;
               padding: 0 !important;
               overflow: hidden !important;
