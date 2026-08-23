@@ -4322,7 +4322,7 @@ const exportarVentasExcel = () => {
     const u=usuarioForzado||usuario;
     const rol=normalizarRol(u?.rol);
 
-    if(!u||["PADRE","ESTUDIANTE","AUDITOR"].includes(rol)){
+    if(!u||["SUPER_ADMIN","ADMIN","PADRE","ESTUDIANTE","AUDITOR"].includes(rol)){
       const libre={
         permitido:true,
         estado_operativo:"NO_APLICA",
@@ -4898,7 +4898,7 @@ if (institucionIdLogin) {
 
   useEffect(()=>{
     if(!usuario||!institucionActivaId||esRolPortal)return;
-    if(normalizarRol(usuario?.rol)==="AUDITOR")return;
+    if(!["ENCARGADO_LOCAL","CAJERO"].includes(normalizarRol(usuario?.rol)))return;
 
     let cancelado=false;
 
