@@ -3975,10 +3975,35 @@ useEffect(()=>{
 },[]);
 
 useEffect(()=>{
-  if(usuario&&institucionActivaId&&!esRolPortal){
+  const rol=normalizarRol(usuario?.rol);
+
+  if(
+    usuario &&
+    institucionActivaId &&
+    ["ENCARGADO_LOCAL","CAJERO"].includes(rol)
+  ){
     cargarContextoJornada();
+    return;
   }
-},[usuario?.id,institucionActivaId]);
+
+  // Cualquier acceso administrativo debe permanecer libre del modal de jornada.
+  if(
+    usuario &&
+    ["ADMIN","SUPER_ADMIN","AUDITOR"].includes(rol)
+  ){
+    setMostrarSelectorJornada(false);
+    localStorage.removeItem("jornadaActiva");
+    setJornadaActiva(null);
+    setEstadoOperativoCaja({
+      permitido:true,
+      estado_operativo:"NO_APLICA",
+      requiere_abrir_jornada:false,
+      requiere_cerrar_pendiente:false,
+      jornada:null,
+      message:"",
+    });
+  }
+},[usuario?.id,usuario?.rol,institucionActivaId]);
 
 useEffect(() => {
   if (!usuario || !institucionActivaId || esRolPortal) return;
@@ -4322,7 +4347,10 @@ const exportarVentasExcel = () => {
     const u=usuarioForzado||usuario;
     const rol=normalizarRol(u?.rol);
 
-    if(!u||["SUPER_ADMIN","ADMIN","PADRE","ESTUDIANTE","AUDITOR"].includes(rol)){
+    if(
+      !u ||
+      !["ENCARGADO_LOCAL","CAJERO"].includes(rol)
+    ){
       const libre={
         permitido:true,
         estado_operativo:"NO_APLICA",
@@ -4416,7 +4444,26 @@ const exportarVentasExcel = () => {
 
   const cargarContextoJornada=async({tokenForzado=null,institucionForzada=null,usuarioForzado=null}={})=>{
     const u=usuarioForzado||usuario;
-    if(!u||["PADRE","ESTUDIANTE"].includes(normalizarRol(u.rol)))return;
+    const rolContexto=normalizarRol(u?.rol);
+
+    if(!u)return;
+
+    // La jornada/caja operativa aplica SOLO a ENCARGADO_LOCAL y CAJERO.
+    // ADMIN / SUPER_ADMIN / AUDITOR entran por administración sin modal de jornada.
+    if(!["ENCARGADO_LOCAL","CAJERO"].includes(rolContexto)){
+      setMostrarSelectorJornada(false);
+      localStorage.removeItem("jornadaActiva");
+      setJornadaActiva(null);
+      setEstadoOperativoCaja({
+        permitido:true,
+        estado_operativo:"NO_APLICA",
+        requiere_abrir_jornada:false,
+        requiere_cerrar_pendiente:false,
+        jornada:null,
+        message:"",
+      });
+      return;
+    }
     const token=tokenForzado||localStorage.getItem("token");
     const institucionId=Number(institucionForzada)||obtenerInstitucionActivaId();
     if(!token||!institucionId)return;
@@ -4860,8 +4907,8 @@ if (institucionIdLogin) {
 
       aplicarVistaInicialRol(data.usuario?.rol,setVista,setVistaVentasInterna);
 
-      if (normalizarRol(data.usuario?.rol)==="AUDITOR") {
-        // Auditor conserva acceso de consulta y no opera caja.
+      if (["ADMIN","SUPER_ADMIN","AUDITOR"].includes(normalizarRol(data.usuario?.rol))) {
+        // Acceso administrativo: NO abre ni recupera jornada operativa.
         setMostrarSelectorJornada(false);
         localStorage.removeItem("jornadaActiva");
         setJornadaActiva(null);
@@ -4878,8 +4925,7 @@ if (institucionIdLogin) {
           message:"",
         });
       } else {
-        // ADMIN / SUPER_ADMIN / ENCARGADO / CAJERO también quedan sujetos
-        // a la caja operativa para movimientos que afecten dinero o stock.
+        // Solo ENCARGADO_LOCAL y CAJERO quedan sujetos a la caja operativa.
         await cargarContextoJornada({
           tokenForzado:data.token,
           institucionForzada:institucionIdLogin,
@@ -4898,7 +4944,9 @@ if (institucionIdLogin) {
 
   useEffect(()=>{
     if(!usuario||!institucionActivaId||esRolPortal)return;
-    if(!["ENCARGADO_LOCAL","CAJERO"].includes(normalizarRol(usuario?.rol)))return;
+
+    const rol=normalizarRol(usuario?.rol);
+    if(!["ENCARGADO_LOCAL","CAJERO"].includes(rol))return;
 
     let cancelado=false;
 
@@ -10494,7 +10542,8 @@ if (!usuario) {
 
   return (
     <div style={styles.appShell}>
-      {estadoOperativoCaja?.estado_operativo==="CIERRE_PENDIENTE"&&(
+      {["ENCARGADO_LOCAL","CAJERO"].includes(rolActual) &&
+       estadoOperativoCaja?.estado_operativo==="CIERRE_PENDIENTE"&&(
         <div
           style={{
             position:"fixed",
@@ -10536,7 +10585,9 @@ if (!usuario) {
         </div>
       )}
 
-      {mostrarSelectorJornada&&!jornadaActiva?.id&&<div
+      {mostrarSelectorJornada &&
+       !jornadaActiva?.id &&
+       ["ENCARGADO_LOCAL","CAJERO"].includes(rolActual) && <div
         style={{
           position:"fixed",
           inset:0,
