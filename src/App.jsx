@@ -1749,181 +1749,328 @@ const importarStockArchivo = (event) => {
   const extension = archivo.name.split(".").pop()?.toLowerCase();
 
   const normalizarTexto = (valor) =>
-    String(valor || "")
+    String(valor ?? "")
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .trim()
-      .toLowerCase();
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+
+  const aliasesProducto = {
+    nombre: [
+      "nombre",
+      "producto",
+      "nombre_producto",
+      "descripcion_producto",
+      "articulo",
+      "item",
+      "nombre_articulo",
+    ],
+    codigo: [
+      "codigo",
+      "codigo_producto",
+      "codigo_barras",
+      "codigo_de_barras",
+      "cod_barras",
+      "barcode",
+      "sku",
+      "referencia",
+    ],
+    precio: [
+      "precio",
+      "precio_venta",
+      "precio_venta_final",
+      "precio_final",
+      "precio_publico",
+      "pvp",
+      "valor_venta",
+      "precio_unitario",
+      "venta",
+    ],
+    categoria: [
+      "categoria",
+      "categoria_producto",
+      "familia",
+      "grupo",
+      "linea",
+      "tipo",
+      "clase",
+    ],
+    stock: [
+      "stock",
+      "stock_actual",
+      "stock_real",
+      "nuevo_stock",
+      "existencia",
+      "existencias",
+      "cantidad_stock",
+      "inventario",
+      "saldo_stock",
+    ],
+    descripcion: [
+      "descripcion",
+      "detalle",
+      "observacion",
+      "descripcion_larga",
+      "detalle_producto",
+    ],
+    stock_minimo: [
+      "stock_minimo",
+      "minimo",
+      "stock_min",
+      "existencia_minima",
+    ],
+  };
+
+  const buscarIndice = (encabezados, aliases) => {
+    const normalizados = aliases.map(normalizarTexto);
+    return encabezados.findIndex((h) => normalizados.includes(h));
+  };
+
+  const numeroFlexible = (valor, fallback = 0) => {
+    if (valor === null || valor === undefined || String(valor).trim() === "") {
+      return fallback;
+    }
+
+    const original = String(valor).trim();
+    const mayuscula = original.toUpperCase();
+
+    if (["SI", "SÍ", "YES", "TRUE", "ACTIVO", "ACTIVA"].includes(mayuscula)) {
+      return fallback;
+    }
+
+    if (["NO", "FALSE", "INACTIVO", "INACTIVA"].includes(mayuscula)) {
+      return fallback;
+    }
+
+    let limpio = original
+      .replace(/\s/g, "")
+      .replace(/\$/g, "")
+      .replace(/[^\d,.\-]/g, "");
+
+    if (!limpio) return fallback;
+
+    const ultimaComa = limpio.lastIndexOf(",");
+    const ultimoPunto = limpio.lastIndexOf(".");
+
+    if (ultimaComa > ultimoPunto) {
+      limpio = limpio.replace(/\./g, "").replace(",", ".");
+    } else if (ultimoPunto > ultimaComa && ultimaComa >= 0) {
+      limpio = limpio.replace(/,/g, "");
+    } else {
+      limpio = limpio.replace(",", ".");
+    }
+
+    const numero = Number(limpio);
+    return Number.isFinite(numero) ? numero : fallback;
+  };
 
   const procesarFilasImportadas = async (filasCrudas) => {
-  if (!Array.isArray(filasCrudas) || filasCrudas.length < 2) {
-    alert("El archivo no tiene datos para importar.");
-    return;
-  }
-
-  const encabezados = (filasCrudas[0] || []).map((h) => normalizarTexto(h));
-
-  const idxNombre = encabezados.findIndex((h) => h === "nombre");
-  const idxCodigo = encabezados.findIndex(
-    (h) => h === "codigo" || h === "código"
-  );
-  const idxPrecio = encabezados.findIndex((h) => h === "precio");
-  const idxCategoria = encabezados.findIndex(
-    (h) => h === "categoria" || h === "categoría"
-  );
-  const idxStock = encabezados.findIndex(
-    (h) =>
-      h === "stock" ||
-      h === "stock actual" ||
-      h === "stock real" ||
-      h === "nuevo stock"
-  );
-
-  if (idxNombre === -1 || idxPrecio === -1 || idxCategoria === -1 || idxStock === -1) {
-    alert(
-      "El archivo debe tener estas columnas: nombre, precio, categoria y stock. Código es opcional."
-    );
-    return;
-  }
-
-  const filasValidas = filasCrudas
-    .slice(1)
-    .map((cols) => {
-      const nombre = String(cols[idxNombre] || "").trim();
-      const codigo = idxCodigo >= 0 ? String(cols[idxCodigo] || "").trim() : "";
-      const precio = Number(String(cols[idxPrecio] || "").replace(",", "."));
-      const categoria = String(cols[idxCategoria] || "").trim();
-      const stock = Number(String(cols[idxStock] || "").replace(",", "."));
-
-      if (!nombre) return null;
-      if (Number.isNaN(precio)) return null;
-      if (Number.isNaN(stock)) return null;
-
-      return {
-        nombre,
-        codigo,
-        precio,
-        categoria,
-        stock,
-      };
-    })
-    .filter(Boolean);
-
-  if (!filasValidas.length) {
-    alert("No hay filas válidas para importar.");
-    return;
-  }
-
-  const token = localStorage.getItem("token");
-  const institucionId = obtenerInstitucionActivaId();
-
-  if (!token || !institucionId) {
-    alert("Tu sesión no es válida. Vuelve a iniciar sesión.");
-    return;
-  }
-
-  const normalizar = (valor) =>
-    String(valor || "")
-      .trim()
-      .toLowerCase();
-
-  const productosActuales = Array.isArray(productos) ? [...productos] : [];
-
-  let actualizados = 0;
-  let nuevos = 0;
-  let errores = 0;
-
-  for (const fila of filasValidas) {
-    const existente = productosActuales.find((producto) => {
-      const mismoCodigo =
-        fila.codigo &&
-        normalizar(producto.codigo) === normalizar(fila.codigo);
-
-      const mismoNombre =
-        normalizar(producto.nombre) === normalizar(fila.nombre);
-
-      return mismoCodigo || mismoNombre;
-    });
-
-    try {
-      if (existente) {
-        const res = await fetch(`${API_URL}/api/productos/${existente.id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            institucion_id: institucionId,
-            nombre: fila.nombre,
-            codigo: fila.codigo || existente.codigo || "",
-            descripcion: existente.descripcion || "",
-            precio: fila.precio,
-            stock: fila.stock,
-            stock_minimo: existente.stock_minimo || 0,
-            categoria: fila.categoria,
-            activo: existente.activo !== false,
-          }),
-        });
-
-        if (!res.ok) {
-          throw new Error(`Error actualizando ${fila.nombre}`);
-        }
-
-        const productoActualizado = await res.json();
-
-        const idx = productosActuales.findIndex((p) => Number(p.id) === Number(existente.id));
-        if (idx >= 0) {
-          productosActuales[idx] = productoActualizado;
-        }
-
-        actualizados += 1;
-      } else {
-        const res = await fetch(`${API_URL}/api/productos`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            institucion_id: institucionId,
-            nombre: fila.nombre,
-            codigo: fila.codigo || "",
-            descripcion: "",
-            precio: fila.precio,
-            stock: fila.stock,
-            stock_minimo: 0,
-            categoria: fila.categoria,
-          }),
-        });
-
-        if (!res.ok) {
-          throw new Error(`Error creando ${fila.nombre}`);
-        }
-
-        const productoNuevo = await res.json();
-        productosActuales.push(productoNuevo);
-        nuevos += 1;
-      }
-    } catch (error) {
-      console.error("Error importando producto:", fila.nombre, error);
-      errores += 1;
+    if (!Array.isArray(filasCrudas) || filasCrudas.length < 2) {
+      alert("El archivo no tiene datos para importar.");
+      return;
     }
-  }
 
-  setProductos(productosActuales);
-  setStockEditado((prev) => {
-    const copia = { ...prev };
-    productosActuales.forEach((p) => {
-      copia[p.id] = String(p.stock ?? 0);
+    // Busca automáticamente la fila de encabezados dentro de las primeras 20 filas.
+    // Así una matriz puede tener títulos o filas informativas antes de los datos.
+    let indiceEncabezado = 0;
+    let encabezados = [];
+    let mejorPuntaje = -1;
+
+    const maxFilasBusqueda = Math.min(filasCrudas.length, 20);
+
+    for (let i = 0; i < maxFilasBusqueda; i += 1) {
+      const candidatos = (filasCrudas[i] || []).map(normalizarTexto);
+      const puntaje = Object.values(aliasesProducto).reduce(
+        (total, aliases) =>
+          total +
+          (buscarIndice(candidatos, aliases) >= 0 ? 1 : 0),
+        0
+      );
+
+      if (puntaje > mejorPuntaje) {
+        mejorPuntaje = puntaje;
+        indiceEncabezado = i;
+        encabezados = candidatos;
+      }
+    }
+
+    const idxNombre = buscarIndice(encabezados, aliasesProducto.nombre);
+    const idxCodigo = buscarIndice(encabezados, aliasesProducto.codigo);
+    const idxPrecio = buscarIndice(encabezados, aliasesProducto.precio);
+    const idxCategoria = buscarIndice(encabezados, aliasesProducto.categoria);
+    const idxStock = buscarIndice(encabezados, aliasesProducto.stock);
+    const idxDescripcion = buscarIndice(encabezados, aliasesProducto.descripcion);
+    const idxStockMinimo = buscarIndice(encabezados, aliasesProducto.stock_minimo);
+
+    // Para permitir matrices con muchas columnas diferentes,
+    // solo NOMBRE/PRODUCTO es indispensable.
+    if (idxNombre === -1) {
+      alert(
+        "No se encontró una columna de producto. Puede llamarse Nombre, Producto, Nombre producto, Artículo o Item. Las demás columnas adicionales se omiten automáticamente."
+      );
+      return;
+    }
+
+    const filasValidas = filasCrudas
+      .slice(indiceEncabezado + 1)
+      .map((cols) => {
+        const nombre = String(cols?.[idxNombre] ?? "").trim();
+        if (!nombre) return null;
+
+        const codigo =
+          idxCodigo >= 0 ? String(cols?.[idxCodigo] ?? "").trim() : "";
+
+        const precio =
+          idxPrecio >= 0 ? numeroFlexible(cols?.[idxPrecio], 0) : 0;
+
+        const categoria =
+          idxCategoria >= 0
+            ? String(cols?.[idxCategoria] ?? "").trim() || "SIN CATEGORIA"
+            : "SIN CATEGORIA";
+
+        // Si Stock trae SI/NO o no existe, se importa en 0.
+        const stock =
+          idxStock >= 0 ? numeroFlexible(cols?.[idxStock], 0) : 0;
+
+        const descripcion =
+          idxDescripcion >= 0
+            ? String(cols?.[idxDescripcion] ?? "").trim()
+            : "";
+
+        const stock_minimo =
+          idxStockMinimo >= 0
+            ? numeroFlexible(cols?.[idxStockMinimo], 0)
+            : 0;
+
+        return {
+          nombre,
+          codigo,
+          precio,
+          categoria,
+          stock,
+          descripcion,
+          stock_minimo,
+        };
+      })
+      .filter(Boolean);
+
+    if (!filasValidas.length) {
+      alert("No hay filas válidas para importar.");
+      return;
+    }
+
+    const token = localStorage.getItem("token");
+    const institucionId = obtenerInstitucionActivaId();
+
+    if (!token || !institucionId) {
+      alert("Tu sesión no es válida. Vuelve a iniciar sesión.");
+      return;
+    }
+
+    const normalizar = (valor) =>
+      String(valor || "")
+        .trim()
+        .toLowerCase();
+
+    const productosActuales = Array.isArray(productos) ? [...productos] : [];
+
+    let actualizados = 0;
+    let nuevos = 0;
+    let errores = 0;
+    const detalleErrores = [];
+
+    for (const fila of filasValidas) {
+      const existente = productosActuales.find((producto) => {
+        const mismoCodigo =
+          fila.codigo &&
+          normalizar(producto.codigo) === normalizar(fila.codigo);
+
+        const mismoNombre =
+          normalizar(producto.nombre) === normalizar(fila.nombre);
+
+        return mismoCodigo || mismoNombre;
+      });
+
+      try {
+        const payload = {
+          institucion_id: Number(institucionId),
+          nombre: fila.nombre,
+          codigo: fila.codigo || existente?.codigo || "",
+          descripcion:
+            fila.descripcion || existente?.descripcion || "",
+          precio: Number(fila.precio || 0),
+          stock: Number(fila.stock || 0),
+          stock_minimo:
+            Number(fila.stock_minimo || existente?.stock_minimo || 0),
+          categoria:
+            fila.categoria || existente?.categoria || "SIN CATEGORIA",
+          activo: existente ? existente.activo !== false : true,
+        };
+
+        const res = await fetch(
+          existente
+            ? `${API_URL}/api/productos/${existente.id}`
+            : `${API_URL}/api/productos`,
+          {
+            method: existente ? "PUT" : "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload),
+          }
+        );
+
+        let data = null;
+        try {
+          data = await res.json();
+        } catch {
+          data = null;
+        }
+
+        if (!res.ok) {
+          throw new Error(
+            data?.message ||
+              data?.error ||
+              `Error ${existente ? "actualizando" : "creando"} ${fila.nombre}`
+          );
+        }
+
+        if (existente) {
+          const idx = productosActuales.findIndex(
+            (p) => Number(p.id) === Number(existente.id)
+          );
+          if (idx >= 0) productosActuales[idx] = data || { ...existente, ...payload };
+          actualizados += 1;
+        } else {
+          productosActuales.push(data || payload);
+          nuevos += 1;
+        }
+      } catch (error) {
+        console.error("Error importando producto:", fila.nombre, error);
+        errores += 1;
+        detalleErrores.push(`${fila.nombre}: ${error.message}`);
+      }
+    }
+
+    setProductos(productosActuales);
+    setStockEditado((prev) => {
+      const copia = { ...prev };
+      productosActuales.forEach((p) => {
+        if (p?.id != null) copia[p.id] = String(p.stock ?? 0);
+      });
+      return copia;
     });
-    return copia;
-  });
 
-  alert(
-    `Importación completada.\n\nProductos actualizados: ${actualizados}\nProductos nuevos: ${nuevos}\nErrores: ${errores}`
-  );
-};
+    alert(
+      `Importación completada.\n\nProductos actualizados: ${actualizados}\nProductos nuevos: ${nuevos}\nErrores: ${errores}` +
+        (detalleErrores.length
+          ? `\n\nPrimeros errores:\n${detalleErrores.slice(0, 8).join("\n")}`
+          : "")
+    );
+  };
 
   const parsearCSVTexto = (texto) => {
     const lineas = texto
@@ -1936,7 +2083,18 @@ const importarStockArchivo = (event) => {
       let actual = "";
       let dentroDeComillas = false;
 
-      for (let i = 0; i < linea.length; i++) {
+      // Detecta coma, punto y coma o tabulador.
+      const cantidadComas = (linea.match(/,/g) || []).length;
+      const cantidadPuntoComa = (linea.match(/;/g) || []).length;
+      const cantidadTabs = (linea.match(/\t/g) || []).length;
+      const separador =
+        cantidadTabs > cantidadComas && cantidadTabs > cantidadPuntoComa
+          ? "\t"
+          : cantidadPuntoComa > cantidadComas
+          ? ";"
+          : ",";
+
+      for (let i = 0; i < linea.length; i += 1) {
         const char = linea[i];
         const siguiente = linea[i + 1];
 
@@ -1947,7 +2105,7 @@ const importarStockArchivo = (event) => {
           } else {
             dentroDeComillas = !dentroDeComillas;
           }
-        } else if (char === "," && !dentroDeComillas) {
+        } else if (char === separador && !dentroDeComillas) {
           resultado.push(actual.trim());
           actual = "";
         } else {
@@ -1966,23 +2124,24 @@ const importarStockArchivo = (event) => {
   };
 
   try {
-    if (extension === "csv") {
+    if (extension === "csv" || extension === "txt") {
       const reader = new FileReader();
 
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
           const texto = String(e.target?.result || "");
           const filasCSV = parsearCSVTexto(texto);
-          procesarFilasImportadas(filasCSV);
+          await procesarFilasImportadas(filasCSV);
         } catch (error) {
-          console.error("Error importando CSV:", error);
-          alert("No se pudo importar el archivo CSV.");
+          console.error("Error importando CSV/TXT:", error);
+          alert("No se pudo importar el archivo.");
+        } finally {
+          event.target.value = "";
         }
-        event.target.value = "";
       };
 
       reader.onerror = () => {
-        alert("No se pudo leer el archivo CSV.");
+        alert("No se pudo leer el archivo.");
         event.target.value = "";
       };
 
@@ -1993,7 +2152,7 @@ const importarStockArchivo = (event) => {
     if (extension === "xlsx" || extension === "xls") {
       const reader = new FileReader();
 
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
           const data = e.target?.result;
           const workbook = XLSX.read(data, { type: "array" });
@@ -2001,7 +2160,6 @@ const importarStockArchivo = (event) => {
 
           if (!primeraHoja) {
             alert("El archivo Excel no contiene hojas.");
-            event.target.value = "";
             return;
           }
 
@@ -2009,14 +2167,16 @@ const importarStockArchivo = (event) => {
           const filasExcel = XLSX.utils.sheet_to_json(worksheet, {
             header: 1,
             defval: "",
+            raw: false,
           });
 
-          procesarFilasImportadas(filasExcel);
+          await procesarFilasImportadas(filasExcel);
         } catch (error) {
           console.error("Error importando Excel:", error);
           alert("No se pudo importar el archivo Excel.");
+        } finally {
+          event.target.value = "";
         }
-        event.target.value = "";
       };
 
       reader.onerror = () => {
@@ -2028,7 +2188,7 @@ const importarStockArchivo = (event) => {
       return;
     }
 
-    alert("Formato no soportado. Usa CSV, XLSX o XLS.");
+    alert("Formato no soportado. Usa CSV, TXT, XLSX o XLS.");
   } catch (error) {
     console.error("Error importando stock:", error);
     alert("No se pudo importar el archivo.");
@@ -2036,7 +2196,6 @@ const importarStockArchivo = (event) => {
 
   event.target.value = "";
 };
-  
 
 const registrarMovimientoKardex = async ({
   productoId,
@@ -2691,12 +2850,26 @@ const cargarFamiliasStock=async()=>{
 };
 
 const normalizarEncabezadoStockExcel=(valor)=>
-  String(valor||"")
+  String(valor??"")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g,"")
     .trim()
     .toUpperCase()
-    .replace(/\s+/g,"_");
+    .replace(/[^A-Z0-9]+/g,"_")
+    .replace(/^_+|_+$/g,"");
+
+const obtenerCampoStockFlexible=(filaNormalizada,aliases,valorDefecto="")=>{
+  for(const alias of aliases){
+    const clave=normalizarEncabezadoStockExcel(alias);
+    if(
+      Object.prototype.hasOwnProperty.call(filaNormalizada,clave)&&
+      String(filaNormalizada[clave]??"").trim()!==""
+    ){
+      return filaNormalizada[clave];
+    }
+  }
+  return valorDefecto;
+};
 
 const leerExcelStockCatalogo=(archivo)=>
   new Promise((resolve,reject)=>{
@@ -2765,19 +2938,48 @@ const importarProveedoresStockExcel=async(event)=>{
         });
 
         return {
-          nombre:String(normalizada.NOMBRE||"").trim(),
+          nombre:String(
+            obtenerCampoStockFlexible(
+              normalizada,
+              [
+                "NOMBRE",
+                "NOMBRE_PROVEEDOR",
+                "PROVEEDOR",
+                "RAZON_SOCIAL",
+                "RAZÓN_SOCIAL",
+                "NOMBRE_COMERCIAL",
+                "EMPRESA",
+                "COMPAÑIA",
+                "COMPAÑÍA",
+              ],
+              ""
+            )
+          ).trim(),
           ruc_cedula:String(
-            normalizada.RUC_CEDULA||
-            normalizada.RUC||
-            normalizada.CEDULA||
-            ""
+            obtenerCampoStockFlexible(
+              normalizada,
+              [
+                "RUC_CEDULA",
+                "RUC/CEDULA",
+                "RUC",
+                "CEDULA",
+                "CÉDULA",
+                "IDENTIFICACION",
+                "IDENTIFICACIÓN",
+                "DOCUMENTO",
+                "NUMERO_DOCUMENTO",
+                "NIT",
+                "TAX_ID",
+              ],
+              ""
+            )
           ).trim(),
         };
       })
       .filter((p)=>p.nombre&&p.ruc_cedula);
 
     if(!proveedores.length){
-      alert("No se encontraron filas válidas. Usa las columnas NOMBRE y RUC_CEDULA.");
+      alert("No se encontraron proveedores válidos. Se aceptan columnas equivalentes como Nombre/Proveedor/Razón social y RUC/Cédula/Identificación. Las columnas adicionales se ignoran.");
       return;
     }
 
@@ -2836,12 +3038,50 @@ const importarFamiliasStockExcel=async(event)=>{
         });
 
         return {
-          nombre:String(normalizada.NOMBRE||"").trim(),
-          codigo:String(normalizada.CODIGO||"").trim(),
-          materia_prima:String(normalizada.MATERIA_PRIMA||"NO")
+          nombre:String(
+            obtenerCampoStockFlexible(
+              normalizada,
+              [
+                "NOMBRE",
+                "FAMILIA",
+                "NOMBRE_FAMILIA",
+                "CATEGORIA",
+                "CATEGORÍA",
+                "GRUPO",
+                "LINEA",
+                "LÍNEA",
+              ],
+              ""
+            )
+          ).trim(),
+          codigo:String(
+            obtenerCampoStockFlexible(
+              normalizada,
+              ["CODIGO","CÓDIGO","CODIGO_FAMILIA","COD","SKU"],
+              ""
+            )
+          ).trim(),
+          materia_prima:String(
+            obtenerCampoStockFlexible(
+              normalizada,
+              [
+                "MATERIA_PRIMA",
+                "MATERIA PRIMA",
+                "ES_MATERIA_PRIMA",
+                "INSUMO",
+              ],
+              "NO"
+            )
+          )
             .trim()
             .toUpperCase(),
-          estado:String(normalizada.ESTADO||"ACTIVO")
+          estado:String(
+            obtenerCampoStockFlexible(
+              normalizada,
+              ["ESTADO","ACTIVO","STATUS"],
+              "ACTIVO"
+            )
+          )
             .trim()
             .toUpperCase(),
         };
@@ -2850,7 +3090,7 @@ const importarFamiliasStockExcel=async(event)=>{
 
     if(!familias.length){
       alert(
-        "No se encontraron filas válidas. Usa NOMBRE, CODIGO, MATERIA_PRIMA y ESTADO."
+        "No se encontraron familias válidas. Se aceptan columnas equivalentes como Nombre/Familia/Categoría. Código, Materia prima y Estado son opcionales; las columnas adicionales se ignoran."
       );
       return;
     }
@@ -4431,12 +4671,51 @@ if (institucionIdLogin) {
 
 
   const normalizarEncabezadoImportacion = (valor) =>
-    String(valor || "")
+    String(valor ?? "")
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .trim()
       .toLowerCase()
-      .replace(/\s+/g, "_");
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+
+  const obtenerCampoImportado = (fila, aliases, valorDefecto = "") => {
+    for (const alias of aliases) {
+      const clave = normalizarEncabezadoImportacion(alias);
+      if (
+        Object.prototype.hasOwnProperty.call(fila || {}, clave) &&
+        String(fila?.[clave] ?? "").trim() !== ""
+      ) {
+        return String(fila[clave] ?? "").trim();
+      }
+    }
+    return valorDefecto;
+  };
+
+  const dividirNombreCompletoImportado = (valor) => {
+    const partes = String(valor || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    if (!partes.length) return { nombres: "", apellidos: "" };
+    if (partes.length === 1) return { nombres: partes[0], apellidos: "-" };
+    if (partes.length === 2) {
+      return { nombres: partes[0], apellidos: partes[1] };
+    }
+    if (partes.length === 3) {
+      return {
+        nombres: partes.slice(0, 1).join(" "),
+        apellidos: partes.slice(1).join(" "),
+      };
+    }
+
+    const mitad = Math.ceil(partes.length / 2);
+    return {
+      nombres: partes.slice(0, mitad).join(" "),
+      apellidos: partes.slice(mitad).join(" "),
+    };
+  };
 
   const descargarExcelPlantilla = (nombreArchivo, hoja, encabezados, ejemplo) => {
     const datos = [encabezados, ejemplo];
@@ -4525,16 +4804,72 @@ if (institucionIdLogin) {
 
       for (let indice = 0; indice < filas.length; indice += 1) {
         const fila = filas[indice];
-        const cedula = fila.cedula || fila.identificacion || fila.documento || "";
-        const codigo = fila.codigo || "";
-        const nombres = fila.nombres || fila.nombre || "";
-        const apellidos = fila.apellidos || fila.apellido || "";
 
-        if (!cedula || !nombres || !apellidos) {
+        const cedula = obtenerCampoImportado(
+          fila,
+          [
+            "cedula",
+            "cédula",
+            "cedula_ruc",
+            "cedula/ruc",
+            "identificacion",
+            "identificación",
+            "numero_identificacion",
+            "nro_identificacion",
+            "documento",
+            "dni",
+            "ci",
+          ],
+          ""
+        );
+
+        const codigo = obtenerCampoImportado(
+          fila,
+          ["codigo","código","codigo_alumno","codigo_estudiante","matricula","matrícula"],
+          ""
+        );
+
+        let nombres = obtenerCampoImportado(
+          fila,
+          ["nombres","nombre","nombres_estudiante","nombre_estudiante","alumno","estudiante"],
+          ""
+        );
+
+        let apellidos = obtenerCampoImportado(
+          fila,
+          ["apellidos","apellido","apellidos_estudiante","apellido_estudiante"],
+          ""
+        );
+
+        if (!apellidos) {
+          const nombreCompleto = obtenerCampoImportado(
+            fila,
+            [
+              "nombre_completo",
+              "nombres_y_apellidos",
+              "nombre_y_apellido",
+              "alumno_completo",
+              "estudiante_completo",
+            ],
+            ""
+          );
+
+          if (nombreCompleto) {
+            const separados = dividirNombreCompletoImportado(nombreCompleto);
+            nombres = nombres || separados.nombres;
+            apellidos = separados.apellidos;
+          }
+        }
+
+        if (!cedula || !nombres) {
           errores += 1;
-          detalleErrores.push(`Fila ${indice + 2}: faltan cédula, nombres o apellidos`);
+          detalleErrores.push(
+            `Fila ${indice + 2}: falta identificación/cédula o nombre`
+          );
           continue;
         }
+
+        if (!apellidos) apellidos = "-";
 
         const existente = alumnosActuales.find((a) =>
           String(obtenerCedulaAlumno(a) || "").trim() === String(cedula).trim()
@@ -4546,11 +4881,25 @@ if (institucionIdLogin) {
           codigo,
           nombres,
           apellidos,
-          curso: fila.curso || "",
-          paralelo: fila.paralelo || "",
-          correo: fila.correo || fila.email || "",
+          curso: obtenerCampoImportado(
+            fila,
+            ["curso","grado","nivel","anio","año","curso_grado"],
+            ""
+          ),
+          paralelo: obtenerCampoImportado(
+            fila,
+            ["paralelo","seccion","sección","aula"],
+            ""
+          ),
+          correo: obtenerCampoImportado(
+            fila,
+            ["correo","email","e_mail","mail","correo_electronico"],
+            ""
+          ),
           saldo: existente ? Number(existente.saldo || 0) : 0,
-          activo: estadoImportadoActivo(fila.estado),
+          activo: estadoImportadoActivo(
+            obtenerCampoImportado(fila,["estado","activo","status"],"ACTIVO")
+          ),
         };
 
         try {
@@ -4616,15 +4965,65 @@ if (institucionIdLogin) {
 
       for (let indice = 0; indice < filas.length; indice += 1) {
         const fila = filas[indice];
-        const cedula = fila.cedula || fila.identificacion || fila.documento || "";
-        const nombres = fila.nombres || fila.nombre || "";
-        const apellidos = fila.apellidos || fila.apellido || "";
 
-        if (!cedula || !nombres || !apellidos) {
+        const cedula = obtenerCampoImportado(
+          fila,
+          [
+            "cedula",
+            "cédula",
+            "cedula_ruc",
+            "cedula/ruc",
+            "identificacion",
+            "identificación",
+            "numero_identificacion",
+            "documento",
+            "dni",
+            "ci",
+          ],
+          ""
+        );
+
+        let nombres = obtenerCampoImportado(
+          fila,
+          ["nombres","nombre","nombres_profesor","nombre_profesor","docente","profesor"],
+          ""
+        );
+
+        let apellidos = obtenerCampoImportado(
+          fila,
+          ["apellidos","apellido","apellidos_profesor","apellido_profesor"],
+          ""
+        );
+
+        if (!apellidos) {
+          const nombreCompleto = obtenerCampoImportado(
+            fila,
+            [
+              "nombre_completo",
+              "nombres_y_apellidos",
+              "nombre_y_apellido",
+              "profesor_completo",
+              "docente_completo",
+            ],
+            ""
+          );
+
+          if (nombreCompleto) {
+            const separados = dividirNombreCompletoImportado(nombreCompleto);
+            nombres = nombres || separados.nombres;
+            apellidos = separados.apellidos;
+          }
+        }
+
+        if (!cedula || !nombres) {
           errores += 1;
-          detalleErrores.push(`Fila ${indice + 2}: faltan cédula, nombres o apellidos`);
+          detalleErrores.push(
+            `Fila ${indice + 2}: falta identificación/cédula o nombre`
+          );
           continue;
         }
+
+        if (!apellidos) apellidos = "-";
 
         const existente = profesoresActuales.find((p) =>
           String(p.cedula || "").trim() === String(cedula).trim()
@@ -4633,14 +5032,28 @@ if (institucionIdLogin) {
         const payload = {
           institucion_id: Number(institucionId),
           cedula,
-          codigo: fila.codigo || "",
+          codigo: obtenerCampoImportado(
+            fila,
+            ["codigo","código","codigo_profesor","codigo_docente"],
+            ""
+          ),
           nombres,
           apellidos,
-          email: fila.correo || fila.email || "",
-          telefono: fila.telefono || fila.celular || "",
+          email: obtenerCampoImportado(
+            fila,
+            ["correo","email","e_mail","mail","correo_electronico"],
+            ""
+          ),
+          telefono: obtenerCampoImportado(
+            fila,
+            ["telefono","teléfono","celular","movil","móvil","telefono_celular"],
+            ""
+          ),
           saldo: existente ? Number(existente.saldo || existente.credito || 0) : 0,
           es_profesor: true,
-          activo: estadoImportadoActivo(fila.estado),
+          activo: estadoImportadoActivo(
+            obtenerCampoImportado(fila,["estado","activo","status"],"ACTIVO")
+          ),
         };
 
         try {
@@ -14638,7 +15051,7 @@ onClick={guardarEgreso}
         <input
           ref={inputImportarStockRef}
           type="file"
-          accept=".csv,.xlsx,.xls"
+          accept=".csv,.txt,.xlsx,.xls"
           onChange={importarStockArchivo}
           style={{display:"none"}}
         />
