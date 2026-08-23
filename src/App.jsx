@@ -3976,6 +3976,7 @@ useEffect(() => {
 const limpiarFormularioVenta = () => {
   setVentaForm({
     alumno_id: "",
+    profesor_id: "",
     metodo_pago: "EFECTIVO",
     observacion: "",
   });
@@ -3989,6 +3990,27 @@ const limpiarFormularioVenta = () => {
   setBusquedaUsuarioNuevaOrden("");
   setLocalNuevaOrden(jornadaActiva?.punto_nombre || localNuevaOrden || "PRINCIPAL");
   setFechaNuevaOrden(new Date().toISOString().slice(0, 10));
+  setEfectivoRecibidoNuevaOrden("");
+};
+
+const abrirNuevaOrdenConsumidorFinal = () => {
+  // Fuerza una orden realmente nueva, sin conservar el alumno/profesor
+  // de la venta anterior ni estados de detalle que puedan bloquear la vista.
+  limpiarFormularioVenta();
+
+  setAlumnoDetalle(null);
+  setOrdenDetalleAlumno(null);
+  setProfesorDetalle(null);
+
+  setVista("ventas");
+  setVistaVentasInterna("registrar");
+  setModoNuevaOrden("consumidor_final");
+  setTipoUsuarioNuevaOrden("TODOS");
+
+  // Volvemos arriba para que la nueva orden aparezca inmediatamente.
+  window.requestAnimationFrame(() => {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  });
 };
 
 const exportarVentasExcel = () => {
@@ -10515,8 +10537,7 @@ if (!usuario) {
         vista === "ventas" &&
         vistaVentasInterna === "registrar",
       accion: () => {
-        setVista("ventas");
-        setVistaVentasInterna("registrar");
+        abrirNuevaOrdenConsumidorFinal();
       },
     },
     {
@@ -17245,7 +17266,7 @@ onClick={guardarEgreso}
         ? styles.ventasTabActive
         : styles.ventasTab
     }
-    onClick={() => setVistaVentasInterna("registrar")}
+    onClick={abrirNuevaOrdenConsumidorFinal}
   >
     Nueva Orden
   </button>
@@ -17802,13 +17823,19 @@ onClick={guardarEgreso}
                         </div>
                       )}
 
-                      <div>
+                      <div style={{minWidth:0,maxWidth:"100%"}}>
                         <div
                           style={{
-                            fontSize: 15,
+                            fontSize: 12,
+                            lineHeight: 1.15,
                             fontWeight: 900,
                             color: "#111827",
                             textTransform: "uppercase",
+                            minWidth: 0,
+                            maxWidth: "100%",
+                            overflowWrap: "anywhere",
+                            wordBreak: "break-word",
+                            hyphens: "auto",
                           }}
                         >
                           {producto.nombre}
@@ -17817,7 +17844,8 @@ onClick={guardarEgreso}
                         <div
                           style={{
                             marginTop: 5,
-                            fontSize: 14,
+                            fontSize: 11,
+                            lineHeight: 1.2,
                             fontWeight: 700,
                           }}
                         >
@@ -17832,8 +17860,12 @@ onClick={guardarEgreso}
                             borderRadius: 999,
                             background: sinStock ? "#fee2e2" : "#dcfce7",
                             color: sinStock ? "#b91c1c" : "#166534",
-                            fontSize: 12,
+                            fontSize: 10,
+                            lineHeight: 1.15,
                             fontWeight: 800,
+                            maxWidth: "100%",
+                            whiteSpace: "normal",
+                            overflowWrap: "anywhere",
                           }}
                         >
                           Stock {jornadaActiva?.punto_nombre || localNuevaOrden}: {stockProductoEnPunto(producto.id, jornadaActiva?.punto_nombre || localNuevaOrden)}
@@ -17884,6 +17916,10 @@ onClick={guardarEgreso}
                           ? "#b91c1c"
                           : "#1726a4",
                         fontWeight: 900,
+                        fontSize: 12,
+                        lineHeight: 1.15,
+                        whiteSpace: "normal",
+                        overflowWrap: "anywhere",
                         cursor: sinStock ? "not-allowed" : "pointer",
                       }}
                     >
@@ -18037,21 +18073,29 @@ onClick={guardarEgreso}
             </div>
 
             <aside
+              aria-hidden="true"
               style={{
-                minWidth: 0,
+                minWidth: 330,
+                width: "100%",
                 alignSelf: "stretch",
+                pointerEvents: "none",
               }}
             >
           {/* RESUMEN DE LA ORDEN */}
           <div
             style={{
-              position: "sticky",
+              // PANEL FLOTANTE REAL:
+              // queda visible aunque el usuario siga bajando por cientos de productos.
+              position: "fixed",
               top: 86,
-              zIndex: 30,
-              alignSelf: "start",
-              width: "100%",
+              right: 24,
+              zIndex: 80,
+              width: "min(390px, calc(100vw - 330px))",
               maxWidth: 390,
-              marginLeft: "auto",
+              maxHeight: "calc(100vh - 105px)",
+              overflowY: "auto",
+              boxSizing: "border-box",
+              pointerEvents: "auto",
             }}
           >
             <div
