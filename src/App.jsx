@@ -266,6 +266,23 @@ const granTotalCierre = (cierre) =>
   Number(cierre?.gran_total ??
     (subtotalRecargasCierre(cierre) + subtotalVentasCierre(cierre)));
 
+// Normaliza nombres equivalentes de ubicación para que una existencia histórica
+// guardada como KIOSCO siga perteneciendo al punto actual KIOSKO.
+const normalizarUbicacionFrontend = (valor) => {
+  const texto = String(valor || "PRINCIPAL")
+    .trim()
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+
+  if (["KIOSCO", "KIOSKO"].includes(texto)) return "KIOSKO";
+  if (["BAR", "BAR PRINCIPAL"].includes(texto)) return "BAR PRINCIPAL";
+  if (!texto || texto === "PRINCIPAL") return "PRINCIPAL";
+
+  return texto;
+};
+
 export default function App() {
   const [correo, setCorreo] = useState("");
 const [password, setPassword] = useState("");
@@ -2313,7 +2330,10 @@ const registrarMovimientoKardex = async ({
   }
 };
 
-const cargarExistenciasInventario = async ({ reintento = true } = {}) => {
+const cargarExistenciasInventario = async ({
+  reintento = true,
+  ubicacionForzada = null,
+} = {}) => {
   try {
     const token = localStorage.getItem("token");
     const institucionId = obtenerInstitucionActivaId();
@@ -2364,12 +2384,15 @@ const cargarExistenciasInventario = async ({ reintento = true } = {}) => {
       : [];
 
     const listaExistencias = Array.isArray(data.existencias)
-      ? data.existencias
+      ? data.existencias.map((item) => ({
+          ...item,
+          ubicacion: normalizarUbicacionFrontend(item?.ubicacion),
+        }))
       : [];
 
     const puntosRecibidos = Array.isArray(data.puntos)
       ? data.puntos
-          .map((p) => String(p || "").trim().toUpperCase())
+          .map((p) => normalizarUbicacionFrontend(p))
           .filter(Boolean)
       : [];
 
@@ -2385,19 +2408,25 @@ const cargarExistenciasInventario = async ({ reintento = true } = {}) => {
     setExistenciasInventario(listaExistencias);
     setPuntosInventario(puntosUnicos);
 
-    setPuntoInventarioSeleccionado((actual) =>
-      puntosUnicos.includes(String(actual || "").toUpperCase())
-        ? String(actual).toUpperCase()
-        : "PRINCIPAL"
-    );
+    setPuntoInventarioSeleccionado((actual) => {
+      const actualNormalizado = normalizarUbicacionFrontend(actual);
+      return puntosUnicos.includes(actualNormalizado)
+        ? actualNormalizado
+        : "PRINCIPAL";
+    });
 
-    setLocalNuevaOrden((actual) =>
-      puntosUnicos.includes(String(jornadaActiva?.punto_nombre || "").toUpperCase())
-        ? String(jornadaActiva.punto_nombre).toUpperCase()
-        : puntosUnicos.includes(String(actual || "").toUpperCase())
-        ? String(actual).toUpperCase()
-        : "PRINCIPAL"
-    );
+    setLocalNuevaOrden((actual) => {
+      const puntoJornada = normalizarUbicacionFrontend(
+        ubicacionForzada || jornadaActiva?.punto_nombre || ""
+      );
+      const actualNormalizado = normalizarUbicacionFrontend(actual);
+
+      return puntosUnicos.includes(puntoJornada)
+        ? puntoJornada
+        : puntosUnicos.includes(actualNormalizado)
+        ? actualNormalizado
+        : "PRINCIPAL";
+    });
 
     return true;
   } catch (error) {
@@ -2407,7 +2436,10 @@ const cargarExistenciasInventario = async ({ reintento = true } = {}) => {
     // aplicación. Hacemos un único reintento automático.
     if (reintento) {
       await new Promise((resolve) => window.setTimeout(resolve, 1200));
-      return cargarExistenciasInventario({ reintento: false });
+      return cargarExistenciasInventario({
+        reintento: false,
+        ubicacionForzada,
+      });
     }
 
     return false;
@@ -2420,14 +2452,21 @@ const existenciasDeProducto = (productoId) =>
   );
 
 const stockProductoEnPunto = (productoId, ubicacion) => {
-  const punto = String(ubicacion || "PRINCIPAL").trim().toUpperCase();
-  const fila = existenciasInventario.find(
+  const punto = normalizarUbicacionFrontend(ubicacion);
+
+  const filas = existenciasInventario.filter(
     (item) =>
       Number(item.producto_id) === Number(productoId) &&
-      String(item.ubicacion || "PRINCIPAL").trim().toUpperCase() === punto
+      normalizarUbicacionFrontend(item?.ubicacion) === punto
   );
 
-  if (fila) return Number(fila.stock || 0);
+  // Si quedaron filas históricas equivalentes, se suman como una sola ubicación.
+  if (filas.length) {
+    return filas.reduce(
+      (total, fila) => total + Number(fila?.stock || 0),
+      0
+    );
+  }
 
   if (punto === "PRINCIPAL") {
     const producto = productos.find(
@@ -4336,9 +4375,24 @@ const exportarVentasExcel = () => {
   };
   const aplicarJornada=(j)=>{
     if(!j)return;
-    const punto=String(j.punto_nombre||"PRINCIPAL").trim().toUpperCase();
-    setJornadaActiva(j);localStorage.setItem("jornadaActiva",JSON.stringify(j));
-    setPuntoInventarioSeleccionado(punto);setLocalNuevaOrden(punto);setMostrarSelectorJornada(false);
+
+    const punto=normalizarUbicacionFrontend(
+      j.punto_nombre||"PRINCIPAL"
+    );
+
+    const jornadaNormalizada={
+      ...j,
+      punto_nombre:punto,
+    };
+
+    setJornadaActiva(jornadaNormalizada);
+    localStorage.setItem(
+      "jornadaActiva",
+      JSON.stringify(jornadaNormalizada)
+    );
+    setPuntoInventarioSeleccionado(punto);
+    setLocalNuevaOrden(punto);
+    setMostrarSelectorJornada(false);
   };
   const cargarEstadoOperativoCaja=async({
     tokenForzado=null,
@@ -4402,9 +4456,9 @@ const exportarVentasExcel = () => {
           JSON.stringify(data.jornada)
         );
 
-        const punto=String(
+        const punto=normalizarUbicacionFrontend(
           data.jornada.punto_nombre||"PRINCIPAL"
-        ).trim().toUpperCase();
+        );
 
         setPuntoInventarioSeleccionado(punto);
         setLocalNuevaOrden(punto);
@@ -4708,7 +4762,9 @@ const exportarVentasExcel = () => {
         institucionForzada:data.usuario.institucion_id,
       });
 
-      await cargarExistenciasInventario();
+      await cargarExistenciasInventario({
+        ubicacionForzada: data.jornada?.punto_nombre,
+      });
     }catch(e){
       alert(e.message||"No se pudo abrir la jornada");
     }finally{
@@ -4865,7 +4921,9 @@ const exportarVentasExcel = () => {
       institucionForzada: data.usuario.institucion_id,
     });
 
-    await cargarExistenciasInventario();
+    await cargarExistenciasInventario({
+      ubicacionForzada: data.jornada?.punto_nombre,
+    });
   };
 
   const handleLogin = async (e) => {
