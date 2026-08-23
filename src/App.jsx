@@ -436,6 +436,15 @@ const [puntosInventario, setPuntosInventario] = useState(["PRINCIPAL"]);
 const [puntoInventarioSeleccionado, setPuntoInventarioSeleccionado] = useState("PRINCIPAL");
 const [puntosOperacion,setPuntosOperacion]=useState([]);
 const [jornadaActiva,setJornadaActiva]=useState(null);
+const [estadoOperativoCaja,setEstadoOperativoCaja]=useState({
+  permitido:true,
+  estado_operativo:"CARGANDO",
+  requiere_abrir_jornada:false,
+  requiere_cerrar_pendiente:false,
+  jornada:null,
+  message:"",
+});
+const [cargandoEstadoOperativoCaja,setCargandoEstadoOperativoCaja]=useState(false);
 const [mostrarSelectorJornada,setMostrarSelectorJornada]=useState(false);
 const [puntoJornadaSeleccionado,setPuntoJornadaSeleccionado]=useState("");
 const [operadorJornadaCorreo,setOperadorJornadaCorreo]=useState("");
@@ -4305,6 +4314,106 @@ const exportarVentasExcel = () => {
     setJornadaActiva(j);localStorage.setItem("jornadaActiva",JSON.stringify(j));
     setPuntoInventarioSeleccionado(punto);setLocalNuevaOrden(punto);setMostrarSelectorJornada(false);
   };
+  const cargarEstadoOperativoCaja=async({
+    tokenForzado=null,
+    institucionForzada=null,
+    usuarioForzado=null,
+  }={})=>{
+    const u=usuarioForzado||usuario;
+    const rol=normalizarRol(u?.rol);
+
+    if(!u||["PADRE","ESTUDIANTE","AUDITOR"].includes(rol)){
+      const libre={
+        permitido:true,
+        estado_operativo:"NO_APLICA",
+        requiere_abrir_jornada:false,
+        requiere_cerrar_pendiente:false,
+        jornada:null,
+        message:"",
+      };
+      setEstadoOperativoCaja(libre);
+      return libre;
+    }
+
+    const token=tokenForzado||localStorage.getItem("token");
+    const institucionId=
+      Number(institucionForzada)||
+      normalizarInstitucionId(u?.institucion_id)||
+      obtenerInstitucionActivaId();
+
+    if(!token||!institucionId)return null;
+
+    try{
+      setCargandoEstadoOperativoCaja(true);
+
+      const res=await fetch(
+        `${API_URL}/api/jornadas/estado-operativo?institucion_id=${institucionId}&t=${Date.now()}`,
+        {
+          headers:{Authorization:`Bearer ${token}`},
+          cache:"no-store",
+        }
+      );
+
+      const data=await res.json();
+
+      if(!res.ok){
+        throw new Error(
+          data.message||
+          data.error||
+          "No se pudo validar el estado de la caja"
+        );
+      }
+
+      setEstadoOperativoCaja(data);
+
+      if(data?.jornada?.id){
+        setJornadaActiva(data.jornada);
+        localStorage.setItem(
+          "jornadaActiva",
+          JSON.stringify(data.jornada)
+        );
+
+        const punto=String(
+          data.jornada.punto_nombre||"PRINCIPAL"
+        ).trim().toUpperCase();
+
+        setPuntoInventarioSeleccionado(punto);
+        setLocalNuevaOrden(punto);
+      }else{
+        localStorage.removeItem("jornadaActiva");
+        setJornadaActiva(null);
+      }
+
+      if(data?.estado_operativo==="SIN_JORNADA"){
+        setMostrarSelectorJornada(true);
+      }
+
+      if(data?.estado_operativo==="CIERRE_PENDIENTE"){
+        setMostrarSelectorJornada(false);
+        setVista("reporte_cierre");
+      }
+
+      return data;
+    }catch(error){
+      console.error("Error validando estado operativo:",error);
+
+      const bloqueado={
+        permitido:false,
+        estado_operativo:"ERROR_VALIDACION",
+        requiere_abrir_jornada:false,
+        requiere_cerrar_pendiente:false,
+        jornada:null,
+        message:
+          "No se pudo validar el estado de la caja. Por seguridad las operaciones permanecen bloqueadas.",
+      };
+
+      setEstadoOperativoCaja(bloqueado);
+      return bloqueado;
+    }finally{
+      setCargandoEstadoOperativoCaja(false);
+    }
+  };
+
   const cargarContextoJornada=async({tokenForzado=null,institucionForzada=null,usuarioForzado=null}={})=>{
     const u=usuarioForzado||usuario;
     if(!u||["PADRE","ESTUDIANTE"].includes(normalizarRol(u.rol)))return;
@@ -4312,20 +4421,67 @@ const exportarVentasExcel = () => {
     const institucionId=Number(institucionForzada)||obtenerInstitucionActivaId();
     if(!token||!institucionId)return;
     const puntos=await cargarPuntosOperacion({tokenForzado:token,institucionForzada:institucionId});
-    try{
-      const res=await fetch(`${API_URL}/api/jornadas/activa?institucion_id=${institucionId}&t=${Date.now()}`,{headers:{Authorization:`Bearer ${token}`},cache:"no-store"});
-      const data=await res.json(); if(!res.ok)throw new Error(data.message||"Error consultando jornada");
-      if(data?.id){
-        // Existe una jornada abierta, pero al volver a abrir/actualizar POS NUBE
-        // NO entramos automáticamente. El operador debe autenticarse otra vez.
-        localStorage.setItem("jornadaActiva",JSON.stringify(data));
-        setJornadaActiva(data);
+    const estado=await cargarEstadoOperativoCaja({
+      tokenForzado:token,
+      institucionForzada:institucionId,
+      usuarioForzado:u,
+    });
 
-        const puntoExistente=puntos.find(
-          (p)=>Number(p.id)===Number(data.punto_id)
+    if(estado?.jornada?.id){
+      const data=estado.jornada;
+
+      const puntoExistente=puntos.find(
+        (p)=>Number(p.id)===Number(data.punto_id)
+      );
+
+      const puntosInicio=(()=>{
+        const activos=(Array.isArray(puntos)?puntos:[])
+          .filter((p)=>p?.activo!==false);
+
+        const puntosReales=activos.filter(
+          (p)=>String(p?.nombre||"")
+            .trim()
+            .toUpperCase()!=="PRINCIPAL"
         );
 
-        const puntosInicio=(()=>{
+        return puntosReales.length>0
+          ? puntosReales
+          : activos;
+      })();
+
+      const puntoExistentePermitido=
+        puntoExistente&&
+        puntosInicio.some(
+          (p)=>Number(p.id)===Number(puntoExistente.id)
+        )
+          ? puntoExistente
+          : null;
+
+      setPuntoJornadaSeleccionado(
+        puntoExistentePermitido?.id
+          ? String(puntoExistentePermitido.id)
+          : puntosInicio[0]?.id
+          ? String(puntosInicio[0].id)
+          : ""
+      );
+
+      setOperadorJornadaCorreo(
+        String(data.usuario_correo||u?.correo||"")
+      );
+      setOperadorJornadaPassword("");
+      setVerPasswordOperadorJornada(false);
+
+      if(estado.estado_operativo==="CIERRE_PENDIENTE"){
+        setVista("reporte_cierre");
+        setMostrarSelectorJornada(false);
+      }else{
+        setMostrarSelectorJornada(false);
+      }
+
+      return;
+    }
+
+    const puntosInicio=(()=>{
           const activos=(Array.isArray(puntos)?puntos:[])
             .filter((p)=>p?.activo!==false);
 
@@ -4389,7 +4545,11 @@ const exportarVentasExcel = () => {
     );
     setOperadorJornadaCorreo(String(u?.correo||""));
     setOperadorJornadaPassword("");
-    setMostrarSelectorJornada(!localStorage.getItem("accesoOperativo"));
+    setMostrarSelectorJornada(
+      estado?.estado_operativo==="SIN_JORNADA"
+        ? true
+        : !localStorage.getItem("accesoOperativo")
+    );
   };
   const obtenerPuntosJornadaDisponibles=(lista=puntosOperacion)=>{
     const activos=(Array.isArray(lista)?lista:[])
@@ -4478,6 +4638,33 @@ const exportarVentasExcel = () => {
 
       aplicarJornada(data.jornada);
 
+      const estadoDespuesAbrir=
+        data.estado_operativo==="CIERRE_PENDIENTE"
+          ? {
+              permitido:false,
+              estado_operativo:"CIERRE_PENDIENTE",
+              requiere_abrir_jornada:false,
+              requiere_cerrar_pendiente:true,
+              jornada:data.jornada,
+              message:
+                data.message||
+                "Existe una caja pendiente de cierre.",
+            }
+          : {
+              permitido:true,
+              estado_operativo:"OPERATIVA",
+              requiere_abrir_jornada:false,
+              requiere_cerrar_pendiente:false,
+              jornada:data.jornada,
+              message:"Jornada operativa habilitada.",
+            };
+
+      setEstadoOperativoCaja(estadoDespuesAbrir);
+
+      if(estadoDespuesAbrir.estado_operativo==="CIERRE_PENDIENTE"){
+        setVista("reporte_cierre");
+      }
+
       await cargarPuntosOperacion({
         tokenForzado:data.token,
         institucionForzada:data.usuario.institucion_id,
@@ -4500,6 +4687,15 @@ const exportarVentasExcel = () => {
       const data=await res.json();if(!res.ok)throw new Error(data.message||"Error cerrando jornada");
       localStorage.removeItem("jornadaActiva");
       setJornadaActiva(null);
+      setEstadoOperativoCaja({
+        permitido:false,
+        estado_operativo:"SIN_JORNADA",
+        requiere_abrir_jornada:true,
+        requiere_cerrar_pendiente:false,
+        jornada:null,
+        message:
+          "La caja fue cerrada. Debes abrir una nueva jornada para continuar operando.",
+      });
       setOperadorJornadaPassword("");
       setPuntoJornadaSeleccionado("");
       setMostrarSelectorJornada(true);
@@ -4599,6 +4795,33 @@ const exportarVentasExcel = () => {
     setVerPasswordOperadorJornada(false);
     aplicarJornada(data.jornada);
 
+    const estadoIngresoOperativo=
+      data.estado_operativo==="CIERRE_PENDIENTE"
+        ? {
+            permitido:false,
+            estado_operativo:"CIERRE_PENDIENTE",
+            requiere_abrir_jornada:false,
+            requiere_cerrar_pendiente:true,
+            jornada:data.jornada,
+            message:
+              data.message||
+              "Existe una caja pendiente de cierre del día anterior.",
+          }
+        : {
+            permitido:true,
+            estado_operativo:"OPERATIVA",
+            requiere_abrir_jornada:false,
+            requiere_cerrar_pendiente:false,
+            jornada:data.jornada,
+            message:"Jornada operativa habilitada.",
+          };
+
+    setEstadoOperativoCaja(estadoIngresoOperativo);
+
+    if(estadoIngresoOperativo.estado_operativo==="CIERRE_PENDIENTE"){
+      setVista("reporte_cierre");
+    }
+
     await cargarPuntosOperacion({
       tokenForzado: data.token,
       institucionForzada: data.usuario.institucion_id,
@@ -4677,16 +4900,26 @@ if (institucionIdLogin) {
 
       aplicarVistaInicialRol(data.usuario?.rol,setVista,setVistaVentasInterna);
 
-      if (["ADMIN", "SUPER_ADMIN", "AUDITOR"].includes(normalizarRol(data.usuario?.rol))) {
-        // El acceso administrativo no necesita abrir caja/jornada.
+      if (normalizarRol(data.usuario?.rol)==="AUDITOR") {
+        // Auditor conserva acceso de consulta y no opera caja.
         setMostrarSelectorJornada(false);
         localStorage.removeItem("jornadaActiva");
         setJornadaActiva(null);
         await cargarPuntosOperacion({
-          tokenForzado: data.token,
-          institucionForzada: institucionIdLogin,
+          tokenForzado:data.token,
+          institucionForzada:institucionIdLogin,
+        });
+        setEstadoOperativoCaja({
+          permitido:true,
+          estado_operativo:"NO_APLICA",
+          requiere_abrir_jornada:false,
+          requiere_cerrar_pendiente:false,
+          jornada:null,
+          message:"",
         });
       } else {
+        // ADMIN / SUPER_ADMIN / ENCARGADO / CAJERO también quedan sujetos
+        // a la caja operativa para movimientos que afecten dinero o stock.
         await cargarContextoJornada({
           tokenForzado:data.token,
           institucionForzada:institucionIdLogin,
@@ -4702,6 +4935,53 @@ if (institucionIdLogin) {
       setCargando(false);
     }
   };
+
+  useEffect(()=>{
+    if(!usuario||!institucionActivaId||esRolPortal)return;
+    if(normalizarRol(usuario?.rol)==="AUDITOR")return;
+
+    let cancelado=false;
+
+    const revisar=async()=>{
+      if(cancelado)return;
+      await cargarEstadoOperativoCaja();
+    };
+
+    const alVolver=()=>{
+      if(document.visibilityState==="visible"){
+        revisar();
+      }
+    };
+
+    revisar();
+
+    const intervalo=window.setInterval(revisar,60000);
+    window.addEventListener("focus",revisar);
+    document.addEventListener("visibilitychange",alVolver);
+
+    return()=>{
+      cancelado=true;
+      window.clearInterval(intervalo);
+      window.removeEventListener("focus",revisar);
+      document.removeEventListener("visibilitychange",alVolver);
+    };
+  },[
+    usuario?.id,
+    usuario?.rol,
+    institucionActivaId,
+  ]);
+
+  useEffect(()=>{
+    if(
+      estadoOperativoCaja?.estado_operativo==="CIERRE_PENDIENTE" &&
+      vista!=="reporte_cierre"
+    ){
+      setVista("reporte_cierre");
+    }
+  },[
+    estadoOperativoCaja?.estado_operativo,
+    vista,
+  ]);
 
   const cargarResumen = async () => {
     try {
@@ -9693,9 +9973,26 @@ Disponible: ${formatearMoneda(
       }
       setMostrarCrearCierre(false);
       setCierreDetalle(data.cierre || null);
+
+      // El backend cierra la jornada dentro de la misma transacción
+      // del cierre de caja. Desde este instante no se puede operar hasta
+      // abrir una nueva jornada.
+      localStorage.removeItem("jornadaActiva");
+      setJornadaActiva(null);
+      setEstadoOperativoCaja({
+        permitido:false,
+        estado_operativo:"SIN_JORNADA",
+        requiere_abrir_jornada:true,
+        requiere_cerrar_pendiente:false,
+        jornada:null,
+        message:
+          "Cierre realizado. Abre una nueva caja/jornada antes de continuar.",
+      });
+      setMostrarSelectorJornada(true);
+
       await cargarCierres();
       alert(
-        "Cierre de caja guardado correctamente. El próximo cierre comenzará desde este momento."
+        "Cierre de caja guardado correctamente. Debes abrir una nueva jornada para continuar operando."
       );
     } catch (error) {
       console.error("Error guardando cierre:", error);
@@ -10237,6 +10534,48 @@ if (!usuario) {
 
   return (
     <div style={styles.appShell}>
+      {estadoOperativoCaja?.estado_operativo==="CIERRE_PENDIENTE"&&(
+        <div
+          style={{
+            position:"fixed",
+            top:0,
+            left:0,
+            right:0,
+            zIndex:199999,
+            background:"#991b1b",
+            color:"#fff",
+            padding:"10px 18px",
+            textAlign:"center",
+            fontWeight:900,
+            boxShadow:"0 4px 12px rgba(0,0,0,.25)",
+          }}
+        >
+          CAJA PENDIENTE DE CIERRE · {
+            estadoOperativoCaja?.message||
+            "Debes cerrar la jornada anterior antes de continuar."
+          }
+        </div>
+      )}
+
+      {cargandoEstadoOperativoCaja&&(
+        <div
+          style={{
+            position:"fixed",
+            right:18,
+            bottom:18,
+            zIndex:200001,
+            background:"#0f172a",
+            color:"#fff",
+            borderRadius:10,
+            padding:"9px 12px",
+            fontSize:12,
+            fontWeight:800,
+          }}
+        >
+          Validando estado de caja...
+        </div>
+      )}
+
       {mostrarSelectorJornada&&!jornadaActiva?.id&&<div
         style={{
           position:"fixed",
@@ -10280,9 +10619,9 @@ if (!usuario) {
               lineHeight:1.5,
             }}
           >
-            Por seguridad, cada vez que POS NUBE se abre o se actualiza,
-            el operador debe volver a validar sus credenciales para continuar
-            la jornada del punto.
+            La caja está cerrada. Para realizar ventas, movimientos de stock,
+            recargas, egresos u otras operaciones debes abrir una jornada.
+            Si existe una jornada anterior pendiente, primero debes cerrarla.
           </div>
 
           <div style={{...styles.filterField,marginTop:18}}>
