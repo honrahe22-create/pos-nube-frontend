@@ -3228,6 +3228,53 @@ const toggleProductoOperacionStock=(producto)=>{
   });
 };
 
+const seleccionarTodosProductosOperacionStock=()=>{
+  setStockItemsOperacion((prev)=>{
+    const copia={...prev};
+
+    // Selecciona TODOS los productos visibles según búsqueda/familia actual.
+    // Conserva cantidades que el usuario ya haya escrito.
+    productosOperacionStock.forEach((producto)=>{
+      const id=String(producto.id);
+      if(!Object.prototype.hasOwnProperty.call(copia,id)){
+        copia[id]="";
+      }
+    });
+
+    return copia;
+  });
+};
+
+const quitarSeleccionProductosOperacionStock=()=>{
+  setStockItemsOperacion((prev)=>{
+    const copia={...prev};
+
+    // Quita únicamente los productos visibles del filtro actual.
+    // Así se puede trabajar por familias sin perder selecciones de otras familias.
+    productosOperacionStock.forEach((producto)=>{
+      delete copia[String(producto.id)];
+    });
+
+    return copia;
+  });
+};
+
+const totalSeleccionadosOperacionStock=()=>{
+  return Object.keys(stockItemsOperacion).length;
+};
+
+const todosVisiblesSeleccionadosOperacionStock=()=>{
+  return (
+    productosOperacionStock.length>0 &&
+    productosOperacionStock.every((producto)=>
+      Object.prototype.hasOwnProperty.call(
+        stockItemsOperacion,
+        String(producto.id)
+      )
+    )
+  );
+};
+
 const cambiarCantidadOperacionStock=(productoId,valor)=>{
   const texto=String(valor??"").trim();
 
@@ -16016,8 +16063,63 @@ onClick={guardarEgreso}
             background:"#dcfce7",
             fontWeight:800
           }}>
-            Seleccionados: {itemsValidosOperacionStock().length}
+            Seleccionados: {totalSeleccionadosOperacionStock()}
           </div>
+        </div>
+
+        <div style={{
+          display:"flex",
+          flexWrap:"wrap",
+          gap:10,
+          alignItems:"center",
+          marginTop:14
+        }}>
+          <button
+            type="button"
+            style={{
+              ...styles.button,
+              padding:"10px 16px",
+              minWidth:170
+            }}
+            onClick={seleccionarTodosProductosOperacionStock}
+            disabled={productosOperacionStock.length===0}
+          >
+            Seleccionar todo ({productosOperacionStock.length})
+          </button>
+
+          <button
+            type="button"
+            style={{
+              ...styles.outlineButton,
+              padding:"10px 16px",
+              minWidth:150
+            }}
+            onClick={quitarSeleccionProductosOperacionStock}
+            disabled={
+              productosOperacionStock.length===0 ||
+              !productosOperacionStock.some((producto)=>
+                Object.prototype.hasOwnProperty.call(
+                  stockItemsOperacion,
+                  String(producto.id)
+                )
+              )
+            }
+          >
+            Quitar selección
+          </button>
+
+          {todosVisiblesSeleccionadosOperacionStock()&&(
+            <span style={{
+              fontSize:13,
+              fontWeight:800,
+              color:"#166534",
+              background:"#dcfce7",
+              borderRadius:999,
+              padding:"7px 10px"
+            }}>
+              Todos los productos visibles están seleccionados
+            </span>
+          )}
         </div>
 
         <div style={{
