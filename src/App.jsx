@@ -452,7 +452,19 @@ const [existenciasInventario, setExistenciasInventario] = useState([]);
 const [puntosInventario, setPuntosInventario] = useState(["PRINCIPAL"]);
 const [puntoInventarioSeleccionado, setPuntoInventarioSeleccionado] = useState("PRINCIPAL");
 const [puntosOperacion,setPuntosOperacion]=useState([]);
-const [jornadaActiva,setJornadaActiva]=useState(null);
+const [jornadaActiva,setJornadaActiva]=useState(() => {
+  // Recuperación inmediata tras un refresh/WebView:
+  // se usa solo como estado inicial y luego se valida contra el backend.
+  try {
+    const guardada = JSON.parse(
+      localStorage.getItem("jornadaActiva") || "null"
+    );
+
+    return guardada?.id ? guardada : null;
+  } catch (_error) {
+    return null;
+  }
+});
 const [estadoOperativoCaja,setEstadoOperativoCaja]=useState({
   permitido:true,
   estado_operativo:"CARGANDO",
@@ -9406,17 +9418,55 @@ if (institucionIdLogin) {
         return;
       }
 
-      const stockDisponible = stockProductoEnPunto(
-        producto.id,
-        jornadaActiva?.punto_nombre || localNuevaOrden
+      const precioProducto = Number(producto.precio || 0);
+
+      if (
+        !Number.isFinite(precioProducto) ||
+        precioProducto <= 0
+      ) {
+        alert(
+          `${producto.nombre}: no se puede vender porque su precio es $0.00 o inválido.`
+        );
+        return;
+      }
+
+      const stockDisponible = Number(
+        stockProductoEnPunto(
+          producto.id,
+          jornadaActiva?.punto_nombre || localNuevaOrden
+        ) || 0
       );
 
-      if (item.cantidad > stockDisponible) {
+      if (stockDisponible < 1) {
+        alert(
+          `${producto.nombre}: no tiene stock disponible en ${
+            jornadaActiva?.punto_nombre || localNuevaOrden || "esta ubicación"
+          }.`
+        );
+        return;
+      }
+
+      if (
+        !Number.isInteger(Number(item.cantidad)) ||
+        Number(item.cantidad) < 1
+      ) {
+        alert(
+          `${producto.nombre}: la cantidad debe ser un número entero desde 1.`
+        );
+        return;
+      }
+
+      if (Number(item.cantidad) > stockDisponible) {
         alert(
           `${producto.nombre}: solo hay ${stockDisponible} unidades disponibles`
         );
         return;
       }
+    }
+
+    if (!Number.isFinite(Number(totalVentaCalculado)) || Number(totalVentaCalculado) <= 0) {
+      alert("No se puede crear una orden con total $0.00.");
+      return;
     }
 
     const pagaConSaldo =
@@ -18515,7 +18565,27 @@ onClick={guardarEgreso}
                   categoriaNuevaOrden === "TODOS" ||
                   String(p.categoria || "") === categoriaNuevaOrden;
 
-                return coincideTexto && coincideCategoria;
+                const precioValido =
+                  Number.isFinite(Number(p.precio)) &&
+                  Number(p.precio) > 0;
+
+                const stockDisponible = Number(
+                  stockProductoEnPunto(
+                    p.id,
+                    jornadaActiva?.punto_nombre || localNuevaOrden
+                  ) || 0
+                );
+
+                const tieneStock = stockDisponible >= 1;
+
+                // Nueva Orden muestra únicamente productos vendibles:
+                // precio mayor a cero y stock desde 1 en adelante.
+                return (
+                  coincideTexto &&
+                  coincideCategoria &&
+                  precioValido &&
+                  tieneStock
+                );
               })
               .map((producto) => {
                 const itemExistente = (
