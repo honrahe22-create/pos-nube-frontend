@@ -7695,7 +7695,7 @@ if (institucionIdLogin) {
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
 
-  const imprimirCierreCaja = (cierre) => {
+  const imprimirCierreCaja = async (cierre) => {
     if (!cierre) {
       alert("No existen datos del cierre para imprimir.");
       return;
@@ -7894,15 +7894,59 @@ if (institucionIdLogin) {
         );
         return;
       }
+
+      // ============================================================
+      // IMPRESIÓN DIRECTA PC - PUENTE LOCAL
+      // ============================================================
+      // Para el cierre NO usamos páginas de 58x100 del driver.
+      // El puente RAW imprime un rollo continuo, por lo que no se parte
+      // antes de "Conteo de billetes y monedas" ni al final.
+      try {
+        const controladorCierre = new AbortController();
+        const timeoutCierre = window.setTimeout(
+          () => controladorCierre.abort(),
+          2200
+        );
+
+        try {
+          const respuestaPuenteCierre = await fetch(
+            "http://127.0.0.1:17321/print-close",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(cierreNativo),
+              signal: controladorCierre.signal,
+              cache: "no-store",
+            }
+          );
+
+          if (respuestaPuenteCierre.ok) {
+            console.log(
+              "Cierre impreso completo mediante puente RAW local:",
+              cierreNativo
+            );
+            return;
+          }
+        } finally {
+          window.clearTimeout(timeoutCierre);
+        }
+      } catch (errorPuenteCierre) {
+        console.warn(
+          "Puente RAW de cierre no disponible; se usará impresión web:",
+          errorPuenteCierre
+        );
+      }
     } catch (error) {
       console.error(
-        "Error enviando cierre a impresora iMin:",
+        "Error enviando cierre a impresora iMin/puente PC:",
         error
       );
     }
 
     // ============================================================
-    // IMPRESIÓN PC / NAVEGADOR
+    // IMPRESIÓN PC / NAVEGADOR - RESPALDO
     // ============================================================
     // No usamos window.print() directamente sobre el modal porque el
     // detalle del cierre vive dentro de un contenedor fixed con scroll.
@@ -18073,12 +18117,11 @@ onClick={guardarEgreso}
             </div>
 
             <aside
-              aria-hidden="true"
               style={{
                 minWidth: 330,
                 width: "100%",
                 alignSelf: "stretch",
-                pointerEvents: "none",
+                position: "relative",
               }}
             >
           {/* RESUMEN DE LA ORDEN */}
@@ -18086,14 +18129,14 @@ onClick={guardarEgreso}
             style={{
               // PANEL FLOTANTE REAL:
               // queda visible aunque el usuario siga bajando por cientos de productos.
-              position: "fixed",
-              // Límite superior visual: debajo del bloque azul
-              // "BAR PRINCIPAL / Fecha de la orden".
-              // El panel continúa acompañando el scroll, pero no sube más.
+              // PANEL LATERAL STICKY:
+              // acompaña el scroll de los productos, pero cuando llega
+              // al borde inferior del bloque azul BAR PRINCIPAL / FECHA,
+              // se queda allí y NO continúa subiendo.
+              position: "sticky",
               top: 176,
-              right: 24,
               zIndex: 80,
-              width: "min(390px, calc(100vw - 330px))",
+              width: "100%",
               maxWidth: 390,
               maxHeight: "calc(100vh - 190px)",
               overflowY: "auto",
