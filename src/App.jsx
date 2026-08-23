@@ -4481,46 +4481,6 @@ const exportarVentasExcel = () => {
       return;
     }
 
-    const puntosInicio=(()=>{
-          const activos=(Array.isArray(puntos)?puntos:[])
-            .filter((p)=>p?.activo!==false);
-
-          const puntosReales=activos.filter(
-            (p)=>String(p?.nombre||"")
-              .trim()
-              .toUpperCase()!=="PRINCIPAL"
-          );
-
-          return puntosReales.length>0
-            ? puntosReales
-            : activos;
-        })();
-
-        const puntoExistentePermitido=
-          puntoExistente&&
-          puntosInicio.some(
-            (p)=>Number(p.id)===Number(puntoExistente.id)
-          )
-            ? puntoExistente
-            : null;
-
-        setPuntoJornadaSeleccionado(
-          puntoExistentePermitido?.id
-            ? String(puntoExistentePermitido.id)
-            : puntosInicio[0]?.id
-            ? String(puntosInicio[0].id)
-            : ""
-        );
-
-        setOperadorJornadaCorreo(
-          String(data.usuario_correo||u?.correo||"")
-        );
-        setOperadorJornadaPassword("");
-        setVerPasswordOperadorJornada(false);
-        setMostrarSelectorJornada(false);
-        return;
-      }
-    }catch(e){console.error(e)}
     localStorage.removeItem("jornadaActiva");setJornadaActiva(null);
 
     const puntosInicio=(()=>{
