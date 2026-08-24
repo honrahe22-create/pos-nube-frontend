@@ -10044,7 +10044,7 @@ Disponible: ${formatearMoneda(
         NUMERO_DOCUMENTO: egreso.numero_factura || "",
         TIPO_DOCUMENTO: String(
           egreso.tipo_documento || "FACTURA"
-        ).replaceAll("_", " "),
+        ).replace(/_/g, " "),
         TIPO_EGRESO: egreso.tipo_egreso || "Efectivo",
       }));
 
@@ -10089,10 +10089,10 @@ Disponible: ${formatearMoneda(
 
       const escapar = (valor) =>
         String(valor ?? "")
-          .replaceAll("&", "&amp;")
-          .replaceAll("<", "&lt;")
-          .replaceAll(">", "&gt;")
-          .replaceAll('"', "&quot;");
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
 
       const totalGeneral = filas.reduce(
         (suma, egreso) => suma + Number(egreso.total || 0),
@@ -10111,7 +10111,7 @@ Disponible: ${formatearMoneda(
               <td>${escapar(egreso.estado || "")}</td>
               <td>${escapar(egreso.numero_factura || "")}</td>
               <td>${escapar(
-                String(egreso.tipo_documento || "FACTURA").replaceAll("_", " ")
+                String(egreso.tipo_documento || "FACTURA").replace(/_/g, " ")
               )}</td>
               <td>${escapar(egreso.tipo_egreso || "Efectivo")}</td>
             </tr>
@@ -12686,7 +12686,7 @@ onClick={guardarEgreso}
                 <td style={styles.td}>{egreso.estado}</td>
                 <td style={styles.td}>{egreso.numero_factura}</td>
                 <td style={styles.td}>
-                  {String(egreso.tipo_documento || "FACTURA").replaceAll("_", " ")}
+                  {String(egreso.tipo_documento || "FACTURA").replace(/_/g, " ")}
                 </td>
                 <td style={styles.td}>{egreso.tipo_egreso || "Efectivo"}</td>
                 <td style={styles.td}>
