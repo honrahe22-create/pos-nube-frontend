@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const VACIO = {
   cedula: "",
@@ -43,6 +44,9 @@ export default function PadresModulo({
   const [cargandoSolicitudes, setCargandoSolicitudes] = useState(false);
   const [procesandoSolicitudId, setProcesandoSolicitudId] = useState(null);
   const [filtroSolicitudes, setFiltroSolicitudes] = useState("PENDIENTE");
+  const inputImportarPadresRef = useRef(null);
+  const [importandoPadres, setImportandoPadres] = useState(false);
+
 
   const headers = useMemo(
     () => ({
@@ -290,6 +294,186 @@ export default function PadresModulo({
       })
       .slice(0, 30);
   }, [alumnos, busquedaHijo, hijosVinculadosIds]);
+
+  const normalizarEncabezadoImportacion = (valor) =>
+    String(valor || "")
+      .trim()
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+
+  const tomarCampoMatriz = (fila, aliases) => {
+    const mapa = Object.entries(fila || {}).reduce((acc, [clave, valor]) => {
+      acc[normalizarEncabezadoImportacion(clave)] = valor;
+      return acc;
+    }, {});
+
+    for (const alias of aliases) {
+      const clave = normalizarEncabezadoImportacion(alias);
+      if (
+        Object.prototype.hasOwnProperty.call(mapa, clave) &&
+        String(mapa[clave] ?? "").trim() !== ""
+      ) {
+        return mapa[clave];
+      }
+    }
+
+    return "";
+  };
+
+  const importarMatrizPadres = async (archivo) => {
+    if (!archivo) return;
+
+    try {
+      setImportandoPadres(true);
+
+      const buffer = await archivo.arrayBuffer();
+      const libro = XLSX.read(buffer, { type: "array" });
+      const primeraHoja = libro.SheetNames?.[0];
+
+      if (!primeraHoja) {
+        throw new Error("El archivo no contiene hojas para importar.");
+      }
+
+      const filasCrudas = XLSX.utils.sheet_to_json(libro.Sheets[primeraHoja], {
+        defval: "",
+        raw: false,
+      });
+
+      if (!filasCrudas.length) {
+        throw new Error("La matriz está vacía.");
+      }
+
+      const filas = filasCrudas
+        .map((fila) => ({
+          cedula: String(
+            tomarCampoMatriz(fila, [
+              "CEDULA",
+              "CÉDULA",
+              "IDENTIFICACION",
+              "IDENTIFICACIÓN",
+              "DOCUMENTO",
+              "NUMERO_DOCUMENTO",
+              "NRO_DOCUMENTO",
+            ]) || ""
+          ).trim(),
+          nombres: String(
+            tomarCampoMatriz(fila, [
+              "NOMBRES",
+              "NOMBRE",
+              "FIRST_NAME",
+              "NOMBRES_PADRE",
+              "NOMBRE_PADRE",
+              "NOMBRES_REPRESENTANTE",
+            ]) || ""
+          ).trim(),
+          apellidos: String(
+            tomarCampoMatriz(fila, [
+              "APELLIDOS",
+              "APELLIDO",
+              "LAST_NAME",
+              "APELLIDOS_PADRE",
+              "APELLIDO_PADRE",
+              "APELLIDOS_REPRESENTANTE",
+            ]) || ""
+          ).trim(),
+          correo: String(
+            tomarCampoMatriz(fila, [
+              "CORREO",
+              "EMAIL",
+              "E_MAIL",
+              "CORREO_ELECTRONICO",
+              "MAIL",
+            ]) || ""
+          ).trim(),
+          telefono: String(
+            tomarCampoMatriz(fila, [
+              "TELEFONO",
+              "TELÉFONO",
+              "CELULAR",
+              "MOVIL",
+              "MÓVIL",
+              "WHATSAPP",
+            ]) || ""
+          ).trim(),
+          pais: String(
+            tomarCampoMatriz(fila, ["PAIS", "PAÍS", "COUNTRY"]) || "Ecuador"
+          ).trim() || "Ecuador",
+          ciudad: String(
+            tomarCampoMatriz(fila, ["CIUDAD", "CITY", "LOCALIDAD"]) || ""
+          ).trim(),
+          password: String(
+            tomarCampoMatriz(fila, [
+              "CONTRASENA",
+              "CONTRASEÑA",
+              "PASSWORD",
+              "CLAVE",
+              "CONTRASENA_INICIAL",
+              "CONTRASEÑA_INICIAL",
+            ]) || ""
+          ),
+        }))
+        .filter((fila) =>
+          Object.values(fila).some((valor) => String(valor ?? "").trim() !== "")
+        );
+
+      if (!filas.length) {
+        throw new Error("No se encontraron filas válidas para importar.");
+      }
+
+      const confirmar = window.confirm(
+        `Se procesarán ${filas.length} filas. Las columnas adicionales del Excel serán ignoradas. ¿Continuar?`
+      );
+
+      if (!confirmar) return;
+
+      const res = await fetch(`${API_URL}/api/padres/importar-matriz`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          institucion_id: Number(institucionId),
+          filas,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "No se pudo importar la matriz.");
+      }
+
+      const errores = Array.isArray(data.errores) ? data.errores : [];
+      const resumen = [
+        `Importación finalizada`,
+        `Nuevos padres: ${Number(data.creados || 0)}`,
+        `Padres actualizados: ${Number(data.actualizados || 0)}`,
+        `Accesos Portal creados: ${Number(data.accesos_creados || 0)}`,
+        `Omitidos: ${Number(data.omitidos || 0)}`,
+        `Errores: ${errores.length}`,
+      ].join("\\n");
+
+      alert(
+        errores.length
+          ? `${resumen}\\n\\nPrimeros errores:\\n${errores
+              .slice(0, 8)
+              .map((e) => `Fila ${e.fila}: ${e.mensaje}`)
+              .join("\\n")}`
+          : resumen
+      );
+
+      await cargarPadres();
+    } catch (error) {
+      console.error("Error importando matriz de padres:", error);
+      alert(error.message || "No se pudo importar la matriz de padres.");
+    } finally {
+      setImportandoPadres(false);
+      if (inputImportarPadresRef.current) {
+        inputImportarPadresRef.current.value = "";
+      }
+    }
+  };
 
   const abrirNuevo = () => {
     setEditandoId(null);
@@ -678,9 +862,28 @@ export default function PadresModulo({
             Administra padres y representantes de {institucionNombre}.
           </p>
         </div>
-        <button style={s.primary} onClick={abrirNuevo}>
-          + Agregar padre
-        </button>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <input
+            ref={inputImportarPadresRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            style={{ display: "none" }}
+            onChange={(e) => importarMatrizPadres(e.target.files?.[0])}
+          />
+
+          <button
+            type="button"
+            style={s.secondary}
+            disabled={importandoPadres}
+            onClick={() => inputImportarPadresRef.current?.click()}
+          >
+            {importandoPadres ? "Importando..." : "Importar matriz"}
+          </button>
+
+          <button style={s.primary} onClick={abrirNuevo}>
+            + Agregar padre
+          </button>
+        </div>
       </div>
 
       <div style={s.card}>
