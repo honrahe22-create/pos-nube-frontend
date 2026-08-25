@@ -31,6 +31,10 @@ export default function PadresModulo({
   const [busquedaHijo, setBusquedaHijo] = useState("");
   const [mostrarAgregarHijo, setMostrarAgregarHijo] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [solicitudesRecarga, setSolicitudesRecarga] = useState([]);
+  const [cargandoSolicitudes, setCargandoSolicitudes] = useState(false);
+  const [procesandoSolicitudId, setProcesandoSolicitudId] = useState(null);
+  const [filtroSolicitudes, setFiltroSolicitudes] = useState("PENDIENTE");
 
   const headers = useMemo(
     () => ({
@@ -76,10 +80,91 @@ export default function PadresModulo({
     }
   };
 
+  const cargarSolicitudesRecarga = async (estado = filtroSolicitudes) => {
+    if (!token || !institucionId) return;
+
+    try {
+      setCargandoSolicitudes(true);
+      const queryEstado =
+        estado && estado !== "TODOS"
+          ? `&estado=${encodeURIComponent(estado)}`
+          : "";
+
+      const res = await fetch(
+        `${API_URL}/api/portal/solicitudes-recarga-admin?institucion_id=${encodeURIComponent(
+          institucionId
+        )}${queryEstado}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "No se pudieron cargar las solicitudes.");
+      }
+
+      setSolicitudesRecarga(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error(error);
+      setSolicitudesRecarga([]);
+    } finally {
+      setCargandoSolicitudes(false);
+    }
+  };
+
+  const procesarSolicitudRecarga = async (solicitud, estado) => {
+    const accion = estado === "APROBADA" ? "aprobar" : "rechazar";
+    if (!window.confirm(`¿Seguro que deseas ${accion} esta solicitud de $${Number(
+      solicitud.monto || 0
+    ).toFixed(2)}?`)) {
+      return;
+    }
+
+    let motivo = "";
+    if (estado === "RECHAZADA") {
+      motivo = window.prompt("Motivo del rechazo (opcional):", "") ?? "";
+    }
+
+    try {
+      setProcesandoSolicitudId(solicitud.id);
+
+      const res = await fetch(
+        `${API_URL}/api/portal/solicitudes-recarga/${solicitud.id}/estado`,
+        {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ estado, motivo }),
+        }
+      );
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "No se pudo procesar la solicitud.");
+      }
+
+      alert(data.message || "Solicitud procesada correctamente.");
+      await cargarSolicitudesRecarga(filtroSolicitudes);
+      if (typeof cargarAlumnos === "function") {
+        await cargarAlumnos();
+      }
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "No se pudo procesar la solicitud.");
+    } finally {
+      setProcesandoSolicitudId(null);
+    }
+  };
+
   useEffect(() => {
     cargarPadres();
+    cargarSolicitudesRecarga(filtroSolicitudes);
     setPadreDetalle(null);
   }, [token, institucionId]);
+
+  useEffect(() => {
+    cargarSolicitudesRecarga(filtroSolicitudes);
+  }, [filtroSolicitudes]);
 
   const padresFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -428,6 +513,127 @@ export default function PadresModulo({
         </button>
       </div>
 
+      <div style={s.card}>
+        <div style={s.sectionHeader}>
+          <div>
+            <h2 style={s.sectionTitle}>Solicitudes de recarga del Portal Padres</h2>
+            <p style={s.subtitle}>
+              Revisa las transferencias enviadas por padres o estudiantes.
+              Al aprobar una solicitud, el sistema registra la recarga y actualiza
+              el saldo/crédito del alumno automáticamente.
+            </p>
+          </div>
+
+          <select
+            style={{ ...s.input, width: "auto", minWidth: 180 }}
+            value={filtroSolicitudes}
+            onChange={(e) => setFiltroSolicitudes(e.target.value)}
+          >
+            <option value="PENDIENTE">Pendientes</option>
+            <option value="APROBADA">Aprobadas</option>
+            <option value="RECHAZADA">Rechazadas</option>
+            <option value="TODOS">Todas</option>
+          </select>
+        </div>
+
+        {cargandoSolicitudes ? (
+          <div style={s.emptySmall}>Cargando solicitudes...</div>
+        ) : solicitudesRecarga.length === 0 ? (
+          <div style={s.emptySmall}>No existen solicitudes en este estado.</div>
+        ) : (
+          <div style={s.tableWrap}>
+            <table style={{ ...s.table, minWidth: 1050 }}>
+              <thead>
+                <tr>
+                  <th style={s.th}>Fecha</th>
+                  <th style={s.th}>Alumno</th>
+                  <th style={s.th}>Solicitante</th>
+                  <th style={s.th}>Monto</th>
+                  <th style={s.th}>Transferencia</th>
+                  <th style={s.th}>Estado</th>
+                  <th style={s.th}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {solicitudesRecarga.map((x) => (
+                  <tr key={x.id}>
+                    <td style={s.td}>
+                      {x.created_at
+                        ? new Date(x.created_at).toLocaleString("es-EC")
+                        : "-"}
+                    </td>
+                    <td style={s.td}>
+                      <strong>
+                        {x.alumno_nombres || ""} {x.alumno_apellidos || ""}
+                      </strong>
+                      <div style={s.muted}>
+                        {x.curso || "-"} {x.paralelo || ""}
+                      </div>
+                    </td>
+                    <td style={s.td}>
+                      {x.solicitante_nombre || x.solicitante_correo || "-"}
+                    </td>
+                    <td style={s.td}>
+                      <strong>${Number(x.monto || 0).toFixed(2)}</strong>
+                    </td>
+                    <td style={s.td}>
+                      <div>{x.fecha_transferencia || "-"}</div>
+                      <div style={s.muted}>
+                        Comp.: {x.numero_comprobante || "-"}
+                      </div>
+                    </td>
+                    <td style={s.td}>
+                      <span
+                        style={
+                          x.estado === "APROBADA"
+                            ? s.estadoAprobado
+                            : x.estado === "RECHAZADA"
+                            ? s.estadoRechazado
+                            : s.estadoPendiente
+                        }
+                      >
+                        {x.estado || "PENDIENTE"}
+                      </span>
+                    </td>
+                    <td style={s.td}>
+                      {x.estado === "PENDIENTE" ? (
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <button
+                            style={s.approveButton}
+                            disabled={procesandoSolicitudId === x.id}
+                            onClick={() =>
+                              procesarSolicitudRecarga(x, "APROBADA")
+                            }
+                          >
+                            Aprobar
+                          </button>
+                          <button
+                            style={s.dangerOutline}
+                            disabled={procesandoSolicitudId === x.id}
+                            onClick={() =>
+                              procesarSolicitudRecarga(x, "RECHAZADA")
+                            }
+                          >
+                            Rechazar
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={s.muted}>
+                          {x.procesado_nombre || "Procesada"}
+                          {x.motivo_rechazo
+                            ? ` · ${x.motivo_rechazo}`
+                            : ""}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       <div style={s.toolbar}>
         <input
           style={{ ...s.input, maxWidth: 520 }}
@@ -686,6 +892,42 @@ const s = {
     borderRadius: 999,
     background: "#e9efff",
     color: "#294fc4",
+    fontWeight: 800,
+  },
+  approveButton: {
+    border: "1px solid #86efac",
+    background: "#dcfce7",
+    color: "#166534",
+    borderRadius: 8,
+    padding: "8px 10px",
+    cursor: "pointer",
+    fontWeight: 800,
+  },
+  estadoPendiente: {
+    display: "inline-block",
+    background: "#fef3c7",
+    color: "#92400e",
+    padding: "5px 9px",
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 800,
+  },
+  estadoAprobado: {
+    display: "inline-block",
+    background: "#dcfce7",
+    color: "#166534",
+    padding: "5px 9px",
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 800,
+  },
+  estadoRechazado: {
+    display: "inline-block",
+    background: "#fee2e2",
+    color: "#991b1b",
+    padding: "5px 9px",
+    borderRadius: 999,
+    fontSize: 12,
     fontWeight: 800,
   },
   smallButton: {

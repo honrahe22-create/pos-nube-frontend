@@ -22,7 +22,7 @@ export default function PortalUsuarioModulo({
   const [enviando, setEnviando] = useState(false);
   const [recarga, setRecarga] = useState({
     monto: "",
-    banco: "",
+    fecha_transferencia: "",
     numero_comprobante: "",
     observacion: "",
   });
@@ -97,7 +97,7 @@ export default function PortalUsuarioModulo({
               : undefined,
           monto: Number(recarga.monto),
           metodo_pago: "TRANSFERENCIA",
-          banco: recarga.banco,
+          fecha_transferencia: recarga.fecha_transferencia,
           numero_comprobante: recarga.numero_comprobante,
           observacion: recarga.observacion,
         }),
@@ -109,7 +109,7 @@ export default function PortalUsuarioModulo({
       setMensaje(data.message);
       setRecarga({
         monto: "",
-        banco: "",
+        fecha_transferencia: "",
         numero_comprobante: "",
         observacion: "",
       });
@@ -278,12 +278,14 @@ export default function PortalUsuarioModulo({
                   </label>
 
                   <label style={s.field}>
-                    Banco
+                    Fecha de transferencia *
                     <input
+                      type="date"
+                      required
                       style={s.input}
-                      value={recarga.banco}
+                      value={recarga.fecha_transferencia}
                       onChange={(e) =>
-                        setRecarga({ ...recarga, banco: e.target.value })
+                        setRecarga({ ...recarga, fecha_transferencia: e.target.value })
                       }
                     />
                   </label>
@@ -292,6 +294,7 @@ export default function PortalUsuarioModulo({
                     No. comprobante
                     <input
                       style={s.input}
+                      required
                       value={recarga.numero_comprobante}
                       onChange={(e) =>
                         setRecarga({
@@ -381,8 +384,24 @@ export default function PortalUsuarioModulo({
                   datos.solicitudes_recarga.map((x) => (
                     <div key={x.id} style={s.requestCard}>
                       <strong>{moneda(x.monto)}</strong>
-                      <span>{x.estado || "PENDIENTE"}</span>
+                      <span style={
+                        x.estado === "APROBADA"
+                          ? s.requestApproved
+                          : x.estado === "RECHAZADA"
+                          ? s.requestRejected
+                          : s.requestPending
+                      }>
+                        {x.estado || "PENDIENTE"}
+                      </span>
                       <small>{fechaHora(x.created_at)}</small>
+                      {x.procesado_at && (
+                        <small>Procesada: {fechaHora(x.procesado_at)}</small>
+                      )}
+                      {x.motivo_rechazo && (
+                        <small style={{ color: "#b91c1c" }}>
+                          Motivo: {x.motivo_rechazo}
+                        </small>
+                      )}
                     </div>
                   ))
                 )}
@@ -619,5 +638,32 @@ const s = {
     padding: 12,
     display: "grid",
     gap: 5,
+  },
+  requestPending: {
+    color: "#92400e",
+    background: "#fef3c7",
+    borderRadius: 999,
+    padding: "4px 8px",
+    width: "fit-content",
+    fontSize: 12,
+    fontWeight: 800,
+  },
+  requestApproved: {
+    color: "#166534",
+    background: "#dcfce7",
+    borderRadius: 999,
+    padding: "4px 8px",
+    width: "fit-content",
+    fontSize: 12,
+    fontWeight: 800,
+  },
+  requestRejected: {
+    color: "#991b1b",
+    background: "#fee2e2",
+    borderRadius: 999,
+    padding: "4px 8px",
+    width: "fit-content",
+    fontSize: 12,
+    fontWeight: 800,
   },
 };
