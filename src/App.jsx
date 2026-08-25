@@ -4976,6 +4976,80 @@ const exportarVentasExcel = () => {
     });
   };
 
+  const handleLoginPortalPadres = async (e) => {
+    e.preventDefault();
+    setMensaje("");
+    setCargando(true);
+
+    if (!loginInstitucionId) {
+      setMensaje("Debes seleccionar la institución.");
+      setCargando(false);
+      return;
+    }
+
+    if (!correo.trim() || !password) {
+      setMensaje("Correo y contraseña son obligatorios.");
+      setCargando(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          correo: String(correo || "").trim(),
+          password,
+          institucion_id: Number(loginInstitucionId),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMensaje(data.message || "No se pudo iniciar sesión.");
+        return;
+      }
+
+      const rolIngreso = normalizarRol(data.usuario?.rol);
+
+      if (!["PADRE", "ESTUDIANTE"].includes(rolIngreso)) {
+        setMensaje(
+          "Este acceso es exclusivo para padres, representantes y estudiantes."
+        );
+        return;
+      }
+
+      localStorage.removeItem("accesoOperativo");
+      localStorage.removeItem("jornadaActiva");
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("usuario", JSON.stringify(data.usuario));
+      localStorage.setItem(
+        "institucionSeleccionadaId",
+        String(data.usuario?.institucion_id || loginInstitucionId)
+      );
+
+      setJornadaActiva(null);
+      setUsuario(data.usuario);
+      setInstitucionSeleccionadaId(
+        normalizarInstitucionId(
+          data.usuario?.institucion_id || loginInstitucionId
+        )
+      );
+      aplicarVistaInicialRol(
+        rolIngreso,
+        setVista,
+        setVistaVentasInterna
+      );
+      setMensaje("");
+    } catch (error) {
+      console.error("Error ingresando al Portal Padres:", error);
+      setMensaje("No se pudo conectar con el servidor.");
+    } finally {
+      setCargando(false);
+    }
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setMensaje("");
@@ -10540,11 +10614,163 @@ Disponible: ${formatearMoneda(
     limpiarFiltrosCierreCaja();
   };
 
+const parametrosAccesoPublico = new URLSearchParams(window.location.search);
+
 const esConsultaPublicaAlumno =
-  new URLSearchParams(window.location.search).get("consulta") === "alumno";
+  parametrosAccesoPublico.get("consulta") === "alumno";
+
+const esPortalPadresPublico =
+  parametrosAccesoPublico.get("portal") === "padres";
 
 if (esConsultaPublicaAlumno) {
   return <ConsultaAlumnoPublica API_URL={API_URL} />;
+}
+
+if (esPortalPadresPublico && !esRolPortal) {
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        background:
+          "linear-gradient(135deg, #eff6ff 0%, #f8fafc 55%, #eef2ff 100%)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 520,
+          background: "#ffffff",
+          borderRadius: 24,
+          padding: "34px 34px 30px",
+          boxShadow: "0 24px 70px rgba(15, 23, 42, 0.14)",
+          border: "1px solid #e2e8f0",
+        }}
+      >
+        <div style={{ textAlign: "center", marginBottom: 26 }}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 62,
+              height: 62,
+              borderRadius: 18,
+              background: "#1d4ed8",
+              color: "#ffffff",
+              fontWeight: 900,
+              fontSize: 25,
+              marginBottom: 14,
+            }}
+          >
+            P
+          </div>
+
+          <h1
+            style={{
+              margin: 0,
+              color: "#0f172a",
+              fontSize: 30,
+              fontWeight: 900,
+            }}
+          >
+            Portal de Padres
+          </h1>
+
+          <p
+            style={{
+              margin: "10px 0 0",
+              color: "#64748b",
+              fontSize: 15,
+              lineHeight: 1.5,
+            }}
+          >
+            Consulta saldo, consumos y recargas de tus hijos.
+          </p>
+        </div>
+
+        <form onSubmit={handleLoginPortalPadres} style={styles.form}>
+          <label style={styles.label}>Institución</label>
+          <select
+            value={loginInstitucionId}
+            onChange={(e) => setLoginInstitucionId(e.target.value)}
+            style={styles.input}
+            required
+          >
+            <option value="">Seleccione una institución</option>
+            {INSTITUCIONES.map((inst) => (
+              <option key={inst.id} value={inst.id}>
+                {inst.nombre}
+              </option>
+            ))}
+          </select>
+
+          <label style={styles.label}>Correo electrónico</label>
+          <input
+            type="email"
+            value={correo}
+            onChange={(e) => setCorreo(e.target.value)}
+            style={styles.input}
+            placeholder="correo@ejemplo.com"
+            required
+          />
+
+          <label style={styles.label}>Contraseña</label>
+          <div style={styles.passwordWrap}>
+            <input
+              type={verPasswordLogin ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={styles.inputPassword}
+              placeholder="Contraseña"
+              required
+            />
+            <button
+              type="button"
+              style={styles.eyeButton}
+              onClick={() => setVerPasswordLogin(!verPasswordLogin)}
+            >
+              {verPasswordLogin ? "Ocultar" : "Ver"}
+            </button>
+          </div>
+
+          <button
+            type="submit"
+            style={{ ...styles.button, marginTop: 10 }}
+            disabled={cargando}
+          >
+            {cargando ? "Ingresando..." : "Ingresar al Portal de Padres"}
+          </button>
+        </form>
+
+        {mensaje && <p style={styles.message}>{mensaje}</p>}
+
+        <div
+          style={{
+            marginTop: 22,
+            paddingTop: 18,
+            borderTop: "1px solid #e2e8f0",
+            textAlign: "center",
+          }}
+        >
+          <a
+            href={window.location.pathname}
+            style={{
+              color: "#64748b",
+              textDecoration: "none",
+              fontSize: 13,
+              fontWeight: 700,
+            }}
+          >
+            Ir al acceso administrativo y locales
+          </a>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 if (!usuario) {
@@ -10674,6 +10900,40 @@ if (!usuario) {
             </form>
 
             {mensaje && <p style={styles.message}>{mensaje}</p>}
+
+            <div
+              style={{
+                marginTop: 22,
+                paddingTop: 18,
+                borderTop: "1px solid #e2e8f0",
+                textAlign: "center",
+              }}
+            >
+              <p
+                style={{
+                  margin: "0 0 10px",
+                  color: "#64748b",
+                  fontSize: 13,
+                }}
+              >
+                ¿Eres padre o representante?
+              </p>
+              <a
+                href={`${window.location.pathname}?portal=padres`}
+                style={{
+                  display: "inline-block",
+                  padding: "10px 14px",
+                  borderRadius: 10,
+                  background: "#eff6ff",
+                  color: "#1d4ed8",
+                  fontWeight: 800,
+                  textDecoration: "none",
+                  border: "1px solid #bfdbfe",
+                }}
+              >
+                Entrar al Portal de Padres
+              </a>
+            </div>
           </>
         ) : mostrarCambiarAcceso ? (
           <>
