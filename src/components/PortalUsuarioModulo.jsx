@@ -18,6 +18,25 @@ export default function PortalUsuarioModulo({
   const [mensaje, setMensaje] = useState("");
   const [alumnoSeleccionadoId, setAlumnoSeleccionadoId] = useState("");
   const [filtro, setFiltro] = useState("TODOS");
+  const [mostrarMiCuenta, setMostrarMiCuenta] = useState(false);
+  const [guardandoCuenta, setGuardandoCuenta] = useState(false);
+  const [cuentaCorreo, setCuentaCorreo] = useState(usuario?.correo || "");
+  const [cuentaPasswordActual, setCuentaPasswordActual] = useState("");
+  const [cuentaPasswordNueva, setCuentaPasswordNueva] = useState("");
+  const [cuentaPasswordConfirmar, setCuentaPasswordConfirmar] = useState("");
+  const [mensajeCuenta, setMensajeCuenta] = useState("");
+
+  const [mostrarVincularHijo, setMostrarVincularHijo] = useState(false);
+  const [buscandoHijo, setBuscandoHijo] = useState(false);
+  const [vinculandoHijo, setVinculandoHijo] = useState(false);
+  const [hijoEncontrado, setHijoEncontrado] = useState(null);
+  const [vinculoForm, setVinculoForm] = useState({
+    cedula: "",
+    nombres: "",
+    apellidos: "",
+  });
+  const [mensajeVinculo, setMensajeVinculo] = useState("");
+
   const [mostrarRecarga, setMostrarRecarga] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [recarga, setRecarga] = useState({
@@ -66,6 +85,207 @@ export default function PortalUsuarioModulo({
     if (filtro === "TODOS") return lista;
     return lista.filter((x) => x.tipo === filtro);
   }, [datos, filtro]);
+
+  const guardarCorreoCuenta = async (e) => {
+    e.preventDefault();
+    setMensajeCuenta("");
+
+    const nuevoCorreo = String(cuentaCorreo || "").trim().toLowerCase();
+    if (!nuevoCorreo) {
+      setMensajeCuenta("Ingresa el nuevo correo.");
+      return;
+    }
+    if (!cuentaPasswordActual) {
+      setMensajeCuenta("Ingresa tu contraseña actual para cambiar el correo.");
+      return;
+    }
+
+    try {
+      setGuardandoCuenta(true);
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/api/usuarios/me/correo`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          nuevoCorreo,
+          password: cuentaPasswordActual,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "No se pudo cambiar el correo.");
+      }
+
+      const usuarioActual = JSON.parse(localStorage.getItem("usuario") || "{}");
+      const usuarioNuevo = { ...usuarioActual, correo: nuevoCorreo };
+      localStorage.setItem("usuario", JSON.stringify(usuarioNuevo));
+
+      setCuentaPasswordActual("");
+      setMensajeCuenta("Correo actualizado correctamente.");
+    } catch (error) {
+      setMensajeCuenta(error.message || "No se pudo cambiar el correo.");
+    } finally {
+      setGuardandoCuenta(false);
+    }
+  };
+
+  const guardarPasswordCuenta = async (e) => {
+    e.preventDefault();
+    setMensajeCuenta("");
+
+    if (!cuentaPasswordActual || !cuentaPasswordNueva) {
+      setMensajeCuenta("Completa la contraseña actual y la nueva contraseña.");
+      return;
+    }
+
+    if (cuentaPasswordNueva.length < 8) {
+      setMensajeCuenta("La nueva contraseña debe tener al menos 8 caracteres.");
+      return;
+    }
+
+    if (cuentaPasswordNueva !== cuentaPasswordConfirmar) {
+      setMensajeCuenta("La confirmación de contraseña no coincide.");
+      return;
+    }
+
+    try {
+      setGuardandoCuenta(true);
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/api/usuarios/me/password`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          actualPassword: cuentaPasswordActual,
+          nuevaPassword: cuentaPasswordNueva,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "No se pudo cambiar la contraseña.");
+      }
+
+      setCuentaPasswordActual("");
+      setCuentaPasswordNueva("");
+      setCuentaPasswordConfirmar("");
+      setMensajeCuenta("Contraseña actualizada correctamente.");
+    } catch (error) {
+      setMensajeCuenta(error.message || "No se pudo cambiar la contraseña.");
+    } finally {
+      setGuardandoCuenta(false);
+    }
+  };
+
+  const limpiarVinculo = () => {
+    setVinculoForm({ cedula: "", nombres: "", apellidos: "" });
+    setHijoEncontrado(null);
+    setMensajeVinculo("");
+  };
+
+  const buscarHijoParaVincular = async (e) => {
+    e.preventDefault();
+    setMensajeVinculo("");
+    setHijoEncontrado(null);
+
+    if (
+      !String(vinculoForm.cedula || "").trim() ||
+      !String(vinculoForm.nombres || "").trim() ||
+      !String(vinculoForm.apellidos || "").trim()
+    ) {
+      setMensajeVinculo("Completa cédula, nombres y apellidos.");
+      return;
+    }
+
+    try {
+      setBuscandoHijo(true);
+
+      const res = await fetch(`${API_URL}/api/portal/buscar-hijo`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(vinculoForm),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "No se encontró al estudiante.");
+      }
+
+      setHijoEncontrado(data.alumno || null);
+
+      if (data.ya_vinculado) {
+        setMensajeVinculo("Este estudiante ya está vinculado a tu cuenta.");
+      } else {
+        setMensajeVinculo(
+          "Estudiante encontrado. Confirma que los datos sean correctos antes de vincularlo."
+        );
+      }
+    } catch (error) {
+      setMensajeVinculo(
+        error.message ||
+          "No se encontró un estudiante con los datos ingresados."
+      );
+    } finally {
+      setBuscandoHijo(false);
+    }
+  };
+
+  const confirmarVinculoHijo = async () => {
+    if (!hijoEncontrado) return;
+
+    const nombre = `${hijoEncontrado.nombres || ""} ${
+      hijoEncontrado.apellidos || ""
+    }`.trim();
+
+    if (
+      !window.confirm(
+        `¿Deseas vincular a ${nombre} a tu cuenta de padre/representante?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setVinculandoHijo(true);
+      setMensajeVinculo("");
+
+      const res = await fetch(`${API_URL}/api/portal/vincular-hijo`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(vinculoForm),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "No se pudo vincular al estudiante.");
+      }
+
+      setMensajeVinculo(data.message || "Estudiante vinculado correctamente.");
+      setMostrarVincularHijo(false);
+      limpiarVinculo();
+      await cargar(String(data.alumno?.id || ""));
+    } catch (error) {
+      setMensajeVinculo(
+        error.message || "No se pudo vincular al estudiante."
+      );
+    } finally {
+      setVinculandoHijo(false);
+    }
+  };
 
   const cambiarHijo = async (id) => {
     setAlumnoSeleccionadoId(id);
@@ -148,13 +368,127 @@ export default function PortalUsuarioModulo({
             <strong>{usuario?.nombre || usuario?.correo}</strong>
             <div style={s.role}>{datos?.tipo_portal}</div>
           </div>
-          <button style={s.logout} onClick={onCerrarSesion}>
+          <button
+              type="button"
+              style={s.secondaryButton}
+              onClick={() => {
+                setMostrarMiCuenta((v) => !v);
+                setMensajeCuenta("");
+                setCuentaCorreo(usuario?.correo || "");
+                setCuentaPasswordActual("");
+                setCuentaPasswordNueva("");
+                setCuentaPasswordConfirmar("");
+              }}
+            >
+              Mi cuenta
+            </button>
+            <button style={s.logout} onClick={onCerrarSesion}>
             Cerrar sesión
           </button>
         </div>
       </header>
 
-      <main style={s.main}>
+            {mostrarMiCuenta && (
+        <section style={s.accountCard}>
+          <div style={s.accountHeader}>
+            <div>
+              <h2 style={{ margin: 0 }}>Mi cuenta</h2>
+              <p style={{ margin: "6px 0 0", color: "#64748b" }}>
+                Puedes cambiar tu correo o contraseña cuando lo necesites.
+              </p>
+            </div>
+            <button
+              type="button"
+              style={s.smallButton}
+              onClick={() => setMostrarMiCuenta(false)}
+            >
+              Cerrar
+            </button>
+          </div>
+
+          <div style={s.accountGrid}>
+            <form onSubmit={guardarCorreoCuenta} style={s.accountBox}>
+              <h3 style={{ marginTop: 0 }}>Cambiar correo</h3>
+              <label style={s.field}>
+                Nuevo correo
+                <input
+                  type="email"
+                  style={s.input}
+                  value={cuentaCorreo}
+                  onChange={(e) => setCuentaCorreo(e.target.value)}
+                  required
+                />
+              </label>
+              <label style={s.field}>
+                Contraseña actual
+                <input
+                  type="password"
+                  style={s.input}
+                  value={cuentaPasswordActual}
+                  onChange={(e) => setCuentaPasswordActual(e.target.value)}
+                  required
+                />
+              </label>
+              <button
+                type="submit"
+                style={s.primaryButton}
+                disabled={guardandoCuenta}
+              >
+                Guardar nuevo correo
+              </button>
+            </form>
+
+            <form onSubmit={guardarPasswordCuenta} style={s.accountBox}>
+              <h3 style={{ marginTop: 0 }}>Cambiar contraseña</h3>
+              <label style={s.field}>
+                Contraseña actual
+                <input
+                  type="password"
+                  style={s.input}
+                  value={cuentaPasswordActual}
+                  onChange={(e) => setCuentaPasswordActual(e.target.value)}
+                  required
+                />
+              </label>
+              <label style={s.field}>
+                Nueva contraseña
+                <input
+                  type="password"
+                  style={s.input}
+                  value={cuentaPasswordNueva}
+                  onChange={(e) => setCuentaPasswordNueva(e.target.value)}
+                  minLength={8}
+                  required
+                />
+              </label>
+              <label style={s.field}>
+                Confirmar nueva contraseña
+                <input
+                  type="password"
+                  style={s.input}
+                  value={cuentaPasswordConfirmar}
+                  onChange={(e) => setCuentaPasswordConfirmar(e.target.value)}
+                  minLength={8}
+                  required
+                />
+              </label>
+              <button
+                type="submit"
+                style={s.primaryButton}
+                disabled={guardandoCuenta}
+              >
+                Guardar nueva contraseña
+              </button>
+            </form>
+          </div>
+
+          {mensajeCuenta && (
+            <div style={s.accountMessage}>{mensajeCuenta}</div>
+          )}
+        </section>
+      )}
+
+<main style={s.main}>
         <div style={s.welcome}>
           <div>
             <div style={s.muted}>Institución</div>
@@ -166,7 +500,120 @@ export default function PortalUsuarioModulo({
             )}
           </div>
 
-          {esPadre && (datos?.hijos || []).length > 1 && (
+                  {esPadre && (
+          <section style={s.linkChildCard}>
+            <div style={s.linkChildHeader}>
+              <div>
+                <h3 style={{ margin: 0 }}>Hijos vinculados</h3>
+                <p style={{ ...s.muted, margin: "5px 0 0" }}>
+                  Puedes vincular a otro hijo verificando cédula, nombres y apellidos.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                style={s.primary}
+                onClick={() => {
+                  setMostrarVincularHijo((v) => !v);
+                  limpiarVinculo();
+                }}
+              >
+                {mostrarVincularHijo ? "Cancelar" : "Vincular hijo"}
+              </button>
+            </div>
+
+            {mostrarVincularHijo && (
+              <form onSubmit={buscarHijoParaVincular} style={s.linkChildForm}>
+                <label style={s.field}>
+                  Cédula del estudiante *
+                  <input
+                    style={s.input}
+                    value={vinculoForm.cedula}
+                    onChange={(e) =>
+                      setVinculoForm({
+                        ...vinculoForm,
+                        cedula: e.target.value,
+                      })
+                    }
+                    required
+                  />
+                </label>
+
+                <label style={s.field}>
+                  Nombres del estudiante *
+                  <input
+                    style={s.input}
+                    value={vinculoForm.nombres}
+                    onChange={(e) =>
+                      setVinculoForm({
+                        ...vinculoForm,
+                        nombres: e.target.value,
+                      })
+                    }
+                    required
+                  />
+                </label>
+
+                <label style={s.field}>
+                  Apellidos del estudiante *
+                  <input
+                    style={s.input}
+                    value={vinculoForm.apellidos}
+                    onChange={(e) =>
+                      setVinculoForm({
+                        ...vinculoForm,
+                        apellidos: e.target.value,
+                      })
+                    }
+                    required
+                  />
+                </label>
+
+                <div style={s.linkChildActions}>
+                  <button
+                    type="submit"
+                    style={s.primaryButton}
+                    disabled={buscandoHijo}
+                  >
+                    {buscandoHijo ? "Buscando..." : "Buscar estudiante"}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {mostrarVincularHijo && mensajeVinculo && (
+              <div style={s.accountMessage}>{mensajeVinculo}</div>
+            )}
+
+            {mostrarVincularHijo && hijoEncontrado && (
+              <div style={s.foundStudentCard}>
+                <div>
+                  <strong style={{ fontSize: 17 }}>
+                    {hijoEncontrado.nombres} {hijoEncontrado.apellidos}
+                  </strong>
+                  <div style={s.muted}>
+                    Cédula: {hijoEncontrado.cedula || "-"}
+                  </div>
+                  <div style={s.muted}>
+                    Curso: {hijoEncontrado.curso || "-"}{" "}
+                    {hijoEncontrado.paralelo || ""}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  style={s.primaryButton}
+                  disabled={vinculandoHijo}
+                  onClick={confirmarVinculoHijo}
+                >
+                  {vinculandoHijo ? "Vinculando..." : "Confirmar vínculo"}
+                </button>
+              </div>
+            )}
+          </section>
+        )}
+
+{esPadre && (datos?.hijos || []).length > 1 && (
             <label style={s.selectLabel}>
               Ver estudiante
               <select
@@ -188,7 +635,11 @@ export default function PortalUsuarioModulo({
 
         {!alumno ? (
           <div style={s.card}>
-            No existen estudiantes vinculados a esta cuenta.
+            <strong>No existen estudiantes vinculados a esta cuenta.</strong>
+            <p style={s.muted}>
+              Usa el botón “Vincular hijo” de arriba e ingresa la cédula,
+              nombres y apellidos exactamente como constan en la institución.
+            </p>
           </div>
         ) : (
           <>
@@ -665,5 +1116,103 @@ const s = {
     width: "fit-content",
     fontSize: 12,
     fontWeight: 800,
+  },
+  linkChildCard: {
+    background: "#ffffff",
+    border: "1px solid #dbeafe",
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 18,
+  },
+  linkChildHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 14,
+    flexWrap: "wrap",
+  },
+  linkChildForm: {
+    marginTop: 16,
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 12,
+    alignItems: "end",
+  },
+  linkChildActions: {
+    display: "flex",
+    alignItems: "end",
+  },
+  foundStudentCard: {
+    marginTop: 14,
+    border: "1px solid #86efac",
+    background: "#f0fdf4",
+    borderRadius: 12,
+    padding: 14,
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 14,
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+  secondaryButton: {
+    background: "#ffffff",
+    color: "#334155",
+    border: "1px solid #cbd5e1",
+    borderRadius: 9,
+    padding: "10px 14px",
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+  smallButton: {
+    background: "#ffffff",
+    color: "#334155",
+    border: "1px solid #cbd5e1",
+    borderRadius: 9,
+    padding: "8px 12px",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  primaryButton: {
+    background: "#147d73",
+    color: "#ffffff",
+    border: "none",
+    borderRadius: 9,
+    padding: "10px 14px",
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+  accountCard: {
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 18,
+  },
+  accountHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  accountGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+    gap: 16,
+  },
+  accountBox: {
+    border: "1px solid #e2e8f0",
+    borderRadius: 12,
+    padding: 14,
+    display: "grid",
+    gap: 12,
+  },
+  accountMessage: {
+    marginTop: 14,
+    padding: 10,
+    borderRadius: 10,
+    background: "#eff6ff",
+    color: "#1e40af",
+    fontWeight: 700,
   },
 };
