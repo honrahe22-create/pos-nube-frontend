@@ -292,6 +292,27 @@ const [loginInstitucionId, setLoginInstitucionId] = useState("");
 const [loginPuntosOperacion, setLoginPuntosOperacion] = useState([]);
 const [loginPuntoId, setLoginPuntoId] = useState("ADMIN");
 const [cargandoLoginPuntos, setCargandoLoginPuntos] = useState(false);
+const clicksAccesoAdminPadresRef = useRef({ cantidad: 0, ultimoClick: 0 });
+
+const registrarClickAccesoAdminPadres = () => {
+  const ahora = Date.now();
+  const anterior = clicksAccesoAdminPadresRef.current;
+
+  // Si pasan más de 2 segundos, reinicia la secuencia.
+  if (ahora - Number(anterior.ultimoClick || 0) > 2000) {
+    anterior.cantidad = 0;
+  }
+
+  anterior.cantidad += 1;
+  anterior.ultimoClick = ahora;
+
+  if (anterior.cantidad >= 3) {
+    anterior.cantidad = 0;
+    // Sale del portal de padres y vuelve al login administrativo/operativo normal.
+    window.location.href = window.location.pathname;
+  }
+};
+
 
 const [verPasswordLogin, setVerPasswordLogin] = useState(false);
 const [verPasswordActual, setVerPasswordActual] = useState(false);
@@ -10652,8 +10673,12 @@ if (esPortalPadresPublico && !esRolPortal) {
       >
         <div style={{ textAlign: "center", marginBottom: 26 }}>
           <div
+            onClick={registrarClickAccesoAdminPadres}
+            title=""
             style={{
               display: "inline-flex",
+              cursor: "default",
+              userSelect: "none",
               alignItems: "center",
               justifyContent: "center",
               width: 62,
@@ -10748,26 +10773,6 @@ if (esPortalPadresPublico && !esRolPortal) {
 
         {mensaje && <p style={styles.message}>{mensaje}</p>}
 
-        <div
-          style={{
-            marginTop: 22,
-            paddingTop: 18,
-            borderTop: "1px solid #e2e8f0",
-            textAlign: "center",
-          }}
-        >
-          <a
-            href={window.location.pathname}
-            style={{
-              color: "#64748b",
-              textDecoration: "none",
-              fontSize: 13,
-              fontWeight: 700,
-            }}
-          >
-            Ir al acceso administrativo y locales
-          </a>
-        </div>
       </div>
     </div>
   );
