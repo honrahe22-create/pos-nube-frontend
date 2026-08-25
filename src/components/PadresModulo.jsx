@@ -32,13 +32,6 @@ export default function PadresModulo({
   const [busquedaHijo, setBusquedaHijo] = useState("");
   const [mostrarAgregarHijo, setMostrarAgregarHijo] = useState(false);
   const [guardando, setGuardando] = useState(false);
-  const [mostrarCrearAccesoPortal, setMostrarCrearAccesoPortal] = useState(false);
-  const [accesoPortalForm, setAccesoPortalForm] = useState({
-    correo: "",
-    password: "",
-    confirmar_password: "",
-  });
-  const [creandoAccesoPortal, setCreandoAccesoPortal] = useState(false);
 
   const [solicitudesRecarga, setSolicitudesRecarga] = useState([]);
   const [cargandoSolicitudes, setCargandoSolicitudes] = useState(false);
@@ -167,74 +160,6 @@ export default function PadresModulo({
       setProcesandoSolicitudId(null);
     }
   };
-
-  const crearAccesoPortalPadre = async (e) => {
-    e.preventDefault();
-
-    if (!padreDetalle?.id) {
-      alert("Primero selecciona un padre o representante.");
-      return;
-    }
-
-    const correoAcceso = String(accesoPortalForm.correo || "").trim().toLowerCase();
-    const passwordAcceso = String(accesoPortalForm.password || "");
-
-    if (!correoAcceso || !passwordAcceso) {
-      alert("Correo y contraseña son obligatorios.");
-      return;
-    }
-
-    if (passwordAcceso.length < 8) {
-      alert("La contraseña debe tener al menos 8 caracteres.");
-      return;
-    }
-
-    if (passwordAcceso !== accesoPortalForm.confirmar_password) {
-      alert("La confirmación de contraseña no coincide.");
-      return;
-    }
-
-    try {
-      setCreandoAccesoPortal(true);
-
-      const res = await fetch(`${API_URL}/api/usuarios`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          institucion_id: Number(institucionId),
-          nombre: nombreCompleto(padreDetalle),
-          correo: correoAcceso,
-          password: passwordAcceso,
-          rol: "PADRE",
-          padre_id: Number(padreDetalle.id),
-          alumno_id: null,
-          punto_id: null,
-          punto_ids: [],
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || "No se pudo crear el acceso al portal.");
-      }
-
-      alert(
-        "Cuenta del Portal de Padres creada correctamente. Ya puede iniciar sesión."
-      );
-
-      setMostrarCrearAccesoPortal(false);
-      setAccesoPortalForm({
-        correo: "",
-        password: "",
-        confirmar_password: "",
-      });
-    } catch (error) {
-      alert(error.message || "No se pudo crear el acceso al Portal de Padres.");
-    } finally {
-      setCreandoAccesoPortal(false);
-    }
-  };
-
   useEffect(() => {
     cargarPadres();
     cargarSolicitudesRecarga(filtroSolicitudes);
@@ -404,16 +329,6 @@ export default function PadresModulo({
           ciudad: String(
             tomarCampoMatriz(fila, ["CIUDAD", "CITY", "LOCALIDAD"]) || ""
           ).trim(),
-          password: String(
-            tomarCampoMatriz(fila, [
-              "CONTRASENA",
-              "CONTRASEÑA",
-              "PASSWORD",
-              "CLAVE",
-              "CONTRASENA_INICIAL",
-              "CONTRASEÑA_INICIAL",
-            ]) || ""
-          ),
         }))
         .filter((fila) =>
           Object.values(fila).some((valor) => String(valor ?? "").trim() !== "")
@@ -449,8 +364,7 @@ export default function PadresModulo({
         `Importación finalizada`,
         `Nuevos padres: ${Number(data.creados || 0)}`,
         `Padres actualizados: ${Number(data.actualizados || 0)}`,
-        `Accesos Portal creados: ${Number(data.accesos_creados || 0)}`,
-        `Omitidos: ${Number(data.omitidos || 0)}`,
+                `Omitidos: ${Number(data.omitidos || 0)}`,
         `Errores: ${errores.length}`,
       ].join("\\n");
 
@@ -634,22 +548,6 @@ export default function PadresModulo({
               <Dato label="Tipo de usuario" value="PADRE / REPRESENTANTE" />
               <Dato label="Cédula" value={padreDetalle.cedula || "-"} />
               <Dato label="Correo electrónico" value={padreDetalle.correo || "-"} />
-              <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
-                <button
-                  type="button"
-                  style={s.primary}
-                  onClick={() => {
-                    setAccesoPortalForm({
-                      correo: padreDetalle.correo || "",
-                      password: "",
-                      confirmar_password: "",
-                    });
-                    setMostrarCrearAccesoPortal(true);
-                  }}
-                >
-                  Crear acceso al Portal de Padres
-                </button>
-              </div>
               <Dato label="Teléfono" value={padreDetalle.telefono || "-"} />
               <Dato label="País" value={padreDetalle.pais || "Ecuador"} />
               <Dato label="Ciudad" value={padreDetalle.ciudad || "-"} />
@@ -760,85 +658,6 @@ export default function PadresModulo({
           </div>
         )}
 
-              {mostrarCrearAccesoPortal && (
-        <div style={s.overlay}>
-          <form style={s.modal} onSubmit={crearAccesoPortalPadre}>
-            <div style={s.modalHeader}>
-              <div>
-                <h2 style={{ margin: 0 }}>Crear acceso al Portal de Padres</h2>
-                <p style={s.subtitle}>
-                  {padreDetalle ? nombreCompleto(padreDetalle) : ""}
-                </p>
-              </div>
-              <button
-                type="button"
-                style={s.close}
-                onClick={() => setMostrarCrearAccesoPortal(false)}
-              >
-                ×
-              </button>
-            </div>
-
-            <div style={s.formGrid}>
-              <Campo
-                label="Correo de acceso *"
-                type="email"
-                value={accesoPortalForm.correo}
-                onChange={(e) =>
-                  setAccesoPortalForm({
-                    ...accesoPortalForm,
-                    correo: e.target.value,
-                  })
-                }
-              />
-              <Campo
-                label="Contraseña inicial *"
-                type="password"
-                value={accesoPortalForm.password}
-                onChange={(e) =>
-                  setAccesoPortalForm({
-                    ...accesoPortalForm,
-                    password: e.target.value,
-                  })
-                }
-              />
-              <Campo
-                label="Confirmar contraseña *"
-                type="password"
-                value={accesoPortalForm.confirmar_password}
-                onChange={(e) =>
-                  setAccesoPortalForm({
-                    ...accesoPortalForm,
-                    confirmar_password: e.target.value,
-                  })
-                }
-              />
-            </div>
-
-            <p style={s.subtitle}>
-              El padre podrá cambiar su correo y contraseña después desde “Mi cuenta”.
-            </p>
-
-            <div style={s.modalActions}>
-              <button
-                type="button"
-                style={s.secondary}
-                onClick={() => setMostrarCrearAccesoPortal(false)}
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                style={s.primary}
-                disabled={creandoAccesoPortal}
-              >
-                {creandoAccesoPortal ? "Creando..." : "Crear acceso"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
       {mostrarForm && (
           <FormularioPadre
             form={form}
@@ -877,7 +696,7 @@ export default function PadresModulo({
             disabled={importandoPadres}
             onClick={() => inputImportarPadresRef.current?.click()}
           >
-            {importandoPadres ? "Importando..." : "Importar matriz"}
+            {importandoPadres ? "Importando..." : "Importar matriz de padres"}
           </button>
 
           <button style={s.primary} onClick={abrirNuevo}>

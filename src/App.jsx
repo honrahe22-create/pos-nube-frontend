@@ -292,6 +292,15 @@ const [loginInstitucionId, setLoginInstitucionId] = useState("");
 const [loginPuntosOperacion, setLoginPuntosOperacion] = useState([]);
 const [loginPuntoId, setLoginPuntoId] = useState("ADMIN");
 const [cargandoLoginPuntos, setCargandoLoginPuntos] = useState(false);
+const [mostrarRegistroPadrePortal, setMostrarRegistroPadrePortal] = useState(false);
+const [registroPadrePortal, setRegistroPadrePortal] = useState({
+  cedula: "",
+  correo: "",
+  password: "",
+  confirmar_password: "",
+});
+const [mensajeRegistroPadre, setMensajeRegistroPadre] = useState("");
+const [cargandoRegistroPadre, setCargandoRegistroPadre] = useState(false);
 const clicksAccesoAdminPadresRef = useRef({ cantidad: 0, ultimoClick: 0 });
 
 const registrarClickAccesoAdminPadres = () => {
@@ -4997,6 +5006,88 @@ const exportarVentasExcel = () => {
     });
   };
 
+  const handleRegistroPortalPadres = async (e) => {
+    e.preventDefault();
+    setMensajeRegistroPadre("");
+
+    const cedula = String(registroPadrePortal.cedula || "").trim();
+    const correoRegistro = String(registroPadrePortal.correo || "")
+      .trim()
+      .toLowerCase();
+    const passwordRegistro = String(registroPadrePortal.password || "");
+
+    if (!loginInstitucionId) {
+      setMensajeRegistroPadre("Debes seleccionar la institución.");
+      return;
+    }
+
+    if (!cedula || !correoRegistro || !passwordRegistro) {
+      setMensajeRegistroPadre(
+        "Cédula, correo y contraseña son obligatorios."
+      );
+      return;
+    }
+
+    if (passwordRegistro.length < 8) {
+      setMensajeRegistroPadre(
+        "La contraseña debe tener al menos 8 caracteres."
+      );
+      return;
+    }
+
+    if (
+      passwordRegistro !==
+      String(registroPadrePortal.confirmar_password || "")
+    ) {
+      setMensajeRegistroPadre("La confirmación de contraseña no coincide.");
+      return;
+    }
+
+    try {
+      setCargandoRegistroPadre(true);
+
+      const res = await fetch(
+        `${API_URL}/api/portal/registro/crear-cuenta`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            institucion_id: Number(loginInstitucionId),
+            cedula,
+            correo: correoRegistro,
+            password: passwordRegistro,
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "No se pudo crear la cuenta.");
+      }
+
+      setCorreo(cedula);
+      setPassword("");
+      setRegistroPadrePortal({
+        cedula: "",
+        correo: "",
+        password: "",
+        confirmar_password: "",
+      });
+      setMostrarRegistroPadrePortal(false);
+      setMensaje(
+        data.message ||
+          "Cuenta creada correctamente. Ingresa con tu cédula y contraseña."
+      );
+    } catch (error) {
+      setMensajeRegistroPadre(
+        error.message || "No se pudo crear la cuenta del Portal."
+      );
+    } finally {
+      setCargandoRegistroPadre(false);
+    }
+  };
+
   const handleLoginPortalPadres = async (e) => {
     e.preventDefault();
     setMensaje("");
@@ -5009,17 +5100,17 @@ const exportarVentasExcel = () => {
     }
 
     if (!correo.trim() || !password) {
-      setMensaje("Correo y contraseña son obligatorios.");
+      setMensaje("Cédula/correo y contraseña son obligatorios.");
       setCargando(false);
       return;
     }
 
     try {
-      const res = await fetch(`${API_URL}/api/auth/login`, {
+      const res = await fetch(`${API_URL}/api/portal/login-padre`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          correo: String(correo || "").trim(),
+          identificador: String(correo || "").trim(),
           password,
           institucion_id: Number(loginInstitucionId),
         }),
@@ -10717,61 +10808,194 @@ if (esPortalPadresPublico && !esRolPortal) {
           </p>
         </div>
 
-        <form onSubmit={handleLoginPortalPadres} style={styles.form}>
-          <label style={styles.label}>Institución</label>
-          <select
-            value={loginInstitucionId}
-            onChange={(e) => setLoginInstitucionId(e.target.value)}
-            style={styles.input}
-            required
-          >
-            <option value="">Seleccione una institución</option>
-            {INSTITUCIONES.map((inst) => (
-              <option key={inst.id} value={inst.id}>
-                {inst.nombre}
-              </option>
-            ))}
-          </select>
+        {!mostrarRegistroPadrePortal ? (
+          <>
+            <form onSubmit={handleLoginPortalPadres} style={styles.form}>
+              <label style={styles.label}>Institución</label>
+              <select
+                value={loginInstitucionId}
+                onChange={(e) => setLoginInstitucionId(e.target.value)}
+                style={styles.input}
+                required
+              >
+                <option value="">Seleccione una institución</option>
+                {INSTITUCIONES.map((inst) => (
+                  <option key={inst.id} value={inst.id}>
+                    {inst.nombre}
+                  </option>
+                ))}
+              </select>
 
-          <label style={styles.label}>Correo electrónico</label>
-          <input
-            type="email"
-            value={correo}
-            onChange={(e) => setCorreo(e.target.value)}
-            style={styles.input}
-            placeholder="correo@ejemplo.com"
-            required
-          />
+              <label style={styles.label}>Cédula o correo</label>
+              <input
+                type="text"
+                value={correo}
+                onChange={(e) => setCorreo(e.target.value)}
+                style={styles.input}
+                placeholder="Cédula o correo registrado"
+                required
+              />
 
-          <label style={styles.label}>Contraseña</label>
-          <div style={styles.passwordWrap}>
-            <input
-              type={verPasswordLogin ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={styles.inputPassword}
-              placeholder="Contraseña"
-              required
-            />
+              <label style={styles.label}>Contraseña</label>
+              <div style={styles.passwordWrap}>
+                <input
+                  type={verPasswordLogin ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  style={styles.inputPassword}
+                  placeholder="Contraseña"
+                  required
+                />
+                <button
+                  type="button"
+                  style={styles.eyeButton}
+                  onClick={() => setVerPasswordLogin(!verPasswordLogin)}
+                >
+                  {verPasswordLogin ? "Ocultar" : "Ver"}
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                style={{ ...styles.button, marginTop: 10 }}
+                disabled={cargando}
+              >
+                {cargando ? "Ingresando..." : "Ingresar al Portal de Padres"}
+              </button>
+            </form>
+
+            <div style={{ marginTop: 18, textAlign: "center" }}>
+              <p style={{ margin: "0 0 8px", color: "#64748b", fontSize: 13 }}>
+                ¿Es tu primera vez en el Portal?
+              </p>
+              <button
+                type="button"
+                style={styles.linkButton}
+                onClick={() => {
+                  setMostrarRegistroPadrePortal(true);
+                  setMensaje("");
+                  setMensajeRegistroPadre("");
+                }}
+              >
+                Crear mi cuenta
+              </button>
+            </div>
+
+            {mensaje && <p style={styles.message}>{mensaje}</p>}
+          </>
+        ) : (
+          <>
+            <h2 style={{ ...styles.title, fontSize: 23, marginBottom: 6 }}>
+              Crear cuenta de padre
+            </h2>
+            <p style={{ ...styles.subtitle, marginBottom: 18 }}>
+              Tu cédula será tu usuario. Debes constar previamente en la base
+              de representantes cargada por la institución.
+            </p>
+
+            <form onSubmit={handleRegistroPortalPadres} style={styles.form}>
+              <label style={styles.label}>Institución</label>
+              <select
+                value={loginInstitucionId}
+                onChange={(e) => setLoginInstitucionId(e.target.value)}
+                style={styles.input}
+                required
+              >
+                <option value="">Seleccione una institución</option>
+                {INSTITUCIONES.map((inst) => (
+                  <option key={inst.id} value={inst.id}>
+                    {inst.nombre}
+                  </option>
+                ))}
+              </select>
+
+              <label style={styles.label}>Cédula del representante</label>
+              <input
+                type="text"
+                value={registroPadrePortal.cedula}
+                onChange={(e) =>
+                  setRegistroPadrePortal({
+                    ...registroPadrePortal,
+                    cedula: e.target.value,
+                  })
+                }
+                style={styles.input}
+                placeholder="Número de cédula"
+                required
+              />
+
+              <label style={styles.label}>Correo registrado</label>
+              <input
+                type="email"
+                value={registroPadrePortal.correo}
+                onChange={(e) =>
+                  setRegistroPadrePortal({
+                    ...registroPadrePortal,
+                    correo: e.target.value,
+                  })
+                }
+                style={styles.input}
+                placeholder="Debe coincidir con el registrado por la institución"
+                required
+              />
+
+              <label style={styles.label}>Crear contraseña</label>
+              <input
+                type="password"
+                value={registroPadrePortal.password}
+                onChange={(e) =>
+                  setRegistroPadrePortal({
+                    ...registroPadrePortal,
+                    password: e.target.value,
+                  })
+                }
+                style={styles.input}
+                minLength={8}
+                required
+              />
+
+              <label style={styles.label}>Confirmar contraseña</label>
+              <input
+                type="password"
+                value={registroPadrePortal.confirmar_password}
+                onChange={(e) =>
+                  setRegistroPadrePortal({
+                    ...registroPadrePortal,
+                    confirmar_password: e.target.value,
+                  })
+                }
+                style={styles.input}
+                minLength={8}
+                required
+              />
+
+              <button
+                type="submit"
+                style={{ ...styles.button, marginTop: 10 }}
+                disabled={cargandoRegistroPadre}
+              >
+                {cargandoRegistroPadre
+                  ? "Creando cuenta..."
+                  : "Crear mi cuenta"}
+              </button>
+            </form>
+
             <button
               type="button"
-              style={styles.eyeButton}
-              onClick={() => setVerPasswordLogin(!verPasswordLogin)}
+              style={{ ...styles.linkButton, marginTop: 14 }}
+              onClick={() => {
+                setMostrarRegistroPadrePortal(false);
+                setMensajeRegistroPadre("");
+              }}
             >
-              {verPasswordLogin ? "Ocultar" : "Ver"}
+              ← Ya tengo cuenta
             </button>
-          </div>
 
-          <button
-            type="submit"
-            style={{ ...styles.button, marginTop: 10 }}
-            disabled={cargando}
-          >
-            {cargando ? "Ingresando..." : "Ingresar al Portal de Padres"}
-          </button>
-        </form>
-
-        {mensaje && <p style={styles.message}>{mensaje}</p>}
+            {mensajeRegistroPadre && (
+              <p style={styles.message}>{mensajeRegistroPadre}</p>
+            )}
+          </>
+        )}
 
       </div>
     </div>

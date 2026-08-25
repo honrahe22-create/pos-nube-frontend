@@ -103,7 +103,7 @@ export default function PortalUsuarioModulo({
     try {
       setGuardandoCuenta(true);
       const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/api/usuarios/me/correo`, {
+      const res = await fetch(`${API_URL}/api/portal/mi-cuenta/correo`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -155,7 +155,7 @@ export default function PortalUsuarioModulo({
     try {
       setGuardandoCuenta(true);
       const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/api/usuarios/me/password`, {
+      const res = await fetch(`${API_URL}/api/portal/mi-cuenta/password`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -787,6 +787,8 @@ export default function PortalUsuarioModulo({
                       <th style={s.th}>Tipo</th>
                       <th style={s.th}>Detalle</th>
                       <th style={s.th}>Método</th>
+                      <th style={s.th}>Ubicación</th>
+                      <th style={s.th}>Operador</th>
                       <th style={s.th}>Valor</th>
                     </tr>
                   </thead>
