@@ -12202,7 +12202,100 @@ if (!usuario) {
             <th style={styles.th}>Acciones</th>
           </tr></thead>
           <tbody>
-            {cargandoCierres ? <tr><td colSpan={14} style={styles.td}>Cargando cierres...</td></tr> : cierresCaja.length===0 ? <tr><td colSpan={14} style={styles.td}>No hay cierres registrados.</td></tr> : cierresCaja.map((c)=><tr key={c.id}>
+            {estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE" &&
+              estadoOperativoCaja?.jornada?.id && (
+              <tr
+                key={`pendiente-${estadoOperativoCaja.jornada.id}`}
+                style={{
+                  background:"#fee2e2",
+                  color:"#991b1b",
+                  borderTop:"2px solid #ef4444",
+                  borderBottom:"2px solid #ef4444",
+                }}
+              >
+                <td style={{...styles.td,fontWeight:1000,whiteSpace:"nowrap",color:"#991b1b"}}>
+                  PENDIENTE
+                </td>
+                <td style={{...styles.td,fontWeight:900,color:"#991b1b"}}>
+                  {formatearSoloFecha(
+                    estadoOperativoCaja.jornada.fecha_operativa_texto ||
+                    estadoOperativoCaja.jornada.fecha_operativa
+                  )}
+                </td>
+                <td style={{...styles.td,fontWeight:1000,color:"#991b1b"}}>
+                  {estadoOperativoCaja.jornada.punto_nombre || "PUNTO"}
+                </td>
+                <td style={{...styles.td,fontWeight:1000,color:"#991b1b"}}>
+                  #{estadoOperativoCaja.jornada.id}
+                </td>
+                <td style={{...styles.td,fontWeight:800,color:"#991b1b"}}>
+                  {estadoOperativoCaja.jornada.usuario_nombre ||
+                    estadoOperativoCaja.jornada.usuario_correo ||
+                    "Operador"}
+                </td>
+                <td
+                  colSpan={8}
+                  style={{
+                    ...styles.td,
+                    fontWeight:1000,
+                    color:"#991b1b",
+                    textAlign:"center",
+                    whiteSpace:"normal",
+                  }}
+                >
+                  ⚠ CAJA PENDIENTE DE CIERRE — debes cerrar esta jornada antes de continuar.
+                </td>
+                <td style={styles.td}>
+                  <button
+                    type="button"
+                    style={{
+                      ...styles.button,
+                      background:"#dc2626",
+                      borderColor:"#dc2626",
+                      color:"#fff",
+                      whiteSpace:"nowrap",
+                    }}
+                    onClick={async () => {
+                      const jornadaPendiente = estadoOperativoCaja.jornada;
+                      const fechaPendiente = normalizarFechaISO(
+                        jornadaPendiente?.fecha_operativa_texto ||
+                        jornadaPendiente?.fecha_operativa
+                      );
+
+                      if (jornadaPendiente?.id) {
+                        setJornadaActiva(jornadaPendiente);
+                        localStorage.setItem(
+                          "jornadaActiva",
+                          JSON.stringify(jornadaPendiente)
+                        );
+                      }
+
+                      setCierreForm((actual) => ({
+                        ...actual,
+                        fecha: fechaPendiente || obtenerFechaEcuadorISO(),
+                      }));
+
+                      setMostrarCrearCierre(true);
+
+                      await cargarResumenCierre(
+                        fechaPendiente || obtenerFechaEcuadorISO(),
+                        jornadaPendiente
+                      );
+                    }}
+                  >
+                    Cerrar pendiente
+                  </button>
+                </td>
+              </tr>
+            )}
+
+            {cargandoCierres ? (
+              <tr><td colSpan={14} style={styles.td}>Cargando cierres...</td></tr>
+            ) : cierresCaja.length===0 ? (
+              estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE" ? null : (
+                <tr><td colSpan={14} style={styles.td}>No hay cierres registrados.</td></tr>
+              )
+            ) : cierresCaja.map((c)=><tr key={c.id}>
               <td style={{...styles.td,fontWeight:900,whiteSpace:"nowrap"}}>{obtenerCodigoCierre(c)}</td>
               <td style={styles.td}>{formatearSoloFecha(c.fecha)}</td>
               <td style={{...styles.td,fontWeight:800}}>{c.punto_nombre || "HISTÓRICO"}</td>
