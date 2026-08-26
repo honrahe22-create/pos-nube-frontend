@@ -4952,6 +4952,19 @@ const exportarVentasExcel = () => {
       setVerPasswordOperadorJornada(false);
 
       aplicarJornada(data.jornada);
+
+      try {
+        localStorage.setItem(
+          "ultimoAccesoOperativo",
+          JSON.stringify({
+            institucion_id: Number(data.usuario.institucion_id),
+            punto_id: Number(data.jornada?.punto_id || puntoJornadaSeleccionado || 0),
+            punto_nombre: String(data.jornada?.punto_nombre || ""),
+            correo: String(data.usuario?.correo || operadorCorreo || "").trim(),
+          })
+        );
+      } catch (_error) {}
+
       setMostrarAbrirJornadaAdmin(false);
 
       const estadoDespuesAbrir=
@@ -4988,6 +5001,15 @@ const exportarVentasExcel = () => {
 
       await cargarExistenciasInventario({
         ubicacionForzada: data.jornada?.punto_nombre,
+      });
+
+      // Confirmación final contra backend usando el token recién emitido.
+      // Si el backend devuelve la jornada, se mantiene operativa y el cuadro
+      // "Abrir nueva jornada" no puede reaparecer por un estado anterior.
+      await cargarEstadoOperativoCaja({
+        tokenForzado:data.token,
+        institucionForzada:data.usuario.institucion_id,
+        usuarioForzado:data.usuario,
       });
     }catch(e){
       alert(e.message||"No se pudo abrir la jornada");
@@ -11847,11 +11869,32 @@ if (!usuario) {
 
             <button
               type="button"
-              onClick={() =>
-                volverAlLoginOperativoSinJornada(
-                  "✅ Listo para abrir nueva jornada. Verifica la ubicación, ingresa tu contraseña y pulsa “Ingresar y abrir jornada”."
-                )
-              }
+              onClick={async () => {
+                const puntos = await cargarPuntosOperacion();
+                const disponibles = obtenerPuntosJornadaDisponibles(puntos);
+
+                const puntoRecordado = Number(
+                  JSON.parse(
+                    localStorage.getItem("ultimoAccesoOperativo") || "null"
+                  )?.punto_id || 0
+                );
+
+                const puntoElegido =
+                  disponibles.find(
+                    (punto) => Number(punto?.id) === puntoRecordado
+                  ) || disponibles[0] || null;
+
+                setPuntoJornadaSeleccionado(
+                  puntoElegido?.id ? String(puntoElegido.id) : ""
+                );
+
+                setOperadorJornadaCorreo(
+                  String(usuario?.correo || "").trim()
+                );
+                setOperadorJornadaPassword("");
+                setVerPasswordOperadorJornada(false);
+                setMostrarAbrirJornadaAdmin(true);
+              }}
               style={{
                 ...styles.button,
                 width:"100%",
@@ -12402,7 +12445,7 @@ if (!usuario) {
     </div>
 
     {mostrarAbrirJornadaAdmin &&
-      ["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+      ["SUPER_ADMIN","ADMIN","ENCARGADO_LOCAL","CAJERO"].includes(rolActual) && (
         <div
           style={{
             position:"fixed",
@@ -12434,9 +12477,9 @@ if (!usuario) {
                   Abrir nueva jornada
                 </h2>
                 <p style={{margin:"0 0 18px",color:"#64748b",lineHeight:1.45}}>
-                  Administración puede abrir una jornada para un operador autorizado.
-                  Al confirmar, la sesión cambiará al operador real para que las ventas
-                  queden registradas correctamente.
+                  {["ADMIN","SUPER_ADMIN"].includes(rolActual)
+                    ? "Administración puede abrir una jornada para un operador autorizado. Al confirmar, la sesión cambiará al operador real para que las ventas queden registradas correctamente."
+                    : "Selecciona tu ubicación, confirma tu correo e ingresa tu contraseña. La nueva jornada se abrirá sin salir del sistema."}
                 </p>
               </div>
               <button
@@ -12470,6 +12513,7 @@ if (!usuario) {
               style={styles.input}
               placeholder="operador@correo.com"
               autoComplete="username"
+              readOnly={["ENCARGADO_LOCAL","CAJERO"].includes(rolActual)}
             />
 
             <label style={styles.label}>Contraseña del operador *</label>
