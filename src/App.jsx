@@ -345,6 +345,75 @@ useEffect(() => {
 }, []);
 
 
+// PWA POS NUBE
+useEffect(() => {
+  if (typeof document === "undefined" || typeof window === "undefined") return;
+
+  let manifestLink = document.querySelector('link[rel="manifest"]');
+  if (!manifestLink) {
+    manifestLink = document.createElement("link");
+    manifestLink.setAttribute("rel", "manifest");
+    document.head.appendChild(manifestLink);
+  }
+  manifestLink.setAttribute("href", "/manifest.webmanifest");
+
+  const asegurarMeta = (selector, atributos) => {
+    let meta = document.querySelector(selector);
+    if (!meta) {
+      meta = document.createElement("meta");
+      Object.entries(atributos).forEach(([clave, valor]) => {
+        meta.setAttribute(clave, valor);
+      });
+      document.head.appendChild(meta);
+    } else {
+      Object.entries(atributos).forEach(([clave, valor]) => {
+        meta.setAttribute(clave, valor);
+      });
+    }
+  };
+
+  asegurarMeta('meta[name="theme-color"]', {
+    name: "theme-color",
+    content: "#1d4ed8",
+  });
+  asegurarMeta('meta[name="mobile-web-app-capable"]', {
+    name: "mobile-web-app-capable",
+    content: "yes",
+  });
+  asegurarMeta('meta[name="apple-mobile-web-app-capable"]', {
+    name: "apple-mobile-web-app-capable",
+    content: "yes",
+  });
+  asegurarMeta('meta[name="apple-mobile-web-app-status-bar-style"]', {
+    name: "apple-mobile-web-app-status-bar-style",
+    content: "black-translucent",
+  });
+  asegurarMeta('meta[name="apple-mobile-web-app-title"]', {
+    name: "apple-mobile-web-app-title",
+    content: "POS NUBE",
+  });
+
+  if ("serviceWorker" in navigator) {
+    const registrar = () => {
+      navigator.serviceWorker
+        .register("/sw.js", { scope: "/" })
+        .then((registro) => {
+          console.log("POS NUBE PWA activa:", registro.scope);
+        })
+        .catch((error) => {
+          console.error("No se pudo registrar la PWA:", error);
+        });
+    };
+
+    if (document.readyState === "complete") {
+      registrar();
+    } else {
+      window.addEventListener("load", registrar, { once: true });
+    }
+  }
+}, []);
+
+
 const registrarClickAccesoAdminPadres = () => {
   const ahora = Date.now();
   const anterior = clicksAccesoAdminPadresRef.current;
@@ -597,6 +666,59 @@ useEffect(()=>{
     setMostrarSelectorJornada(false);
   }
 },[jornadaActiva?.id]);
+
+// Q2 / operadores:
+// Si el usuario está dentro del POS pero no tiene jornada, preparamos
+// automáticamente el formulario GLOBAL de apertura. No dependemos de
+// ningún modal ubicado dentro de "Cierre de caja".
+useEffect(() => {
+  const rol = normalizarRol(usuario?.rol);
+
+  if (
+    !usuario ||
+    !["ENCARGADO_LOCAL","CAJERO"].includes(rol) ||
+    jornadaActiva?.id
+  ) {
+    return;
+  }
+
+  setOperadorJornadaCorreo(String(usuario?.correo || "").trim());
+  setOperadorJornadaPassword("");
+  setVerPasswordOperadorJornada(false);
+
+  cargarPuntosOperacion()
+    .then((puntos) => {
+      const disponibles = obtenerPuntosJornadaDisponibles(puntos);
+
+      let puntoRecordado = 0;
+
+      try {
+        const ultimo = JSON.parse(
+          localStorage.getItem("ultimoAccesoOperativo") || "null"
+        );
+        puntoRecordado = Number(ultimo?.punto_id || 0);
+      } catch (_error) {
+        puntoRecordado = 0;
+      }
+
+      const puntoElegido =
+        disponibles.find(
+          (punto) => Number(punto?.id) === puntoRecordado
+        ) ||
+        disponibles[0] ||
+        null;
+
+      setPuntoJornadaSeleccionado(
+        puntoElegido?.id ? String(puntoElegido.id) : ""
+      );
+    })
+    .catch((error) => {
+      console.error(
+        "No se pudieron preparar las ubicaciones para abrir jornada:",
+        error
+      );
+    });
+}, [usuario?.id, usuario?.rol, jornadaActiva?.id]);
 const [mostrarPuntosStock,setMostrarPuntosStock]=useState(false);
 const [nuevoPuntoForm,setNuevoPuntoForm]=useState({nombre:"",codigo:"",descripcion:""});
 const [mostrarNuevoProductoStock,setMostrarNuevoProductoStock]=useState(false);
@@ -11896,67 +12018,190 @@ if (!usuario) {
               con ventas, abre una nueva jornada.
             </p>
 
-            <button
-              type="button"
-              onClick={() => {
-                // Abrimos el formulario INMEDIATAMENTE.
-                // No esperamos ninguna llamada al backend porque en el Q2
-                // eso hacía parecer que el botón no respondía.
-                setOperadorJornadaCorreo(
-                  String(usuario?.correo || "").trim()
-                );
-                setOperadorJornadaPassword("");
-                setVerPasswordOperadorJornada(false);
-                setPuntoJornadaSeleccionado("");
-                setMostrarAbrirJornadaAdmin(true);
-
-                // Las ubicaciones se cargan después, sin bloquear el botón.
-                cargarPuntosOperacion()
-                  .then((puntos) => {
-                    const disponibles =
-                      obtenerPuntosJornadaDisponibles(puntos);
-
-                    let puntoRecordado = 0;
-
-                    try {
-                      const ultimo = JSON.parse(
-                        localStorage.getItem("ultimoAccesoOperativo") || "null"
-                      );
-                      puntoRecordado = Number(ultimo?.punto_id || 0);
-                    } catch (_error) {
-                      puntoRecordado = 0;
-                    }
-
-                    const puntoElegido =
-                      disponibles.find(
-                        (punto) =>
-                          Number(punto?.id) === puntoRecordado
-                      ) ||
-                      disponibles[0] ||
-                      null;
-
-                    setPuntoJornadaSeleccionado(
-                      puntoElegido?.id
-                        ? String(puntoElegido.id)
-                        : ""
-                    );
-                  })
-                  .catch((error) => {
-                    console.error(
-                      "No se pudieron cargar ubicaciones para nueva jornada:",
-                      error
-                    );
-                  });
-              }}
+            <div
               style={{
-                ...styles.button,
-                width:"100%",
-                fontSize:17,
-                padding:"14px 16px",
+                display:"grid",
+                gap:12,
+                textAlign:"left",
               }}
             >
-              Abrir nueva jornada
-            </button>
+              <div>
+                <label
+                  style={{
+                    display:"block",
+                    marginBottom:6,
+                    color:"#0f172a",
+                    fontWeight:800,
+                    fontSize:14,
+                  }}
+                >
+                  Ubicación *
+                </label>
+
+                <select
+                  value={puntoJornadaSeleccionado}
+                  onChange={(e) =>
+                    setPuntoJornadaSeleccionado(e.target.value)
+                  }
+                  style={{
+                    width:"100%",
+                    minHeight:48,
+                    border:"1px solid #cbd5e1",
+                    borderRadius:10,
+                    padding:"10px 12px",
+                    fontSize:16,
+                    background:"#fff",
+                    color:"#0f172a",
+                  }}
+                >
+                  <option value="">
+                    {obtenerPuntosJornadaDisponibles(puntosOperacion).length
+                      ? "Selecciona ubicación"
+                      : "Cargando ubicaciones..."}
+                  </option>
+
+                  {obtenerPuntosJornadaDisponibles(puntosOperacion).map(
+                    (punto) => (
+                      <option key={punto.id} value={punto.id}>
+                        {punto.nombre}
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display:"block",
+                    marginBottom:6,
+                    color:"#0f172a",
+                    fontWeight:800,
+                    fontSize:14,
+                  }}
+                >
+                  Operador
+                </label>
+
+                <input
+                  type="email"
+                  value={operadorJornadaCorreo}
+                  readOnly
+                  style={{
+                    width:"100%",
+                    boxSizing:"border-box",
+                    minHeight:48,
+                    border:"1px solid #cbd5e1",
+                    borderRadius:10,
+                    padding:"10px 12px",
+                    fontSize:15,
+                    background:"#f8fafc",
+                    color:"#334155",
+                  }}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display:"block",
+                    marginBottom:6,
+                    color:"#0f172a",
+                    fontWeight:800,
+                    fontSize:14,
+                  }}
+                >
+                  Contraseña *
+                </label>
+
+                <div
+                  style={{
+                    display:"flex",
+                    gap:8,
+                    alignItems:"stretch",
+                  }}
+                >
+                  <input
+                    type={
+                      verPasswordOperadorJornada
+                        ? "text"
+                        : "password"
+                    }
+                    value={operadorJornadaPassword}
+                    onChange={(e) =>
+                      setOperadorJornadaPassword(e.target.value)
+                    }
+                    placeholder="Contraseña"
+                    autoComplete="current-password"
+                    style={{
+                      flex:1,
+                      minWidth:0,
+                      minHeight:48,
+                      border:"1px solid #cbd5e1",
+                      borderRadius:10,
+                      padding:"10px 12px",
+                      fontSize:16,
+                      boxSizing:"border-box",
+                    }}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setVerPasswordOperadorJornada(
+                        (actual) => !actual
+                      )
+                    }
+                    style={{
+                      minWidth:62,
+                      border:"1px solid #cbd5e1",
+                      borderRadius:10,
+                      background:"#f8fafc",
+                      color:"#0f172a",
+                      fontWeight:800,
+                      padding:"0 10px",
+                    }}
+                  >
+                    {verPasswordOperadorJornada ? "Ocultar" : "Ver"}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={abrirJornada}
+                disabled={
+                  cargandoJornada ||
+                  !puntoJornadaSeleccionado ||
+                  !operadorJornadaPassword
+                }
+                style={{
+                  width:"100%",
+                  minHeight:52,
+                  border:0,
+                  borderRadius:12,
+                  background:
+                    cargandoJornada ||
+                    !puntoJornadaSeleccionado ||
+                    !operadorJornadaPassword
+                      ? "#94a3b8"
+                      : "#2563eb",
+                  color:"#fff",
+                  fontSize:17,
+                  fontWeight:900,
+                  padding:"12px 14px",
+                  cursor:"pointer",
+                }}
+              >
+                {cargandoJornada
+                  ? "Abriendo jornada..."
+                  : !puntoJornadaSeleccionado
+                  ? "Esperando ubicación..."
+                  : !operadorJornadaPassword
+                  ? "Ingresa tu contraseña"
+                  : "Abrir jornada y continuar"}
+              </button>
+            </div>
           </div>
         </div>
       )}
