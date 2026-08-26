@@ -4534,9 +4534,18 @@ const exportarVentasExcel = () => {
     setMostrarSelectorJornada(false);
   };
   const volverAlLoginOperativoSinJornada = (mensaje = "") => {
-    // El modal antiguo "Iniciar jornada" queda eliminado.
-    // Si ENCARGADO_LOCAL/CAJERO no tiene jornada, vuelve al login normal
-    // donde selecciona BAR PRINCIPAL / KIOSKO e ingresa sus credenciales.
+    // Después de cerrar caja volvemos al login operativo, pero conservando
+    // institución, ubicación y correo para que abrir la nueva jornada sea rápido.
+    let ultimoAcceso = null;
+
+    try {
+      ultimoAcceso = JSON.parse(
+        localStorage.getItem("ultimoAccesoOperativo") || "null"
+      );
+    } catch (_error) {
+      ultimoAcceso = null;
+    }
+
     localStorage.removeItem("token");
     localStorage.removeItem("usuario");
     localStorage.removeItem("accesoOperativo");
@@ -4551,9 +4560,47 @@ const exportarVentasExcel = () => {
     setProfesorDetalle(null);
     setOrdenDetalleAlumno(null);
 
-    setCorreo("");
     setPassword("");
-    setLoginPuntoId("ADMIN");
+
+    const institucionRecordada = Number(
+      ultimoAcceso?.institucion_id || 0
+    );
+    const puntoRecordado = Number(
+      ultimoAcceso?.punto_id || 0
+    );
+    const correoRecordado = String(
+      ultimoAcceso?.correo || ""
+    ).trim();
+
+    if (institucionRecordada) {
+      setLoginInstitucionId(String(institucionRecordada));
+    }
+
+    if (correoRecordado) {
+      setCorreo(correoRecordado);
+    } else {
+      setCorreo("");
+    }
+
+    if (institucionRecordada && puntoRecordado) {
+      // Carga los puntos reales de la institución y deja seleccionado
+      // automáticamente el mismo BAR/KIOSKO que acaba de cerrar.
+      cargarPuntosLoginPublicos(institucionRecordada)
+        .then((lista) => {
+          const existe = (Array.isArray(lista) ? lista : []).some(
+            (punto) => Number(punto?.id) === puntoRecordado
+          );
+
+          setLoginPuntoId(
+            existe ? String(puntoRecordado) : "ADMIN"
+          );
+        })
+        .catch(() => {
+          setLoginPuntoId("ADMIN");
+        });
+    } else {
+      setLoginPuntoId("ADMIN");
+    }
 
     if (mensaje) {
       setMensaje(mensaje);
@@ -10768,6 +10815,31 @@ Disponible: ${formatearMoneda(
       setMostrarCrearCierre(false);
       setCierreDetalle(data.cierre || null);
 
+      // Recordamos el acceso operativo que acaba de cerrar la caja para
+      // que la siguiente jornada se pueda abrir sin volver a escoger todo.
+      try {
+        localStorage.setItem(
+          "ultimoAccesoOperativo",
+          JSON.stringify({
+            institucion_id: Number(institucionId),
+            punto_id: Number(jornadaActiva?.punto_id || 0),
+            punto_nombre: String(
+              jornadaActiva?.punto_nombre ||
+              localNuevaOrden ||
+              ""
+            ),
+            correo: String(
+              usuario?.correo ||
+              operadorJornadaCorreo ||
+              ""
+            ).trim(),
+          })
+        );
+      } catch (_error) {
+        // Si el navegador no permite guardar esta preferencia,
+        // el cierre igualmente continúa normalmente.
+      }
+
       // El backend cierra la jornada dentro de la misma transacción
       // del cierre de caja. Desde este instante no se puede operar hasta
       // abrir una nueva jornada.
@@ -10787,11 +10859,11 @@ Disponible: ${formatearMoneda(
       await cargarCierres();
 
       alert(
-        "Cierre de caja guardado correctamente. Debes iniciar sesión nuevamente en tu ubicación para abrir una nueva jornada."
+        "Cierre de caja guardado correctamente. Ahora puedes abrir una nueva jornada."
       );
 
       volverAlLoginOperativoSinJornada(
-        "Caja cerrada. Selecciona BAR PRINCIPAL o KIOSKO e inicia sesión para abrir la nueva jornada."
+        "✅ Caja cerrada correctamente. Tu institución, ubicación y correo quedaron listos. Ingresa únicamente tu contraseña y pulsa “Ingresar y abrir jornada”."
       );
     } catch (error) {
       console.error("Error guardando cierre:", error);
@@ -11311,7 +11383,26 @@ if (!usuario) {
               </button>
             </form>
 
-            {mensaje && <p style={styles.message}>{mensaje}</p>}
+            {mensaje && (
+              <div
+                style={
+                  String(mensaje).includes("Caja cerrada")
+                    ? {
+                        marginTop: 14,
+                        padding: 12,
+                        borderRadius: 10,
+                        background: "#ecfdf5",
+                        border: "1px solid #10b981",
+                        color: "#065f46",
+                        fontWeight: 800,
+                        lineHeight: 1.45,
+                      }
+                    : styles.message
+                }
+              >
+                {mensaje}
+              </div>
+            )}
 
             <div
               style={{
