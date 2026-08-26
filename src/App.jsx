@@ -4903,13 +4903,30 @@ const exportarVentasExcel = () => {
 
       const tokenActual=localStorage.getItem("token");
       const institucionId=obtenerInstitucionActivaId();
+      const rolQueAbre=normalizarRol(usuario?.rol);
 
-      const res=await fetch(`${API_URL}/api/jornadas/abrir`,{
+      // Para CAJERO / ENCARGADO_LOCAL usamos el mismo endpoint público
+      // que ya funciona correctamente en el login inicial.
+      // ADMIN / SUPER_ADMIN conservan /abrir porque abren una jornada
+      // para otro operador desde Administración.
+      const esOperadorActual=
+        ["ENCARGADO_LOCAL","CAJERO"].includes(rolQueAbre);
+
+      const urlAbrir=esOperadorActual
+        ? `${API_URL}/api/jornadas/abrir-publica`
+        : `${API_URL}/api/jornadas/abrir`;
+
+      const headersAbrir={
+        "Content-Type":"application/json",
+      };
+
+      if(!esOperadorActual && tokenActual){
+        headersAbrir.Authorization=`Bearer ${tokenActual}`;
+      }
+
+      const res=await fetch(urlAbrir,{
         method:"POST",
-        headers:{
-          "Content-Type":"application/json",
-          Authorization:`Bearer ${tokenActual}`,
-        },
+        headers:headersAbrir,
         body:JSON.stringify({
           institucion_id:Number(institucionId),
           punto_id:Number(puntoJornadaSeleccionado),
@@ -4952,6 +4969,17 @@ const exportarVentasExcel = () => {
       setVerPasswordOperadorJornada(false);
 
       aplicarJornada(data.jornada);
+
+      // Dejamos el estado operativo confirmado inmediatamente con la
+      // misma jornada que acaba de devolver el backend.
+      setEstadoOperativoCaja({
+        permitido:true,
+        estado_operativo:"OPERATIVA",
+        requiere_abrir_jornada:false,
+        requiere_cerrar_pendiente:false,
+        jornada:data.jornada,
+        message:"Jornada operativa habilitada.",
+      });
 
       try {
         localStorage.setItem(
@@ -5003,14 +5031,14 @@ const exportarVentasExcel = () => {
         ubicacionForzada: data.jornada?.punto_nombre,
       });
 
-      // Confirmación final contra backend usando el token recién emitido.
-      // Si el backend devuelve la jornada, se mantiene operativa y el cuadro
-      // "Abrir nueva jornada" no puede reaparecer por un estado anterior.
-      await cargarEstadoOperativoCaja({
-        tokenForzado:data.token,
-        institucionForzada:data.usuario.institucion_id,
-        usuarioForzado:data.usuario,
-      });
+      // IMPORTANTE:
+      // No volvemos a consultar estado-operativo inmediatamente después
+      // de abrir. La respuesta de /abrir-publica o /abrir ya viene de una
+      // transacción confirmada y contiene la jornada real. Una validación
+      // inmediata en este Android antiguo podía sobrescribir el estado recién
+      // abierto con SIN_JORNADA y volver a mostrar el cuadro.
+      // La validación normal seguirá ejecutándose en el ciclo habitual
+      // del sistema y en el siguiente refresh.
     }catch(e){
       alert(e.message||"No se pudo abrir la jornada");
     }finally{
@@ -11803,6 +11831,7 @@ if (!usuario) {
 
       {["ENCARGADO_LOCAL","CAJERO"].includes(rolActual) &&
        !jornadaActiva?.id &&
+       estadoOperativoCaja?.estado_operativo!=="OPERATIVA" &&
        !cargandoEstadoOperativoCaja && (
         <div
           style={{
