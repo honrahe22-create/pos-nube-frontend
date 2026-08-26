@@ -546,6 +546,43 @@ const [estadoOperativoCaja,setEstadoOperativoCaja]=useState({
   message:"",
 });
 const [cargandoEstadoOperativoCaja,setCargandoEstadoOperativoCaja]=useState(false);
+
+// Referencia visual robusta de la caja pendiente.
+// Prioridad 1: la jornada que entrega /estado-operativo como CIERRE_PENDIENTE.
+// Respaldo: jornadaActiva/localStorage si su fecha operativa es anterior a hoy.
+// Esto evita que la marca roja desaparezca al navegar al módulo Cierre de caja.
+const jornadaPendienteCierreVisual = (() => {
+  const desdeEstado =
+    estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE"
+      ? estadoOperativoCaja?.jornada
+      : null;
+
+  if (desdeEstado?.id) return desdeEstado;
+
+  let candidata = jornadaActiva || null;
+
+  if (!candidata?.id) {
+    try {
+      candidata = JSON.parse(localStorage.getItem("jornadaActiva") || "null");
+    } catch (_error) {
+      candidata = null;
+    }
+  }
+
+  if (!candidata?.id) return null;
+
+  const fechaJornada = normalizarFechaISO(
+    candidata?.fecha_operativa_texto ||
+      candidata?.fecha_operativa ||
+      candidata?.abierta_at
+  );
+
+  const hoyEcuador = obtenerFechaEcuadorISO();
+
+  return fechaJornada && hoyEcuador && fechaJornada < hoyEcuador
+    ? candidata
+    : null;
+})();
 const [mostrarSelectorJornada,setMostrarSelectorJornada]=useState(false);
 const [puntoJornadaSeleccionado,setPuntoJornadaSeleccionado]=useState("");
 const [operadorJornadaCorreo,setOperadorJornadaCorreo]=useState("");
@@ -12183,6 +12220,68 @@ if (!usuario) {
         <h3 style={{ margin:0 }}>Historial de cierres</h3>
         <span>{cierresCaja.length} registro(s)</span>
       </div>
+      {jornadaPendienteCierreVisual?.id && (
+        <div
+          style={{
+            background:"#fee2e2",
+            border:"2px solid #ef4444",
+            color:"#991b1b",
+            borderRadius:12,
+            padding:"12px",
+            marginBottom:12,
+            fontWeight:900,
+          }}
+        >
+          <div style={{fontSize:18,marginBottom:6}}>
+            ⚠ CAJA PENDIENTE DE CIERRE
+          </div>
+          <div style={{fontSize:14,lineHeight:1.45}}>
+            Fecha: {formatearSoloFecha(
+              jornadaPendienteCierreVisual.fecha_operativa_texto ||
+              jornadaPendienteCierreVisual.fecha_operativa
+            )} · Ubicación: {jornadaPendienteCierreVisual.punto_nombre || "PUNTO"} · Jornada #{jornadaPendienteCierreVisual.id}
+          </div>
+          <button
+            type="button"
+            style={{
+              ...styles.button,
+              background:"#dc2626",
+              borderColor:"#dc2626",
+              color:"#fff",
+              marginTop:10,
+              width:"100%",
+            }}
+            onClick={async () => {
+              const jornadaPendiente = jornadaPendienteCierreVisual;
+              const fechaPendiente = normalizarFechaISO(
+                jornadaPendiente?.fecha_operativa_texto ||
+                jornadaPendiente?.fecha_operativa
+              );
+
+              setJornadaActiva(jornadaPendiente);
+              localStorage.setItem(
+                "jornadaActiva",
+                JSON.stringify(jornadaPendiente)
+              );
+
+              setCierreForm((actual) => ({
+                ...actual,
+                fecha: fechaPendiente || obtenerFechaEcuadorISO(),
+              }));
+
+              setMostrarCrearCierre(true);
+
+              await cargarResumenCierre(
+                fechaPendiente || obtenerFechaEcuadorISO(),
+                jornadaPendiente
+              );
+            }}
+          >
+            Cerrar esta caja pendiente
+          </button>
+        </div>
+      )}
+
       <div style={styles.tableWrap}>
         <table style={styles.table}>
           <thead><tr>
@@ -12202,10 +12301,9 @@ if (!usuario) {
             <th style={styles.th}>Acciones</th>
           </tr></thead>
           <tbody>
-            {estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE" &&
-              estadoOperativoCaja?.jornada?.id && (
+            {jornadaPendienteCierreVisual?.id && (
               <tr
-                key={`pendiente-${estadoOperativoCaja.jornada.id}`}
+                key={`pendiente-${jornadaPendienteCierreVisual.id}`}
                 style={{
                   background:"#fee2e2",
                   color:"#991b1b",
@@ -12218,19 +12316,19 @@ if (!usuario) {
                 </td>
                 <td style={{...styles.td,fontWeight:900,color:"#991b1b"}}>
                   {formatearSoloFecha(
-                    estadoOperativoCaja.jornada.fecha_operativa_texto ||
-                    estadoOperativoCaja.jornada.fecha_operativa
+                    jornadaPendienteCierreVisual.fecha_operativa_texto ||
+                    jornadaPendienteCierreVisual.fecha_operativa
                   )}
                 </td>
                 <td style={{...styles.td,fontWeight:1000,color:"#991b1b"}}>
-                  {estadoOperativoCaja.jornada.punto_nombre || "PUNTO"}
+                  {jornadaPendienteCierreVisual.punto_nombre || "PUNTO"}
                 </td>
                 <td style={{...styles.td,fontWeight:1000,color:"#991b1b"}}>
-                  #{estadoOperativoCaja.jornada.id}
+                  #{jornadaPendienteCierreVisual.id}
                 </td>
                 <td style={{...styles.td,fontWeight:800,color:"#991b1b"}}>
-                  {estadoOperativoCaja.jornada.usuario_nombre ||
-                    estadoOperativoCaja.jornada.usuario_correo ||
+                  {jornadaPendienteCierreVisual.usuario_nombre ||
+                    jornadaPendienteCierreVisual.usuario_correo ||
                     "Operador"}
                 </td>
                 <td
@@ -12256,7 +12354,7 @@ if (!usuario) {
                       whiteSpace:"nowrap",
                     }}
                     onClick={async () => {
-                      const jornadaPendiente = estadoOperativoCaja.jornada;
+                      const jornadaPendiente = jornadaPendienteCierreVisual;
                       const fechaPendiente = normalizarFechaISO(
                         jornadaPendiente?.fecha_operativa_texto ||
                         jornadaPendiente?.fecha_operativa
@@ -12292,7 +12390,7 @@ if (!usuario) {
             {cargandoCierres ? (
               <tr><td colSpan={14} style={styles.td}>Cargando cierres...</td></tr>
             ) : cierresCaja.length===0 ? (
-              estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE" ? null : (
+              jornadaPendienteCierreVisual?.id ? null : (
                 <tr><td colSpan={14} style={styles.td}>No hay cierres registrados.</td></tr>
               )
             ) : cierresCaja.map((c)=><tr key={c.id}>
