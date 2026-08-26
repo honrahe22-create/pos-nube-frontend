@@ -584,6 +584,7 @@ const jornadaPendienteCierreVisual = (() => {
     : null;
 })();
 const [mostrarSelectorJornada,setMostrarSelectorJornada]=useState(false);
+const [mostrarAbrirJornadaAdmin,setMostrarAbrirJornadaAdmin]=useState(false);
 const [puntoJornadaSeleccionado,setPuntoJornadaSeleccionado]=useState("");
 const [operadorJornadaCorreo,setOperadorJornadaCorreo]=useState("");
 const [operadorJornadaPassword,setOperadorJornadaPassword]=useState("");
@@ -4951,6 +4952,7 @@ const exportarVentasExcel = () => {
       setVerPasswordOperadorJornada(false);
 
       aplicarJornada(data.jornada);
+      setMostrarAbrirJornadaAdmin(false);
 
       const estadoDespuesAbrir=
         data.estado_operativo==="CIERRE_PENDIENTE"
@@ -11778,7 +11780,8 @@ if (!usuario) {
       )}
 
       {["ENCARGADO_LOCAL","CAJERO"].includes(rolActual) &&
-       estadoOperativoCaja?.estado_operativo==="SIN_JORNADA" && (
+       !jornadaActiva?.id &&
+       !cargandoEstadoOperativoCaja && (
         <div
           style={{
             position:"fixed",
@@ -11838,8 +11841,8 @@ if (!usuario) {
                 fontSize:15,
               }}
             >
-              La caja anterior ya está cerrada. Para continuar con ventas,
-              abre una nueva jornada con el mismo operador.
+              No existe una jornada abierta para este operador. Para continuar
+              con ventas, abre una nueva jornada.
             </p>
 
             <button
@@ -12348,14 +12351,39 @@ if (!usuario) {
         </button>
 
         {["SUPER_ADMIN","ADMIN"].includes(rolActual)&&(
-          <button
-            type="button"
-            style={styles.outlineButton}
-            onClick={verCierreConsolidado}
-            disabled={cargandoConsolidado}
-          >
-            {cargandoConsolidado ? "Calculando..." : "Cierre total del local"}
-          </button>
+          <>
+            <button
+              type="button"
+              style={styles.outlineButton}
+              onClick={verCierreConsolidado}
+              disabled={cargandoConsolidado}
+            >
+              {cargandoConsolidado ? "Calculando..." : "Cierre total del local"}
+            </button>
+
+            <button
+              type="button"
+              style={{
+                ...styles.button,
+                background:"#16a34a",
+                borderColor:"#16a34a",
+              }}
+              onClick={async () => {
+                const puntos = await cargarPuntosOperacion();
+                const disponibles = obtenerPuntosJornadaDisponibles(puntos);
+
+                setPuntoJornadaSeleccionado(
+                  disponibles[0]?.id ? String(disponibles[0].id) : ""
+                );
+                setOperadorJornadaCorreo("");
+                setOperadorJornadaPassword("");
+                setVerPasswordOperadorJornada(false);
+                setMostrarAbrirJornadaAdmin(true);
+              }}
+            >
+              Abrir nueva jornada
+            </button>
+          </>
         )}
         {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
           <button
@@ -12372,6 +12400,125 @@ if (!usuario) {
         )}
       </div>
     </div>
+
+    {mostrarAbrirJornadaAdmin &&
+      ["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+        <div
+          style={{
+            position:"fixed",
+            inset:0,
+            zIndex:200700,
+            background:"rgba(15,23,42,0.72)",
+            display:"flex",
+            alignItems:"center",
+            justifyContent:"center",
+            padding:16,
+          }}
+          onClick={() => setMostrarAbrirJornadaAdmin(false)}
+        >
+          <div
+            style={{
+              width:"min(520px, 100%)",
+              maxHeight:"92vh",
+              overflowY:"auto",
+              background:"#fff",
+              borderRadius:18,
+              padding:22,
+              boxShadow:"0 24px 70px rgba(0,0,0,.4)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"flex-start"}}>
+              <div>
+                <h2 style={{margin:"0 0 6px",color:"#0f172a"}}>
+                  Abrir nueva jornada
+                </h2>
+                <p style={{margin:"0 0 18px",color:"#64748b",lineHeight:1.45}}>
+                  Administración puede abrir una jornada para un operador autorizado.
+                  Al confirmar, la sesión cambiará al operador real para que las ventas
+                  queden registradas correctamente.
+                </p>
+              </div>
+              <button
+                type="button"
+                style={styles.closeButton}
+                onClick={() => setMostrarAbrirJornadaAdmin(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            <label style={styles.label}>Ubicación *</label>
+            <select
+              value={puntoJornadaSeleccionado}
+              onChange={(e) => setPuntoJornadaSeleccionado(e.target.value)}
+              style={styles.input}
+            >
+              <option value="">Selecciona ubicación</option>
+              {obtenerPuntosJornadaDisponibles(puntosOperacion).map((punto) => (
+                <option key={punto.id} value={punto.id}>
+                  {punto.nombre}
+                </option>
+              ))}
+            </select>
+
+            <label style={styles.label}>Correo del operador *</label>
+            <input
+              type="email"
+              value={operadorJornadaCorreo}
+              onChange={(e) => setOperadorJornadaCorreo(e.target.value)}
+              style={styles.input}
+              placeholder="operador@correo.com"
+              autoComplete="username"
+            />
+
+            <label style={styles.label}>Contraseña del operador *</label>
+            <div style={styles.passwordWrap}>
+              <input
+                type={verPasswordOperadorJornada ? "text" : "password"}
+                value={operadorJornadaPassword}
+                onChange={(e) => setOperadorJornadaPassword(e.target.value)}
+                style={styles.passwordInput}
+                placeholder="Contraseña"
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                style={styles.eyeButton}
+                onClick={() => setVerPasswordOperadorJornada((actual) => !actual)}
+              >
+                {verPasswordOperadorJornada ? "Ocultar" : "Ver"}
+              </button>
+            </div>
+
+            <div style={{display:"flex",gap:10,marginTop:18,flexWrap:"wrap"}}>
+              <button
+                type="button"
+                style={{
+                  ...styles.button,
+                  flex:1,
+                  minWidth:190,
+                  background:"#16a34a",
+                  borderColor:"#16a34a",
+                }}
+                onClick={abrirJornada}
+                disabled={cargandoJornada}
+              >
+                {cargandoJornada ? "Abriendo jornada..." : "Abrir jornada y entrar"}
+              </button>
+
+              <button
+                type="button"
+                style={{...styles.outlineButton,flex:1,minWidth:130}}
+                onClick={() => setMostrarAbrirJornadaAdmin(false)}
+                disabled={cargandoJornada}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     {estadoOperativoCaja?.estado_operativo !== "CIERRE_PENDIENTE" && (
       <div style={styles.box}>
