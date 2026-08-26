@@ -11898,31 +11898,55 @@ if (!usuario) {
 
             <button
               type="button"
-              onClick={async () => {
-                const puntos = await cargarPuntosOperacion();
-                const disponibles = obtenerPuntosJornadaDisponibles(puntos);
-
-                const puntoRecordado = Number(
-                  JSON.parse(
-                    localStorage.getItem("ultimoAccesoOperativo") || "null"
-                  )?.punto_id || 0
-                );
-
-                const puntoElegido =
-                  disponibles.find(
-                    (punto) => Number(punto?.id) === puntoRecordado
-                  ) || disponibles[0] || null;
-
-                setPuntoJornadaSeleccionado(
-                  puntoElegido?.id ? String(puntoElegido.id) : ""
-                );
-
+              onClick={() => {
+                // Abrimos el formulario INMEDIATAMENTE.
+                // No esperamos ninguna llamada al backend porque en el Q2
+                // eso hacía parecer que el botón no respondía.
                 setOperadorJornadaCorreo(
                   String(usuario?.correo || "").trim()
                 );
                 setOperadorJornadaPassword("");
                 setVerPasswordOperadorJornada(false);
+                setPuntoJornadaSeleccionado("");
                 setMostrarAbrirJornadaAdmin(true);
+
+                // Las ubicaciones se cargan después, sin bloquear el botón.
+                cargarPuntosOperacion()
+                  .then((puntos) => {
+                    const disponibles =
+                      obtenerPuntosJornadaDisponibles(puntos);
+
+                    let puntoRecordado = 0;
+
+                    try {
+                      const ultimo = JSON.parse(
+                        localStorage.getItem("ultimoAccesoOperativo") || "null"
+                      );
+                      puntoRecordado = Number(ultimo?.punto_id || 0);
+                    } catch (_error) {
+                      puntoRecordado = 0;
+                    }
+
+                    const puntoElegido =
+                      disponibles.find(
+                        (punto) =>
+                          Number(punto?.id) === puntoRecordado
+                      ) ||
+                      disponibles[0] ||
+                      null;
+
+                    setPuntoJornadaSeleccionado(
+                      puntoElegido?.id
+                        ? String(puntoElegido.id)
+                        : ""
+                    );
+                  })
+                  .catch((error) => {
+                    console.error(
+                      "No se pudieron cargar ubicaciones para nueva jornada:",
+                      error
+                    );
+                  });
               }}
               style={{
                 ...styles.button,
@@ -12526,7 +12550,11 @@ if (!usuario) {
               onChange={(e) => setPuntoJornadaSeleccionado(e.target.value)}
               style={styles.input}
             >
-              <option value="">Selecciona ubicación</option>
+              <option value="">
+                {obtenerPuntosJornadaDisponibles(puntosOperacion).length
+                  ? "Selecciona ubicación"
+                  : "Cargando ubicaciones..."}
+              </option>
               {obtenerPuntosJornadaDisponibles(puntosOperacion).map((punto) => (
                 <option key={punto.id} value={punto.id}>
                   {punto.nombre}
@@ -12575,9 +12603,16 @@ if (!usuario) {
                   borderColor:"#16a34a",
                 }}
                 onClick={abrirJornada}
-                disabled={cargandoJornada}
+                disabled={
+                  cargandoJornada ||
+                  !puntoJornadaSeleccionado
+                }
               >
-                {cargandoJornada ? "Abriendo jornada..." : "Abrir jornada y entrar"}
+                {cargandoJornada
+                  ? "Abriendo jornada..."
+                  : !puntoJornadaSeleccionado
+                  ? "Esperando ubicación..."
+                  : "Abrir jornada y entrar"}
               </button>
 
               <button
