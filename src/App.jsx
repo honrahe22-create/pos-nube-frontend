@@ -113,6 +113,16 @@ const PERMISOS_FRONTEND = {
 
 const normalizarRol = (rol) => String(rol || "").trim().toUpperCase();
 
+const detectarPantallaCompacta = () => {
+  if (typeof window === "undefined") return false;
+  const anchoVentana = Number(window.innerWidth || 0);
+  const anchoPantalla = Number(window.screen?.width || 0);
+  return (
+    (anchoVentana > 0 && anchoVentana <= 820) ||
+    (anchoPantalla > 0 && anchoPantalla <= 820)
+  );
+};
+
 const puedeRol = (rol, permiso) => {
   const lista = PERMISOS_FRONTEND[normalizarRol(rol)] || [];
   return lista.includes("*") || lista.includes(permiso);
@@ -302,6 +312,38 @@ const [registroPadrePortal, setRegistroPadrePortal] = useState({
 const [mensajeRegistroPadre, setMensajeRegistroPadre] = useState("");
 const [cargandoRegistroPadre, setCargandoRegistroPadre] = useState(false);
 const clicksAccesoAdminPadresRef = useRef({ cantidad: 0, ultimoClick: 0 });
+const [esPantallaCompacta, setEsPantallaCompacta] = useState(() =>
+  detectarPantallaCompacta()
+);
+const [menuQ2Abierto, setMenuQ2Abierto] = useState(false);
+
+useEffect(() => {
+  let viewport = document.querySelector('meta[name="viewport"]');
+  if (!viewport) {
+    viewport = document.createElement("meta");
+    viewport.setAttribute("name", "viewport");
+    document.head.appendChild(viewport);
+  }
+  viewport.setAttribute(
+    "content",
+    "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
+  );
+
+  const actualizarPantalla = () => {
+    const compacta = detectarPantallaCompacta();
+    setEsPantallaCompacta(compacta);
+    if (!compacta) setMenuQ2Abierto(false);
+  };
+
+  actualizarPantalla();
+  window.addEventListener("resize", actualizarPantalla);
+  window.addEventListener("orientationchange", actualizarPantalla);
+  return () => {
+    window.removeEventListener("resize", actualizarPantalla);
+    window.removeEventListener("orientationchange", actualizarPantalla);
+  };
+}, []);
+
 
 const registrarClickAccesoAdminPadres = () => {
   const ahora = Date.now();
@@ -11452,7 +11494,14 @@ if (!usuario) {
   }
 
   return (
-    <div style={styles.appShell}>
+    <div
+      style={{
+        ...styles.appShell,
+        gridTemplateColumns: esPantallaCompacta
+          ? "minmax(0, 1fr)"
+          : styles.appShell.gridTemplateColumns,
+      }}
+    >
       {["ENCARGADO_LOCAL","CAJERO"].includes(rolActual) &&
        estadoOperativoCaja?.estado_operativo==="CIERRE_PENDIENTE"&&(
         <div
@@ -11500,7 +11549,67 @@ if (!usuario) {
           La apertura de BAR PRINCIPAL / KIOSKO se realiza únicamente
           desde el login operativo actual. */}
 
-      <aside style={styles.sidebar}>
+      {esPantallaCompacta && (
+        <button
+          type="button"
+          aria-label="Abrir menú"
+          onClick={() => setMenuQ2Abierto((actual) => !actual)}
+          style={{
+            position: "fixed",
+            left: 10,
+            top: 10,
+            zIndex: 200500,
+            width: 46,
+            height: 46,
+            borderRadius: 12,
+            border: "1px solid rgba(255,255,255,0.35)",
+            background: "#1e3a8a",
+            color: "#ffffff",
+            fontSize: 25,
+            fontWeight: 900,
+            boxShadow: "0 6px 18px rgba(15,23,42,0.25)",
+            cursor: "pointer",
+          }}
+        >
+          {menuQ2Abierto ? "×" : "☰"}
+        </button>
+      )}
+
+      {esPantallaCompacta && menuQ2Abierto && (
+        <div
+          onClick={() => setMenuQ2Abierto(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15,23,42,0.45)",
+            zIndex: 200300,
+          }}
+        />
+      )}
+
+      <aside
+        style={{
+          ...styles.sidebar,
+          ...(esPantallaCompacta
+            ? {
+                position: "fixed",
+                top: 0,
+                left: 0,
+                zIndex: 200400,
+                width: "min(82vw, 280px)",
+                height: "100dvh",
+                minHeight: "100vh",
+                padding: "68px 14px 16px",
+                overflowY: "auto",
+                transform: menuQ2Abierto
+                  ? "translateX(0)"
+                  : "translateX(-105%)",
+                transition: "transform 0.2s ease",
+                boxShadow: "12px 0 30px rgba(15,23,42,0.28)",
+              }
+            : {}),
+        }}
+      >
         <div>
           <h2 style={styles.logo}>POS NUBE</h2>
 
@@ -11670,7 +11779,10 @@ if (!usuario) {
     <button
       key={opcion.id}
       type="button"
-      onClick={opcion.accion}
+      onClick={() => {
+        opcion.accion();
+        if (esPantallaCompacta) setMenuQ2Abierto(false);
+      }}
       style={{
         position: "relative",
         width: "100%",
@@ -11758,7 +11870,13 @@ if (!usuario) {
 
 </aside>
 
-<main style={styles.main}>
+<main
+  style={{
+    ...styles.main,
+    padding: esPantallaCompacta ? "66px 10px 18px" : styles.main.padding,
+    overflowX: "hidden",
+  }}
+>
 
 {/* ===== BARRA SUPERIOR GLOBAL ===== */}
 <div
@@ -11766,9 +11884,9 @@ if (!usuario) {
     position: "sticky",
     top: 0,
     zIndex: 100,
-    margin: "-34px -36px 28px",
-    padding: "14px 36px",
-    minHeight: 68,
+    margin: esPantallaCompacta ? "-66px -10px 12px" : "-34px -36px 28px",
+    padding: esPantallaCompacta ? "10px 10px 10px 66px" : "14px 36px",
+    minHeight: esPantallaCompacta ? 58 : 68,
     background: "#ffffff",
     borderBottom: "1px solid #e5e7eb",
     boxShadow: "0 4px 14px rgba(15, 23, 42, 0.08)",
@@ -18538,7 +18656,9 @@ onClick={guardarEgreso}
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(180px, 240px) minmax(240px, 1fr)",
+            gridTemplateColumns: esPantallaCompacta
+              ? "minmax(0, 1fr)"
+              : "minmax(180px, 240px) minmax(240px, 1fr)",
             gap: 14,
           }}
         >
@@ -18572,7 +18692,9 @@ onClick={guardarEgreso}
           style={{
             marginTop: 14,
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+            gridTemplateColumns: esPantallaCompacta
+              ? "repeat(2, minmax(0, 1fr))"
+              : "repeat(auto-fill, minmax(220px, 1fr))",
             gap: 10,
           }}
         >
@@ -18703,7 +18825,12 @@ onClick={guardarEgreso}
         }}
       >
         {/* ÁREA DE PRODUCTOS */}
-        <section style={{ padding: 20, minWidth: 0 }}>
+        <section
+          style={{
+            padding: esPantallaCompacta ? 8 : 20,
+            minWidth: 0,
+          }}
+        >
           <div
             style={{
               textAlign: "center",
@@ -18722,8 +18849,8 @@ onClick={guardarEgreso}
               borderRadius: 10,
               padding: 14,
               display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 16,
+              gridTemplateColumns: esPantallaCompacta ? "1fr" : "1fr 1fr",
+              gap: esPantallaCompacta ? 8 : 16,
               maxWidth: 1100,
               margin: "0 auto 22px auto",
               background: "#eef4ff",
@@ -18748,8 +18875,10 @@ onClick={guardarEgreso}
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(0, 1fr) minmax(330px, 390px)",
-              gap: 18,
+              gridTemplateColumns: esPantallaCompacta
+                ? "minmax(0, 1fr)"
+                : "minmax(0, 1fr) minmax(330px, 390px)",
+              gap: esPantallaCompacta ? 12 : 18,
               alignItems: "start",
               position: "relative",
             }}
@@ -18758,8 +18887,10 @@ onClick={guardarEgreso}
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-              gap: 8,
+              gridTemplateColumns: esPantallaCompacta
+                ? "repeat(2, minmax(0, 1fr))"
+                : "repeat(5, minmax(0, 1fr))",
+              gap: esPantallaCompacta ? 6 : 8,
             }}
           >
             {productosActivos
@@ -19201,7 +19332,7 @@ onClick={guardarEgreso}
 
             <aside
               style={{
-                minWidth: 330,
+                minWidth: esPantallaCompacta ? 0 : 330,
                 width: "100%",
                 alignSelf: "stretch",
                 position: "relative",
@@ -19214,14 +19345,18 @@ onClick={guardarEgreso}
               // permanece visible mientras se recorren los productos.
               // Su posición sigue el borde inferior del bloque azul;
               // al llegar a 176px queda fijado y no sube más.
-              position: "fixed",
-              top: topPanelPagoNuevaOrden,
-              right: 24,
+              position: esPantallaCompacta ? "relative" : "fixed",
+              top: esPantallaCompacta ? "auto" : topPanelPagoNuevaOrden,
+              right: esPantallaCompacta ? "auto" : 24,
               zIndex: 80,
-              width: "min(390px, calc(100vw - 330px))",
-              maxWidth: 390,
-              maxHeight: `calc(100vh - ${topPanelPagoNuevaOrden + 14}px)`,
-              overflowY: "auto",
+              width: esPantallaCompacta
+                ? "100%"
+                : "min(390px, calc(100vw - 330px))",
+              maxWidth: esPantallaCompacta ? "none" : 390,
+              maxHeight: esPantallaCompacta
+                ? "none"
+                : `calc(100vh - ${topPanelPagoNuevaOrden + 14}px)`,
+              overflowY: esPantallaCompacta ? "visible" : "auto",
               boxSizing: "border-box",
               pointerEvents: "auto",
             }}
