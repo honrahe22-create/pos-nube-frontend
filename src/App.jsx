@@ -11777,9 +11777,94 @@ if (!usuario) {
         </div>
       )}
 
-      {/* Modal antiguo "Iniciar jornada" eliminado.
-          La apertura de BAR PRINCIPAL / KIOSKO se realiza únicamente
-          desde el login operativo actual. */}
+      {["ENCARGADO_LOCAL","CAJERO"].includes(rolActual) &&
+       estadoOperativoCaja?.estado_operativo==="SIN_JORNADA" && (
+        <div
+          style={{
+            position:"fixed",
+            inset:0,
+            zIndex:200600,
+            background:"rgba(15,23,42,0.72)",
+            display:"flex",
+            alignItems:"center",
+            justifyContent:"center",
+            padding:16,
+          }}
+        >
+          <div
+            style={{
+              width:"min(460px, 100%)",
+              background:"#ffffff",
+              borderRadius:18,
+              padding:22,
+              boxShadow:"0 20px 60px rgba(0,0,0,.35)",
+              textAlign:"center",
+              border:"2px solid #2563eb",
+            }}
+          >
+            <div
+              style={{
+                width:58,
+                height:58,
+                margin:"0 auto 12px",
+                borderRadius:16,
+                background:"#dbeafe",
+                color:"#1d4ed8",
+                display:"flex",
+                alignItems:"center",
+                justifyContent:"center",
+                fontSize:30,
+                fontWeight:1000,
+              }}
+            >
+              ▶
+            </div>
+
+            <h2
+              style={{
+                margin:"0 0 8px",
+                color:"#0f172a",
+                fontSize:24,
+              }}
+            >
+              Debes abrir una nueva jornada
+            </h2>
+
+            <p
+              style={{
+                margin:"0 0 18px",
+                color:"#475569",
+                lineHeight:1.5,
+                fontSize:15,
+              }}
+            >
+              La caja anterior ya está cerrada. Para continuar con ventas,
+              abre una nueva jornada con el mismo operador.
+            </p>
+
+            <button
+              type="button"
+              onClick={() =>
+                volverAlLoginOperativoSinJornada(
+                  "✅ Listo para abrir nueva jornada. Verifica la ubicación, ingresa tu contraseña y pulsa “Ingresar y abrir jornada”."
+                )
+              }
+              style={{
+                ...styles.button,
+                width:"100%",
+                fontSize:17,
+                padding:"14px 16px",
+              }}
+            >
+              Abrir nueva jornada
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* La apertura de una nueva jornada se realiza desde el login operativo.
+          Cuando no existe jornada, el botón anterior lleva directamente
+          al operador al acceso ya preparado. */}
 
       {esPantallaCompacta && (
         <button
