@@ -394,15 +394,32 @@ useEffect(() => {
   });
 
   if ("serviceWorker" in navigator) {
-    const registrar = () => {
-      navigator.serviceWorker
-        .register("/sw.js", { scope: "/" })
-        .then((registro) => {
-          console.log("POS NUBE PWA activa:", registro.scope);
-        })
-        .catch((error) => {
-          console.error("No se pudo registrar la PWA:", error);
-        });
+    const registrar = async () => {
+      try {
+        // Limpia cualquier caché PWA vieja que pueda apuntar a bundles
+        // de Vite que ya no existen después de un deploy de Render.
+        if ("caches" in window) {
+          const claves = await caches.keys();
+          await Promise.all(
+            claves
+              .filter((clave) => String(clave).startsWith("pos-nube-pwa-"))
+              .map((clave) => caches.delete(clave))
+          );
+        }
+
+        const registro = await navigator.serviceWorker.register(
+          "/sw.js?v=8",
+          { scope: "/" }
+        );
+
+        if (registro?.update) {
+          registro.update().catch(() => {});
+        }
+
+        console.log("POS NUBE PWA activa:", registro.scope);
+      } catch (error) {
+        console.error("No se pudo registrar la PWA:", error);
+      }
     };
 
     if (document.readyState === "complete") {
