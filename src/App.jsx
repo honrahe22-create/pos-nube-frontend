@@ -873,6 +873,7 @@ const [egresosDiarios, setEgresosDiarios] = useState([]);
 const [mostrarCrearEgreso, setMostrarCrearEgreso] = useState(false);
 const [editandoEgresoId, setEditandoEgresoId] = useState(null);
 const [cierresCaja, setCierresCaja] = useState([]);
+const [cajasPendientesCierre, setCajasPendientesCierre] = useState([]);
 const [mostrarCrearCierre, setMostrarCrearCierre] = useState(false);
 const [cierreDetalle, setCierreDetalle] = useState(null);
 const [guardandoCierre, setGuardandoCierre] = useState(false);
@@ -880,6 +881,23 @@ const [cargandoCierres, setCargandoCierres] = useState(false);
 const [resumenCierreServidor, setResumenCierreServidor] = useState(null);
 const [cierreConsolidado, setCierreConsolidado] = useState(null);
 const [cargandoConsolidado, setCargandoConsolidado] = useState(false);
+
+const cajasPendientesVisuales = (() => {
+  if (Array.isArray(cajasPendientesCierre) && cajasPendientesCierre.length > 0) {
+    return cajasPendientesCierre.map((fila) => ({
+      ...fila,
+      id: Number(fila.id || fila.jornada_id || 0),
+      fecha_operativa_texto:
+        fila.fecha_operativa_texto ||
+        fila.fecha_operativa ||
+        null,
+    })).filter((fila) => fila.id);
+  }
+
+  return jornadaPendienteCierreVisual?.id
+    ? [jornadaPendienteCierreVisual]
+    : [];
+})();
 const [cierreForm, setCierreForm] = useState({
   fecha: obtenerFechaEcuadorISO(),
   negocio: "POS NUBE",
@@ -10596,24 +10614,110 @@ Disponible: ${formatearMoneda(
   const cargarCierres = async () => {
     try {
       setCargandoCierres(true);
+
       const token = localStorage.getItem("token");
       const institucionId = obtenerInstitucionActivaId();
-      const params = new URLSearchParams({ institucion_id: String(institucionId) });
-      if (cierreCajaFiltros.fecha_inicio) params.set("fecha_inicio", cierreCajaFiltros.fecha_inicio);
-      if (cierreCajaFiltros.fecha_fin) params.set("fecha_fin", cierreCajaFiltros.fecha_fin);
-      if (cierreCajaFiltros.punto_id) params.set("punto_id", cierreCajaFiltros.punto_id);
-      const respuesta = await fetch(`${API_URL}/api/cierres?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
+
+      if (!token || !institucionId) {
+        setCierresCaja([]);
+        setCajasPendientesCierre([]);
+        return;
+      }
+
+      const params = new URLSearchParams({
+        institucion_id: String(institucionId),
       });
-      const data = await respuesta.json();
-      if (!respuesta.ok) throw new Error(data.message || data.error || "No se pudieron cargar los cierres");
-      setCierresCaja(Array.isArray(data) ? data : []);
+
+      if (cierreCajaFiltros.fecha_inicio) {
+        params.set("fecha_inicio", cierreCajaFiltros.fecha_inicio);
+      }
+
+      if (cierreCajaFiltros.fecha_fin) {
+        params.set("fecha_fin", cierreCajaFiltros.fecha_fin);
+      }
+
+      if (cierreCajaFiltros.punto_id) {
+        params.set("punto_id", cierreCajaFiltros.punto_id);
+      }
+
+      const headers = {
+        Authorization: `Bearer ${token}`,
+      };
+
+      const [respuestaCierres, respuestaPendientes] = await Promise.all([
+        fetch(`${API_URL}/api/cierres?${params.toString()}`, { headers }),
+        fetch(
+          `${API_URL}/api/cierres/pendientes?institucion_id=${institucionId}`,
+          { headers }
+        ),
+      ]);
+
+      const dataCierres = await respuestaCierres.json();
+      const dataPendientes = await respuestaPendientes.json();
+
+      if (!respuestaCierres.ok) {
+        throw new Error(
+          dataCierres.message ||
+          dataCierres.error ||
+          "No se pudieron cargar los cierres"
+        );
+      }
+
+      if (!respuestaPendientes.ok) {
+        throw new Error(
+          dataPendientes.message ||
+          dataPendientes.error ||
+          "No se pudieron cargar las cajas pendientes"
+        );
+      }
+
+      setCierresCaja(Array.isArray(dataCierres) ? dataCierres : []);
+      setCajasPendientesCierre(
+        Array.isArray(dataPendientes) ? dataPendientes : []
+      );
     } catch (error) {
-      console.error("Error cargando cierres:", error);
+      console.error("Error cargando cierres/cajas pendientes:", error);
       alert(error.message || "No se pudieron cargar los cierres.");
     } finally {
       setCargandoCierres(false);
     }
+  };
+
+  const abrirCajaPendienteDesdeListado = async (jornadaPendiente) => {
+    if (!jornadaPendiente?.id) return;
+
+    const fechaPendiente = normalizarFechaISO(
+      jornadaPendiente?.fecha_operativa_texto ||
+      jornadaPendiente?.fecha_operativa
+    );
+
+    setJornadaActiva(jornadaPendiente);
+
+    localStorage.setItem(
+      "jornadaActiva",
+      JSON.stringify(jornadaPendiente)
+    );
+
+    setEstadoOperativoCaja({
+      permitido: false,
+      estado_operativo: "CIERRE_PENDIENTE",
+      requiere_abrir_jornada: false,
+      requiere_cerrar_pendiente: true,
+      jornada: jornadaPendiente,
+      message: "Existe una caja pendiente de cierre.",
+    });
+
+    setCierreForm((actual) => ({
+      ...actual,
+      fecha: fechaPendiente || obtenerFechaEcuadorISO(),
+    }));
+
+    setMostrarCrearCierre(true);
+
+    await cargarResumenCierre(
+      fechaPendiente || obtenerFechaEcuadorISO(),
+      jornadaPendiente
+    );
   };
 
   const totalEfectivoContado = useMemo(() => {
@@ -12220,65 +12324,54 @@ if (!usuario) {
         <h3 style={{ margin:0 }}>Historial de cierres</h3>
         <span>{cierresCaja.length} registro(s)</span>
       </div>
-      {jornadaPendienteCierreVisual?.id && (
-        <div
-          style={{
-            background:"#fee2e2",
-            border:"2px solid #ef4444",
-            color:"#991b1b",
-            borderRadius:12,
-            padding:"12px",
-            marginBottom:12,
-            fontWeight:900,
-          }}
-        >
-          <div style={{fontSize:18,marginBottom:6}}>
-            ⚠ CAJA PENDIENTE DE CIERRE
-          </div>
-          <div style={{fontSize:14,lineHeight:1.45}}>
-            Fecha: {formatearSoloFecha(
-              jornadaPendienteCierreVisual.fecha_operativa_texto ||
-              jornadaPendienteCierreVisual.fecha_operativa
-            )} · Ubicación: {jornadaPendienteCierreVisual.punto_nombre || "PUNTO"} · Jornada #{jornadaPendienteCierreVisual.id}
-          </div>
-          <button
-            type="button"
-            style={{
-              ...styles.button,
-              background:"#dc2626",
-              borderColor:"#dc2626",
-              color:"#fff",
-              marginTop:10,
-              width:"100%",
-            }}
-            onClick={async () => {
-              const jornadaPendiente = jornadaPendienteCierreVisual;
-              const fechaPendiente = normalizarFechaISO(
-                jornadaPendiente?.fecha_operativa_texto ||
-                jornadaPendiente?.fecha_operativa
-              );
+      {cajasPendientesVisuales.length > 0 && (
+        <div style={{display:"grid",gap:10,marginBottom:12}}>
+          {cajasPendientesVisuales.map((pendiente) => (
+            <div
+              key={`aviso-pendiente-${pendiente.id}`}
+              style={{
+                background:"#fee2e2",
+                border:"2px solid #ef4444",
+                color:"#991b1b",
+                borderRadius:12,
+                padding:"12px",
+                fontWeight:900,
+              }}
+            >
+              <div style={{fontSize:18,marginBottom:6}}>
+                ⚠ CAJA PENDIENTE DE CIERRE
+              </div>
 
-              setJornadaActiva(jornadaPendiente);
-              localStorage.setItem(
-                "jornadaActiva",
-                JSON.stringify(jornadaPendiente)
-              );
+              <div style={{fontSize:14,lineHeight:1.5}}>
+                Fecha: {formatearSoloFecha(
+                  pendiente.fecha_operativa_texto ||
+                  pendiente.fecha_operativa
+                )}
+                {" · "}Ubicación: {pendiente.punto_nombre || "PUNTO"}
+                {" · "}Jornada #{pendiente.id}
+                {" · "}Operador: {
+                  pendiente.usuario_nombre ||
+                  pendiente.usuario_correo ||
+                  "Operador"
+                }
+              </div>
 
-              setCierreForm((actual) => ({
-                ...actual,
-                fecha: fechaPendiente || obtenerFechaEcuadorISO(),
-              }));
-
-              setMostrarCrearCierre(true);
-
-              await cargarResumenCierre(
-                fechaPendiente || obtenerFechaEcuadorISO(),
-                jornadaPendiente
-              );
-            }}
-          >
-            Cerrar esta caja pendiente
-          </button>
+              <button
+                type="button"
+                style={{
+                  ...styles.button,
+                  background:"#dc2626",
+                  borderColor:"#dc2626",
+                  color:"#fff",
+                  marginTop:10,
+                  width:"100%",
+                }}
+                onClick={() => abrirCajaPendienteDesdeListado(pendiente)}
+              >
+                Cerrar esta caja pendiente
+              </button>
+            </div>
+          ))}
         </div>
       )}
 
@@ -12301,9 +12394,9 @@ if (!usuario) {
             <th style={styles.th}>Acciones</th>
           </tr></thead>
           <tbody>
-            {jornadaPendienteCierreVisual?.id && (
+            {cajasPendientesVisuales.map((pendiente) => (
               <tr
-                key={`pendiente-${jornadaPendienteCierreVisual.id}`}
+                key={`pendiente-${pendiente.id}`}
                 style={{
                   background:"#fee2e2",
                   color:"#991b1b",
@@ -12314,23 +12407,28 @@ if (!usuario) {
                 <td style={{...styles.td,fontWeight:1000,whiteSpace:"nowrap",color:"#991b1b"}}>
                   PENDIENTE
                 </td>
+
                 <td style={{...styles.td,fontWeight:900,color:"#991b1b"}}>
                   {formatearSoloFecha(
-                    jornadaPendienteCierreVisual.fecha_operativa_texto ||
-                    jornadaPendienteCierreVisual.fecha_operativa
+                    pendiente.fecha_operativa_texto ||
+                    pendiente.fecha_operativa
                   )}
                 </td>
+
                 <td style={{...styles.td,fontWeight:1000,color:"#991b1b"}}>
-                  {jornadaPendienteCierreVisual.punto_nombre || "PUNTO"}
+                  {pendiente.punto_nombre || "PUNTO"}
                 </td>
+
                 <td style={{...styles.td,fontWeight:1000,color:"#991b1b"}}>
-                  #{jornadaPendienteCierreVisual.id}
+                  #{pendiente.id}
                 </td>
+
                 <td style={{...styles.td,fontWeight:800,color:"#991b1b"}}>
-                  {jornadaPendienteCierreVisual.usuario_nombre ||
-                    jornadaPendienteCierreVisual.usuario_correo ||
+                  {pendiente.usuario_nombre ||
+                    pendiente.usuario_correo ||
                     "Operador"}
                 </td>
+
                 <td
                   colSpan={8}
                   style={{
@@ -12341,8 +12439,9 @@ if (!usuario) {
                     whiteSpace:"normal",
                   }}
                 >
-                  ⚠ CAJA PENDIENTE DE CIERRE — debes cerrar esta jornada antes de continuar.
+                  ⚠ CAJA PENDIENTE DE CIERRE
                 </td>
+
                 <td style={styles.td}>
                   <button
                     type="button"
@@ -12353,44 +12452,18 @@ if (!usuario) {
                       color:"#fff",
                       whiteSpace:"nowrap",
                     }}
-                    onClick={async () => {
-                      const jornadaPendiente = jornadaPendienteCierreVisual;
-                      const fechaPendiente = normalizarFechaISO(
-                        jornadaPendiente?.fecha_operativa_texto ||
-                        jornadaPendiente?.fecha_operativa
-                      );
-
-                      if (jornadaPendiente?.id) {
-                        setJornadaActiva(jornadaPendiente);
-                        localStorage.setItem(
-                          "jornadaActiva",
-                          JSON.stringify(jornadaPendiente)
-                        );
-                      }
-
-                      setCierreForm((actual) => ({
-                        ...actual,
-                        fecha: fechaPendiente || obtenerFechaEcuadorISO(),
-                      }));
-
-                      setMostrarCrearCierre(true);
-
-                      await cargarResumenCierre(
-                        fechaPendiente || obtenerFechaEcuadorISO(),
-                        jornadaPendiente
-                      );
-                    }}
+                    onClick={() => abrirCajaPendienteDesdeListado(pendiente)}
                   >
                     Cerrar pendiente
                   </button>
                 </td>
               </tr>
-            )}
+            ))}
 
             {cargandoCierres ? (
               <tr><td colSpan={14} style={styles.td}>Cargando cierres...</td></tr>
             ) : cierresCaja.length===0 ? (
-              jornadaPendienteCierreVisual?.id ? null : (
+              cajasPendientesVisuales.length > 0 ? null : (
                 <tr><td colSpan={14} style={styles.td}>No hay cierres registrados.</td></tr>
               )
             ) : cierresCaja.map((c)=><tr key={c.id}>
