@@ -85,12 +85,51 @@ export default function AlumnosModulo({
 
 
   const normalizarEncabezado = (valor) =>
-    String(valor || "")
+    String(valor ?? "")
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .trim()
       .toLowerCase()
-      .replace(/\s+/g, "_");
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+
+  const obtenerCampoImportado = (fila, aliases, valorDefecto = "") => {
+    for (const alias of aliases) {
+      const clave = normalizarEncabezado(alias);
+      if (
+        Object.prototype.hasOwnProperty.call(fila || {}, clave) &&
+        String(fila?.[clave] ?? "").trim() !== ""
+      ) {
+        return String(fila[clave] ?? "").trim();
+      }
+    }
+    return valorDefecto;
+  };
+
+  const dividirNombreCompletoImportado = (valor) => {
+    const partes = String(valor || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    if (!partes.length) return { nombres: "", apellidos: "" };
+    if (partes.length === 1) return { nombres: partes[0], apellidos: "-" };
+    if (partes.length === 2) {
+      return { nombres: partes[0], apellidos: partes[1] };
+    }
+    if (partes.length === 3) {
+      return {
+        nombres: partes.slice(0, 1).join(" "),
+        apellidos: partes.slice(1).join(" "),
+      };
+    }
+
+    const mitad = Math.ceil(partes.length / 2);
+    return {
+      nombres: partes.slice(0, mitad).join(" "),
+      apellidos: partes.slice(mitad).join(" "),
+    };
+  };
 
   const descargarPlantillaAlumnos = () => {
     const datos = [
@@ -143,8 +182,8 @@ export default function AlumnosModulo({
 
       const filas = filasOriginales.map((fila) => {
         const normalizada = {};
-        Object.entries(fila).forEach(([clave, valor]) => {
-          normalizada[normalizarEncabezado(clave)] = valor;
+        Object.entries(fila || {}).forEach(([clave, valor]) => {
+          normalizada[normalizarEncabezado(clave)] = String(valor ?? "").trim();
         });
         return normalizada;
       });
@@ -160,37 +199,147 @@ export default function AlumnosModulo({
       let creados = 0;
       let actualizados = 0;
       const errores = [];
+      const alumnosActuales = Array.isArray(alumnosFiltrados)
+        ? [...alumnosFiltrados]
+        : [];
 
       for (let indice = 0; indice < filas.length; indice += 1) {
         const fila = filas[indice];
-        const cedula = String(
-          fila.cedula || fila.cedula_ruc || fila.identificacion || ""
-        ).trim();
-        const nombres = String(fila.nombres || fila.nombre || "").trim();
-        const apellidos = String(fila.apellidos || fila.apellido || "").trim();
 
-        if (!cedula || !nombres || !apellidos) {
-          errores.push(`Fila ${indice + 2}: faltan cédula, nombres o apellidos.`);
+        const cedula = obtenerCampoImportado(
+          fila,
+          [
+            "cedula",
+            "cédula",
+            "cedula_ruc",
+            "cedula/ruc",
+            "identificacion",
+            "identificación",
+            "numero_identificacion",
+            "nro_identificacion",
+            "numero_documento",
+            "documento",
+            "dni",
+            "ci",
+            "numero_cedula",
+            "nro_cedula",
+          ],
+          ""
+        );
+
+        const codigo = obtenerCampoImportado(
+          fila,
+          [
+            "codigo",
+            "código",
+            "codigo_alumno",
+            "codigo_estudiante",
+            "matricula",
+            "matrícula",
+          ],
+          ""
+        );
+
+        let nombres = obtenerCampoImportado(
+          fila,
+          [
+            "nombres",
+            "nombre",
+            "nombres_estudiante",
+            "nombre_estudiante",
+            "alumno",
+            "estudiante",
+          ],
+          ""
+        );
+
+        let apellidos = obtenerCampoImportado(
+          fila,
+          [
+            "apellidos",
+            "apellido",
+            "apellidos_estudiante",
+            "apellido_estudiante",
+          ],
+          ""
+        );
+
+        if (!apellidos) {
+          const nombreCompleto = obtenerCampoImportado(
+            fila,
+            [
+              "nombre_completo",
+              "nombres_y_apellidos",
+              "nombre_y_apellido",
+              "apellidos_y_nombres",
+              "alumno_completo",
+              "estudiante_completo",
+            ],
+            ""
+          );
+
+          if (nombreCompleto) {
+            const separados = dividirNombreCompletoImportado(nombreCompleto);
+            nombres = nombres || separados.nombres;
+            apellidos = separados.apellidos;
+          }
+        }
+
+        // La importación flexible solo exige identificación y nombre.
+        // El apellido puede faltar y se guarda como "-".
+        if (!cedula || !nombres) {
+          errores.push(
+            `Fila ${indice + 2}: falta identificación/cédula o nombre.`
+          );
           continue;
         }
 
-        const existente = alumnosFiltrados.find(
-          (alumno) => String(obtenerCedulaAlumno(alumno) || "").trim() === cedula
+        if (!apellidos) apellidos = "-";
+
+        const existente = alumnosActuales.find(
+          (alumno) =>
+            String(obtenerCedulaAlumno(alumno) || "").trim() ===
+            String(cedula).trim()
         );
 
-        const estadoTexto = String(fila.estado || "Activo").trim().toLowerCase();
+        const estadoTexto = obtenerCampoImportado(
+          fila,
+          ["estado", "activo", "status"],
+          "Activo"
+        )
+          .trim()
+          .toLowerCase();
+
         const datos = {
           institucion_id: Number(institucionId),
-          cedula,
-          codigo: String(fila.codigo || cedula).trim(),
-          nombres,
-          apellidos,
-          curso: String(fila.curso || "").trim(),
-          paralelo: String(fila.paralelo || "").trim(),
-          correo: String(fila.correo || fila.email || "").trim(),
-          telefono: String(fila.telefono || fila.celular || "").trim(),
+          cedula: String(cedula).trim(),
+          codigo: String(codigo || cedula).trim(),
+          nombres: String(nombres).trim(),
+          apellidos: String(apellidos).trim(),
+          curso: obtenerCampoImportado(
+            fila,
+            ["curso", "grado", "nivel", "curso_grado"],
+            ""
+          ),
+          paralelo: obtenerCampoImportado(
+            fila,
+            ["paralelo", "seccion", "sección", "aula"],
+            ""
+          ),
+          correo: obtenerCampoImportado(
+            fila,
+            ["correo", "email", "e_mail", "mail", "correo_electronico"],
+            ""
+          ),
+          telefono: obtenerCampoImportado(
+            fila,
+            ["telefono", "teléfono", "celular", "movil", "móvil"],
+            ""
+          ),
           saldo: existente ? Number(existente.saldo || 0) : 0,
-          activo: !["inactivo", "false", "0", "no"].includes(estadoTexto),
+          activo: !["inactivo", "inactiva", "false", "0", "no"].includes(
+            estadoTexto
+          ),
         };
 
         const url = existente
@@ -198,28 +347,47 @@ export default function AlumnosModulo({
           : `${API_URL}/api/alumnos`;
         const metodo = existente ? "PUT" : "POST";
 
-        const respuesta = await fetch(url, {
-          method: metodo,
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(datos),
-        });
+        try {
+          const respuesta = await fetch(url, {
+            method: metodo,
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(datos),
+          });
 
-        const resultado = await respuesta.json().catch(() => ({}));
+          const resultado = await respuesta.json().catch(() => ({}));
 
-        if (!respuesta.ok) {
+          if (!respuesta.ok) {
+            throw new Error(
+              resultado.message ||
+                resultado.error ||
+                "error al guardar alumno"
+            );
+          }
+
+          if (existente) {
+            actualizados += 1;
+            const posicion = alumnosActuales.findIndex(
+              (a) => Number(a.id) === Number(existente.id)
+            );
+            if (posicion >= 0) {
+              alumnosActuales[posicion] = {
+                ...existente,
+                ...datos,
+                ...(resultado || {}),
+              };
+            }
+          } else {
+            creados += 1;
+            alumnosActuales.push(resultado || datos);
+          }
+        } catch (errorFila) {
           errores.push(
-            `Fila ${indice + 2} (${cedula}): ${
-              resultado.message || resultado.error || "error al guardar"
-            }`
+            `Fila ${indice + 2} (${cedula}): ${errorFila.message}`
           );
-          continue;
         }
-
-        if (existente) actualizados += 1;
-        else creados += 1;
       }
 
       await cargarAlumnos();
@@ -243,6 +411,7 @@ export default function AlumnosModulo({
       setImportandoAlumnos(false);
     }
   };
+
 
   const alumnosFiltradosBusqueda = alumnosFiltrados.filter((alumno) => {
     const texto = busquedaAlumnos.trim().toLowerCase();
