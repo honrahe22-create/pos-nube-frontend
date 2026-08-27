@@ -5758,15 +5758,35 @@ if (institucionIdLogin) {
       .replace(/^_+|_+$/g, "");
 
   const obtenerCampoImportado = (fila, aliases, valorDefecto = "") => {
-    for (const alias of aliases) {
-      const clave = normalizarEncabezadoImportacion(alias);
+    const objeto = fila || {};
+    const aliasNormalizados = aliases.map((alias) => normalizarEncabezadoImportacion(alias));
+
+    // 1. Coincidencia exacta del encabezado.
+    for (const alias of aliasNormalizados) {
       if (
-        Object.prototype.hasOwnProperty.call(fila || {}, clave) &&
-        String(fila?.[clave] ?? "").trim() !== ""
+        Object.prototype.hasOwnProperty.call(objeto, alias) &&
+        String(objeto?.[alias] ?? "").trim() !== ""
       ) {
-        return String(fila[clave] ?? "").trim();
+        return String(objeto[alias] ?? "").trim();
       }
     }
+
+    // 2. Coincidencia flexible: permite encabezados como
+    // "CEDULA DEL ESTUDIANTE", "NOMBRE ALUMNO", "No. IDENTIFICACION", etc.
+    for (const [claveOriginal, valor] of Object.entries(objeto)) {
+      const clave = normalizarEncabezadoImportacion(claveOriginal);
+      const contenido = String(valor ?? "").trim();
+      if (!contenido) continue;
+
+      const coincide = aliasNormalizados.some((alias) =>
+        clave === alias ||
+        clave.includes(alias) ||
+        alias.includes(clave)
+      );
+
+      if (coincide) return contenido;
+    }
+
     return valorDefecto;
   };
 
@@ -5883,7 +5903,30 @@ if (institucionIdLogin) {
       for (let indice = 0; indice < filas.length; indice += 1) {
         const fila = filas[indice];
 
-        const cedula = obtenerCampoImportado(
+        const valoresFila = Object.values(fila || {})
+          .map((v) => String(v ?? "").trim())
+          .filter(Boolean);
+
+        const detectarIdentificacionFila = () => {
+          const candidatos = valoresFila
+            .map((v) => v.replace(/\.0+$/, "").replace(/[^0-9A-Za-z-]/g, ""))
+            .filter((v) => /\d/.test(v) && v.length >= 6 && v.length <= 20);
+          return candidatos[0] || "";
+        };
+
+        const detectarNombreFila = () => {
+          const textos = valoresFila.filter(
+            (v) =>
+              /[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/.test(v) &&
+              !/@/.test(v) &&
+              !/^activo$/i.test(v) &&
+              !/^inactivo$/i.test(v) &&
+              v.length >= 2
+          );
+          return textos[0] || "";
+        };
+
+        let cedula = obtenerCampoImportado(
           fila,
           [
             "cedula",
@@ -5912,6 +5955,11 @@ if (institucionIdLogin) {
           ["nombres","nombre","nombres_estudiante","nombre_estudiante","alumno","estudiante"],
           ""
         );
+
+        // Si el Excel usa encabezados totalmente personalizados,
+        // detectamos identificación y nombre por el contenido de la fila.
+        if (!cedula) cedula = detectarIdentificacionFila();
+        if (!nombres) nombres = detectarNombreFila();
 
         let apellidos = obtenerCampoImportado(
           fila,
