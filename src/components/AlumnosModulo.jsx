@@ -170,23 +170,191 @@ export default function AlumnosModulo({
       const buffer = await archivo.arrayBuffer();
       const libro = XLSX.read(buffer, { type: "array" });
       const hoja = libro.Sheets[libro.SheetNames[0]];
-      const filasOriginales = XLSX.utils.sheet_to_json(hoja, {
+
+      // Leemos como matriz (filas/columnas), no como objetos.
+      // Así no dependemos de nombres exactos de encabezados ni del orden.
+      const matriz = XLSX.utils.sheet_to_json(hoja, {
+        header: 1,
         defval: "",
         raw: false,
+        blankrows: false,
       });
 
-      if (!filasOriginales.length) {
+      if (!Array.isArray(matriz) || !matriz.length) {
         alert("El archivo no contiene registros.");
         return;
       }
 
-      const filas = filasOriginales.map((fila) => {
-        const normalizada = {};
-        Object.entries(fila || {}).forEach(([clave, valor]) => {
-          normalizada[normalizarEncabezado(clave)] = String(valor ?? "").trim();
+      const norm = (valor) =>
+        String(valor ?? "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "_")
+          .replace(/^_+|_+$/g, "");
+
+      const contiene = (texto, palabras) =>
+        palabras.some((palabra) => texto.includes(norm(palabra)));
+
+      // Detecta automáticamente qué fila contiene los encabezados.
+      // Busca una fila con señales de alumno/estudiante + identificación/nombre.
+      let indiceEncabezado = 0;
+      let mejorPuntaje = -1;
+
+      matriz.slice(0, Math.min(20, matriz.length)).forEach((fila, indice) => {
+        const encabezados = (fila || []).map(norm);
+        let puntaje = 0;
+
+        encabezados.forEach((h) => {
+          if (contiene(h, ["alumno", "estudiante", "hijo"])) puntaje += 4;
+          if (contiene(h, ["cedula", "identificacion", "documento", "dni", "ci"])) puntaje += 3;
+          if (contiene(h, ["nombre", "apellido"])) puntaje += 2;
+          if (contiene(h, ["grado", "curso", "nivel", "paralelo", "grupo", "seccion"])) puntaje += 1;
         });
-        return normalizada;
+
+        if (puntaje > mejorPuntaje) {
+          mejorPuntaje = puntaje;
+          indiceEncabezado = indice;
+        }
       });
+
+      const encabezadosOriginales = matriz[indiceEncabezado] || [];
+      const encabezados = encabezadosOriginales.map(norm);
+
+      const encontrarColumna = (reglas, excluir = []) => {
+        let mejorIndice = -1;
+        let mejorScore = -9999;
+
+        encabezados.forEach((h, indice) => {
+          if (!h) return;
+
+          let score = 0;
+
+          for (const regla of reglas) {
+            if (h === norm(regla.texto)) score += (regla.peso || 1) + 20;
+            else if (h.includes(norm(regla.texto))) score += regla.peso || 1;
+          }
+
+          for (const palabra of excluir) {
+            if (h.includes(norm(palabra))) score -= 50;
+          }
+
+          if (score > mejorScore && score > 0) {
+            mejorScore = score;
+            mejorIndice = indice;
+          }
+        });
+
+        return mejorIndice;
+      };
+
+      // PRIORIDAD: datos DEL ALUMNO, no del representante.
+      const colCedula = encontrarColumna(
+        [
+          { texto: "cedula_hijo", peso: 50 },
+          { texto: "cedula_alumno", peso: 50 },
+          { texto: "cedula_estudiante", peso: 50 },
+          { texto: "identificacion_alumno", peso: 45 },
+          { texto: "identificacion_estudiante", peso: 45 },
+          { texto: "documento_alumno", peso: 40 },
+          { texto: "cedula", peso: 10 },
+          { texto: "identificacion", peso: 8 },
+          { texto: "documento", peso: 7 },
+          { texto: "dni", peso: 6 },
+          { texto: "ci", peso: 5 },
+        ],
+        ["representante", "padre", "madre", "tutor"]
+      );
+
+      const colNombres = encontrarColumna(
+        [
+          { texto: "nombre_alumno", peso: 60 },
+          { texto: "nombres_alumno", peso: 60 },
+          { texto: "nombre_estudiante", peso: 55 },
+          { texto: "nombres_estudiante", peso: 55 },
+          { texto: "alumno", peso: 20 },
+          { texto: "estudiante", peso: 20 },
+          { texto: "nombre", peso: 8 },
+          { texto: "nombres", peso: 8 },
+        ],
+        ["representante", "padre", "madre", "tutor", "apellido"]
+      );
+
+      const colApellidos = encontrarColumna(
+        [
+          { texto: "apellido_alumno", peso: 60 },
+          { texto: "apellidos_alumno", peso: 60 },
+          { texto: "apellido_estudiante", peso: 55 },
+          { texto: "apellidos_estudiante", peso: 55 },
+          { texto: "apellido", peso: 10 },
+          { texto: "apellidos", peso: 10 },
+        ],
+        ["representante", "padre", "madre", "tutor"]
+      );
+
+      const colCodigo = encontrarColumna([
+        { texto: "codigo_estudiante", peso: 60 },
+        { texto: "codigo_alumno", peso: 60 },
+        { texto: "codigo", peso: 15 },
+        { texto: "matricula", peso: 15 },
+      ]);
+
+      const colCurso = encontrarColumna([
+        { texto: "grado", peso: 40 },
+        { texto: "curso", peso: 35 },
+        { texto: "nivel", peso: 30 },
+      ]);
+
+      const colParalelo = encontrarColumna([
+        { texto: "paralelo_grupo", peso: 60 },
+        { texto: "paralelo", peso: 50 },
+        { texto: "grupo", peso: 40 },
+        { texto: "seccion", peso: 35 },
+        { texto: "aula", peso: 30 },
+      ]);
+
+      const colCorreo = encontrarColumna(
+        [
+          { texto: "email_alumno", peso: 60 },
+          { texto: "correo_alumno", peso: 60 },
+          { texto: "email_estudiante", peso: 55 },
+          { texto: "correo_estudiante", peso: 55 },
+          { texto: "email", peso: 15 },
+          { texto: "correo", peso: 15 },
+        ],
+        ["representante"]
+      );
+
+      const colTelefono = encontrarColumna([
+        { texto: "telefono_alumno", peso: 60 },
+        { texto: "celular_alumno", peso: 60 },
+        { texto: "telefono", peso: 15 },
+        { texto: "celular", peso: 15 },
+        { texto: "numero_celular", peso: 15 },
+      ]);
+
+      const colEstado = encontrarColumna([
+        { texto: "estado", peso: 40 },
+        { texto: "activo", peso: 30 },
+        { texto: "status", peso: 30 },
+      ]);
+
+      // Sin identificación y nombre de alumno no podemos crear un registro seguro.
+      if (colCedula < 0 || colNombres < 0) {
+        const detectados = encabezadosOriginales
+          .map((h, i) => `${i + 1}. ${String(h || "").trim()}`)
+          .filter((x) => !x.endsWith(". "))
+          .join("\n");
+
+        alert(
+          "No pude identificar automáticamente las columnas mínimas del alumno.\n\n" +
+          "Necesito una columna de identificación/cédula y una de nombre del alumno.\n\n" +
+          "Encabezados detectados:\n" +
+          detectados.slice(0, 2500)
+        );
+        return;
+      }
 
       const token = localStorage.getItem("token");
       const institucionId = obtenerInstitucionActivaId();
@@ -203,98 +371,34 @@ export default function AlumnosModulo({
         ? [...alumnosFiltrados]
         : [];
 
-      for (let indice = 0; indice < filas.length; indice += 1) {
-        const fila = filas[indice];
+      const filasDatos = matriz.slice(indiceEncabezado + 1);
 
-        const cedula = obtenerCampoImportado(
-          fila,
-          [
-            "cedula",
-            "cédula",
-            "cedula_ruc",
-            "cedula/ruc",
-            "identificacion",
-            "identificación",
-            "numero_identificacion",
-            "nro_identificacion",
-            "numero_documento",
-            "documento",
-            "dni",
-            "ci",
-            "numero_cedula",
-            "nro_cedula",
-          ],
-          ""
-        );
+      for (let indice = 0; indice < filasDatos.length; indice += 1) {
+        const fila = Array.isArray(filasDatos[indice]) ? filasDatos[indice] : [];
 
-        const codigo = obtenerCampoImportado(
-          fila,
-          [
-            "codigo",
-            "código",
-            "codigo_alumno",
-            "codigo_estudiante",
-            "matricula",
-            "matrícula",
-          ],
-          ""
-        );
+        const valor = (columna) =>
+          columna >= 0 ? String(fila[columna] ?? "").trim() : "";
 
-        let nombres = obtenerCampoImportado(
-          fila,
-          [
-            "nombres",
-            "nombre",
-            "nombres_estudiante",
-            "nombre_estudiante",
-            "alumno",
-            "estudiante",
-          ],
-          ""
-        );
+        let cedula = valor(colCedula)
+          .replace(/\.0+$/, "")
+          .replace(/\s+/g, "");
 
-        let apellidos = obtenerCampoImportado(
-          fila,
-          [
-            "apellidos",
-            "apellido",
-            "apellidos_estudiante",
-            "apellido_estudiante",
-          ],
-          ""
-        );
+        let nombres = valor(colNombres);
+        let apellidos = valor(colApellidos);
 
-        if (!apellidos) {
-          const nombreCompleto = obtenerCampoImportado(
-            fila,
-            [
-              "nombre_completo",
-              "nombres_y_apellidos",
-              "nombre_y_apellido",
-              "apellidos_y_nombres",
-              "alumno_completo",
-              "estudiante_completo",
-            ],
-            ""
-          );
+        // Ignora filas realmente vacías.
+        if (!fila.some((v) => String(v ?? "").trim() !== "")) continue;
 
-          if (nombreCompleto) {
-            const separados = dividirNombreCompletoImportado(nombreCompleto);
-            nombres = nombres || separados.nombres;
-            apellidos = separados.apellidos;
-          }
-        }
-
-        // La importación flexible solo exige identificación y nombre.
-        // El apellido puede faltar y se guarda como "-".
         if (!cedula || !nombres) {
           errores.push(
-            `Fila ${indice + 2}: falta identificación/cédula o nombre.`
+            `Fila ${indiceEncabezado + indice + 2}: falta identificación/cédula o nombre del alumno.`
           );
           continue;
         }
 
         if (!apellidos) apellidos = "-";
+
+        const codigo = valor(colCodigo) || cedula;
 
         const existente = alumnosActuales.find(
           (alumno) =>
@@ -302,40 +406,20 @@ export default function AlumnosModulo({
             String(cedula).trim()
         );
 
-        const estadoTexto = obtenerCampoImportado(
-          fila,
-          ["estado", "activo", "status"],
-          "Activo"
-        )
+        const estadoTexto = (valor(colEstado) || "Activo")
           .trim()
           .toLowerCase();
 
         const datos = {
           institucion_id: Number(institucionId),
-          cedula: String(cedula).trim(),
-          codigo: String(codigo || cedula).trim(),
-          nombres: String(nombres).trim(),
-          apellidos: String(apellidos).trim(),
-          curso: obtenerCampoImportado(
-            fila,
-            ["curso", "grado", "nivel", "curso_grado"],
-            ""
-          ),
-          paralelo: obtenerCampoImportado(
-            fila,
-            ["paralelo", "seccion", "sección", "aula"],
-            ""
-          ),
-          correo: obtenerCampoImportado(
-            fila,
-            ["correo", "email", "e_mail", "mail", "correo_electronico"],
-            ""
-          ),
-          telefono: obtenerCampoImportado(
-            fila,
-            ["telefono", "teléfono", "celular", "movil", "móvil"],
-            ""
-          ),
+          cedula,
+          codigo,
+          nombres,
+          apellidos,
+          curso: valor(colCurso),
+          paralelo: valor(colParalelo),
+          correo: valor(colCorreo),
+          telefono: valor(colTelefono),
           saldo: existente ? Number(existente.saldo || 0) : 0,
           activo: !["inactivo", "inactiva", "false", "0", "no"].includes(
             estadoTexto
@@ -385,7 +469,7 @@ export default function AlumnosModulo({
           }
         } catch (errorFila) {
           errores.push(
-            `Fila ${indice + 2} (${cedula}): ${errorFila.message}`
+            `Fila ${indiceEncabezado + indice + 2} (${cedula}): ${errorFila.message}`
           );
         }
       }
@@ -397,6 +481,13 @@ export default function AlumnosModulo({
         `Nuevos: ${creados}`,
         `Actualizados: ${actualizados}`,
         `Errores: ${errores.length}`,
+        "",
+        `Columnas detectadas:`,
+        `Cédula alumno: ${encabezadosOriginales[colCedula] || "-"}`,
+        `Nombre alumno: ${encabezadosOriginales[colNombres] || "-"}`,
+        `Apellido alumno: ${colApellidos >= 0 ? encabezadosOriginales[colApellidos] : "(opcional)"}`,
+        `Curso/Grado: ${colCurso >= 0 ? encabezadosOriginales[colCurso] : "(opcional)"}`,
+        `Paralelo/Grupo: ${colParalelo >= 0 ? encabezadosOriginales[colParalelo] : "(opcional)"}`,
       ];
 
       if (errores.length) {
@@ -406,7 +497,7 @@ export default function AlumnosModulo({
       alert(resumen.join("\n"));
     } catch (error) {
       console.error("Error importando alumnos:", error);
-      alert("No se pudo importar el archivo de alumnos.");
+      alert(`No se pudo importar el archivo de alumnos: ${error.message}`);
     } finally {
       setImportandoAlumnos(false);
     }
