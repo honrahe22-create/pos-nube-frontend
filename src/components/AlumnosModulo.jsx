@@ -367,6 +367,7 @@ export default function AlumnosModulo({
       let creados = 0;
       let actualizados = 0;
       const errores = [];
+      const observacionesImportacion = [];
       const alumnosActuales = Array.isArray(alumnosFiltrados)
         ? [...alumnosFiltrados]
         : [];
@@ -389,16 +390,50 @@ export default function AlumnosModulo({
         // Ignora filas realmente vacías.
         if (!fila.some((v) => String(v ?? "").trim() !== "")) continue;
 
+        const codigoEstudiante = valor(colCodigo)
+          .replace(/\.0+$/, "")
+          .trim();
+
+        const numeroFilaExcel = indiceEncabezado + indice + 2;
+        const camposFaltantes = [];
+
+        // Los campos faltantes generan una OBSERVACIÓN, no un rechazo,
+        // siempre que podamos identificar al alumno.
+        if (!cedula) camposFaltantes.push("Cédula Hijo");
+        if (!codigoEstudiante) camposFaltantes.push("Código Estudiante");
+        if (!nombres) camposFaltantes.push("Nombre alumno");
+        if (!apellidos) camposFaltantes.push("Apellido alumno");
+        if (!valor(colCurso)) camposFaltantes.push("Curso/Grado");
+        if (!valor(colParalelo)) camposFaltantes.push("Paralelo/Grupo");
+        if (!valor(colCorreo)) camposFaltantes.push("Email alumno");
+        if (!valor(colTelefono)) camposFaltantes.push("Teléfono");
+
+        // Prioridad: Cédula Hijo -> Código Estudiante.
+        // Nunca usamos la cédula del representante.
+        if (!cedula && codigoEstudiante) {
+          cedula = codigoEstudiante;
+        }
+
+        // Solo rechazamos cuando realmente no podemos identificar al alumno
+        // o no existe nombre.
         if (!cedula || !nombres) {
           errores.push(
-            `Fila ${indiceEncabezado + indice + 2}: falta identificación/cédula o nombre del alumno.`
+            `Fila ${numeroFilaExcel}: no se pudo importar porque falta ` +
+            `${!nombres ? "Nombre alumno" : "Cédula Hijo y Código Estudiante"}.`
           );
           continue;
         }
 
         if (!apellidos) apellidos = "-";
 
-        const codigo = valor(colCodigo) || cedula;
+        if (camposFaltantes.length > 0) {
+          observacionesImportacion.push(
+            `Fila ${numeroFilaExcel} - ${nombres} ${apellidos !== "-" ? apellidos : ""}`.trim() +
+            `: IMPORTADO. Faltan: ${camposFaltantes.join(", ")}.`
+          );
+        }
+
+        const codigo = codigoEstudiante || cedula;
 
         const existente = alumnosActuales.find(
           (alumno) =>
@@ -477,10 +512,11 @@ export default function AlumnosModulo({
       await cargarAlumnos();
 
       const resumen = [
-        "Importación finalizada.",
+        "Importación finalizada. [IMPORTADOR PU V5]",
         `Nuevos: ${creados}`,
         `Actualizados: ${actualizados}`,
         `Errores: ${errores.length}`,
+        `Importados con observaciones: ${observacionesImportacion.length}`,
         "",
         `Columnas detectadas:`,
         `Cédula alumno: ${encabezadosOriginales[colCedula] || "-"}`,
@@ -488,7 +524,22 @@ export default function AlumnosModulo({
         `Apellido alumno: ${colApellidos >= 0 ? encabezadosOriginales[colApellidos] : "(opcional)"}`,
         `Curso/Grado: ${colCurso >= 0 ? encabezadosOriginales[colCurso] : "(opcional)"}`,
         `Paralelo/Grupo: ${colParalelo >= 0 ? encabezadosOriginales[colParalelo] : "(opcional)"}`,
+        "",
+        "Identificación usada: Cédula Hijo; si está vacía, Código Estudiante.",
       ];
+
+      if (observacionesImportacion.length) {
+        resumen.push(
+          "",
+          "Observaciones por campos faltantes:",
+          ...observacionesImportacion.slice(0, 20)
+        );
+        if (observacionesImportacion.length > 20) {
+          resumen.push(
+            `... y ${observacionesImportacion.length - 20} observaciones adicionales.`
+          );
+        }
+      }
 
       if (errores.length) {
         resumen.push("", "Primeros errores:", ...errores.slice(0, 8));
