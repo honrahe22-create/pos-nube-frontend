@@ -513,9 +513,10 @@ export default function AlumnosModulo({
 
       const resumen = [
         "Importación finalizada. [IMPORTADOR PU V5]",
+        `Filas procesadas: ${nuevos + actualizados + errores.length}`,
         `Nuevos: ${creados}`,
-        `Actualizados: ${actualizados}`,
-        `Errores: ${errores.length}`,
+        `Registros existentes/repetidos actualizados: ${actualizados}`,
+        `Errores/no importados: ${errores.length}`,
         `Importados con observaciones: ${observacionesImportacion.length}`,
         "",
         `Columnas detectadas:`,
