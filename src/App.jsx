@@ -582,6 +582,15 @@ const [recargasFiltros, setRecargasFiltros] = useState({
 });
 const [cuentasBancarias, setCuentasBancarias] = useState([]);
 
+// Selección manual de registros de prueba. Solo se muestran controles de borrado
+// a ADMIN / SUPER_ADMIN; el backend vuelve a validar el rol.
+const [ventasSeleccionadasBorrar, setVentasSeleccionadasBorrar] = useState([]);
+const [recargasSeleccionadasBorrar, setRecargasSeleccionadasBorrar] = useState([]);
+const [cierresSeleccionadosBorrar, setCierresSeleccionadosBorrar] = useState([]);
+const [jornadasSeleccionadasBorrar, setJornadasSeleccionadasBorrar] = useState([]);
+const [jornadasHistorial, setJornadasHistorial] = useState([]);
+const [eliminandoPruebas, setEliminandoPruebas] = useState(false);
+
   const [ventas, setVentas] = useState([]);
   const [ventaForm, setVentaForm] = useState({
     alumno_id: "",
@@ -10913,6 +10922,19 @@ Disponible: ${formatearMoneda(
       setCajasPendientesCierre(
         Array.isArray(dataPendientes) ? dataPendientes : []
       );
+
+      if (["SUPER_ADMIN", "ADMIN"].includes(normalizarRol(usuario?.rol))) {
+        const respuestaJornadas = await fetch(
+          `${API_URL}/api/jornadas/historial?institucion_id=${institucionId}`,
+          { headers }
+        );
+        const dataJornadas = await respuestaJornadas.json();
+        setJornadasHistorial(
+          respuestaJornadas.ok && Array.isArray(dataJornadas) ? dataJornadas : []
+        );
+      } else {
+        setJornadasHistorial([]);
+      }
     } catch (error) {
       console.error("Error cargando cierres/cajas pendientes:", error);
       alert(error.message || "No se pudieron cargar los cierres.");
@@ -11128,6 +11150,122 @@ Disponible: ${formatearMoneda(
       await cargarCierres();
     } catch (error) {
       alert(error.message || "No se pudo eliminar el cierre.");
+    }
+  };
+
+  const alternarSeleccionId = (setter, id, marcado) => {
+    const numero = Number(id);
+    setter((actual) => {
+      const set = new Set((actual || []).map(Number));
+      if (marcado) set.add(numero);
+      else set.delete(numero);
+      return Array.from(set);
+    });
+  };
+
+  const eliminarVentasSeleccionadas = async () => {
+    if (!ventasSeleccionadasBorrar.length) return alert("Selecciona al menos una venta.");
+    if (!window.confirm(`¿Eliminar ${ventasSeleccionadasBorrar.length} venta(s) seleccionada(s)? El sistema devolverá el stock y corregirá saldo/crédito automáticamente.`)) return;
+
+    try {
+      setEliminandoPruebas(true);
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+      const respuesta = await fetch(`${API_URL}/api/ventas/eliminar-seleccionadas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ institucion_id: Number(institucionId), ids: ventasSeleccionadasBorrar }),
+      });
+      const data = await respuesta.json();
+      if (!respuesta.ok) throw new Error(data.message || "No se pudieron eliminar las ventas seleccionadas");
+      setVentasSeleccionadasBorrar([]);
+      await Promise.all([cargarVentas(), cargarProductos(), cargarAlumnos(), cargarProfesores()]);
+      alert(data.message || "Ventas eliminadas correctamente.");
+    } catch (error) {
+      alert(error.message || "No se pudieron eliminar las ventas seleccionadas.");
+    } finally {
+      setEliminandoPruebas(false);
+    }
+  };
+
+  const eliminarRecargasSeleccionadas = async () => {
+    if (!recargasSeleccionadasBorrar.length) return alert("Selecciona al menos una recarga.");
+    if (!window.confirm(`¿Eliminar ${recargasSeleccionadasBorrar.length} recarga(s) seleccionada(s)? El sistema revertirá saldo y crédito automáticamente.`)) return;
+
+    try {
+      setEliminandoPruebas(true);
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+      const respuesta = await fetch(`${API_URL}/api/recargas/eliminar-seleccionadas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ institucion_id: Number(institucionId), ids: recargasSeleccionadasBorrar }),
+      });
+      const data = await respuesta.json();
+      if (!respuesta.ok) throw new Error(data.message || "No se pudieron eliminar las recargas seleccionadas");
+      setRecargasSeleccionadasBorrar([]);
+      await Promise.all([cargarRecargas(), cargarAlumnos()]);
+      alert(data.message || "Recargas eliminadas correctamente.");
+    } catch (error) {
+      alert(error.message || "No se pudieron eliminar las recargas seleccionadas.");
+    } finally {
+      setEliminandoPruebas(false);
+    }
+  };
+
+  const eliminarCierresSeleccionados = async () => {
+    if (!cierresSeleccionadosBorrar.length) return alert("Selecciona al menos un cierre.");
+    if (!window.confirm(`¿Eliminar ${cierresSeleccionadosBorrar.length} cierre(s) seleccionado(s)? No se eliminarán automáticamente ventas, recargas ni egresos.`)) return;
+
+    try {
+      setEliminandoPruebas(true);
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+      const respuesta = await fetch(`${API_URL}/api/cierres/eliminar-seleccionados`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ institucion_id: Number(institucionId), ids: cierresSeleccionadosBorrar }),
+      });
+      const data = await respuesta.json();
+      if (!respuesta.ok) throw new Error(data.message || "No se pudieron eliminar los cierres seleccionados");
+      setCierresSeleccionadosBorrar([]);
+      await cargarCierres();
+      alert(data.message || "Cierres eliminados correctamente.");
+    } catch (error) {
+      alert(error.message || "No se pudieron eliminar los cierres seleccionados.");
+    } finally {
+      setEliminandoPruebas(false);
+    }
+  };
+
+  const eliminarJornadasSeleccionadas = async () => {
+    if (!jornadasSeleccionadasBorrar.length) return alert("Selecciona al menos una jornada.");
+    if (!window.confirm(`¿Eliminar ${jornadasSeleccionadasBorrar.length} jornada(s) seleccionada(s)? Solo se borrarán si ya no tienen cierre ni ventas relacionadas.`)) return;
+
+    try {
+      setEliminandoPruebas(true);
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+      const ids = [...jornadasSeleccionadasBorrar];
+      const respuesta = await fetch(`${API_URL}/api/jornadas/eliminar-seleccionadas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ institucion_id: Number(institucionId), ids }),
+      });
+      const data = await respuesta.json();
+      if (!respuesta.ok) throw new Error(data.message || "No se pudieron eliminar las jornadas seleccionadas");
+
+      if (jornadaActiva?.id && ids.map(Number).includes(Number(jornadaActiva.id))) {
+        localStorage.removeItem("jornadaActiva");
+        setJornadaActiva(null);
+      }
+      setJornadasSeleccionadasBorrar([]);
+      await cargarCierres();
+      alert(data.message || "Jornadas eliminadas correctamente.");
+    } catch (error) {
+      alert(error.message || "No se pudieron eliminar las jornadas seleccionadas.");
+    } finally {
+      setEliminandoPruebas(false);
     }
   };
 
@@ -13013,9 +13151,39 @@ if (!usuario) {
 
     <div style={{ height: 20 }} />
     <div style={styles.box}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, gap:10, flexWrap:"wrap" }}>
         <h3 style={{ margin:0 }}>Historial de cierres</h3>
-        <span>{cierresCaja.length} registro(s)</span>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <span>{cierresCaja.length} registro(s)</span>
+          {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+            <>
+              <button
+                type="button"
+                style={styles.outlineButton}
+                disabled={eliminandoPruebas || cierresCaja.length === 0}
+                onClick={() =>
+                  setCierresSeleccionadosBorrar(
+                    cierresSeleccionadosBorrar.length === cierresCaja.length
+                      ? []
+                      : cierresCaja.map((c) => Number(c.id))
+                  )
+                }
+              >
+                {cierresSeleccionadosBorrar.length === cierresCaja.length && cierresCaja.length > 0
+                  ? "Quitar selección"
+                  : "Seleccionar todos"}
+              </button>
+              <button
+                type="button"
+                style={{...styles.deleteIconButton,padding:"9px 12px"}}
+                disabled={eliminandoPruebas || cierresSeleccionadosBorrar.length === 0}
+                onClick={eliminarCierresSeleccionados}
+              >
+                Eliminar seleccionados ({cierresSeleccionadosBorrar.length})
+              </button>
+            </>
+          )}
+        </div>
       </div>
       {cajasPendientesVisuales.length > 0 && (
         <div style={{display:"grid",gap:10,marginBottom:12}}>
@@ -13071,6 +13239,9 @@ if (!usuario) {
       <div style={styles.tableWrap}>
         <table style={styles.table}>
           <thead><tr>
+            {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+              <th style={styles.th}>Seleccionar</th>
+            )}
             <th style={styles.th}>Código cierre</th>
             <th style={styles.th}>Fecha</th>
             <th style={styles.th}>Ubicación</th>
@@ -13097,6 +13268,18 @@ if (!usuario) {
                   borderBottom:"2px solid #ef4444",
                 }}
               >
+                {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+                  <td style={styles.td}>
+                    <input
+                      type="checkbox"
+                      checked={jornadasSeleccionadasBorrar.includes(Number(pendiente.id))}
+                      onChange={(e) =>
+                        alternarSeleccionId(setJornadasSeleccionadasBorrar, pendiente.id, e.target.checked)
+                      }
+                      aria-label={`Seleccionar jornada ${pendiente.id}`}
+                    />
+                  </td>
+                )}
                 <td style={{...styles.td,fontWeight:1000,whiteSpace:"nowrap",color:"#991b1b"}}>
                   PENDIENTE
                 </td>
@@ -13160,6 +13343,18 @@ if (!usuario) {
                 <tr><td colSpan={14} style={styles.td}>No hay cierres registrados.</td></tr>
               )
             ) : cierresCaja.map((c)=><tr key={c.id}>
+              {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+                <td style={styles.td}>
+                  <input
+                    type="checkbox"
+                    checked={cierresSeleccionadosBorrar.includes(Number(c.id))}
+                    onChange={(e) =>
+                      alternarSeleccionId(setCierresSeleccionadosBorrar, c.id, e.target.checked)
+                    }
+                    aria-label={`Seleccionar cierre ${c.id}`}
+                  />
+                </td>
+              )}
               <td style={{...styles.td,fontWeight:900,whiteSpace:"nowrap"}}>{obtenerCodigoCierre(c)}</td>
               <td style={styles.td}>{formatearSoloFecha(c.fecha)}</td>
               <td style={{...styles.td,fontWeight:800}}>{c.punto_nombre || "HISTÓRICO"}</td>
@@ -13184,6 +13379,92 @@ if (!usuario) {
         </table>
       </div>
     </div>
+
+
+
+    {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+      <>
+        <div style={{ height: 20 }} />
+        <div style={styles.box}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:14}}>
+            <div>
+              <h3 style={{margin:0}}>Administración de jornadas de prueba</h3>
+              <p style={{margin:"6px 0 0",color:"#64748b"}}>
+                Puedes marcar una por una o seleccionar todas. Una jornada solo se elimina si ya no tiene cierre ni ventas asociadas.
+              </p>
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <button
+                type="button"
+                style={styles.outlineButton}
+                disabled={eliminandoPruebas || jornadasHistorial.length === 0}
+                onClick={() =>
+                  setJornadasSeleccionadasBorrar(
+                    jornadasSeleccionadasBorrar.length === jornadasHistorial.length
+                      ? []
+                      : jornadasHistorial.map((j) => Number(j.id))
+                  )
+                }
+              >
+                {jornadasSeleccionadasBorrar.length === jornadasHistorial.length && jornadasHistorial.length > 0
+                  ? "Quitar selección"
+                  : "Seleccionar todas"}
+              </button>
+              <button
+                type="button"
+                style={{...styles.deleteIconButton,padding:"9px 12px"}}
+                disabled={eliminandoPruebas || jornadasSeleccionadasBorrar.length === 0}
+                onClick={eliminarJornadasSeleccionadas}
+              >
+                Eliminar jornadas ({jornadasSeleccionadasBorrar.length})
+              </button>
+            </div>
+          </div>
+
+          <div style={styles.tableWrap}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Seleccionar</th>
+                  <th style={styles.th}>Jornada</th>
+                  <th style={styles.th}>Fecha</th>
+                  <th style={styles.th}>Ubicación</th>
+                  <th style={styles.th}>Operador</th>
+                  <th style={styles.th}>Estado</th>
+                  <th style={styles.th}>Apertura</th>
+                  <th style={styles.th}>Cierre</th>
+                </tr>
+              </thead>
+              <tbody>
+                {jornadasHistorial.length === 0 ? (
+                  <tr><td colSpan={8} style={styles.td}>No hay jornadas registradas.</td></tr>
+                ) : jornadasHistorial.map((j) => (
+                  <tr key={`jornada-admin-${j.id}`}>
+                    <td style={styles.td}>
+                      <input
+                        type="checkbox"
+                        checked={jornadasSeleccionadasBorrar.includes(Number(j.id))}
+                        onChange={(e) =>
+                          alternarSeleccionId(setJornadasSeleccionadasBorrar, j.id, e.target.checked)
+                        }
+                        aria-label={`Seleccionar jornada ${j.id}`}
+                      />
+                    </td>
+                    <td style={{...styles.td,fontWeight:900}}>#{j.id}</td>
+                    <td style={styles.td}>{formatearSoloFecha(j.fecha_operativa)}</td>
+                    <td style={styles.td}>{j.punto_nombre || "PUNTO"}</td>
+                    <td style={styles.td}>{j.usuario_nombre || j.usuario_correo || "Operador"}</td>
+                    <td style={styles.td}>{j.estado || "-"}</td>
+                    <td style={styles.td}>{formatearFechaHora(j.abierta_at)}</td>
+                    <td style={styles.td}>{formatearFechaHora(j.cerrada_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </>
+    )}
 
     {mostrarCrearCierre && createPortal((
       <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, width:"100vw", height:"100dvh", minHeight:"100vh", background:"rgba(15,23,42,.65)", zIndex:99999, padding:"8px", boxSizing:"border-box", overflow:"hidden", display:"flex", alignItems:"stretch", justifyContent:"center" }}>
@@ -19322,6 +19603,35 @@ onClick={guardarEgreso}
             {recargasFiltradas.length} registros
           </span>
 
+          {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+            <>
+              <button
+                type="button"
+                style={styles.outlineButton}
+                disabled={eliminandoPruebas || recargasFiltradas.length === 0}
+                onClick={() =>
+                  setRecargasSeleccionadasBorrar(
+                    recargasSeleccionadasBorrar.length === recargasFiltradas.length
+                      ? []
+                      : recargasFiltradas.map((r) => Number(r.id))
+                  )
+                }
+              >
+                {recargasSeleccionadasBorrar.length === recargasFiltradas.length && recargasFiltradas.length > 0
+                  ? "Quitar selección"
+                  : "Seleccionar todo"}
+              </button>
+              <button
+                type="button"
+                style={{...styles.deleteIconButton,padding:"9px 12px"}}
+                disabled={eliminandoPruebas || recargasSeleccionadasBorrar.length === 0}
+                onClick={eliminarRecargasSeleccionadas}
+              >
+                Eliminar seleccionados ({recargasSeleccionadasBorrar.length})
+              </button>
+            </>
+          )}
+
           <button
             type="button"
             style={styles.exportButton}
@@ -19344,6 +19654,9 @@ onClick={guardarEgreso}
 
             <thead>
               <tr>
+                {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+                  <th style={styles.th}>Seleccionar</th>
+                )}
                 <th style={styles.th}>Fecha</th>
                 <th style={styles.th}>Nombre</th>
                 <th style={styles.th}>Entregado</th>
@@ -19362,6 +19675,19 @@ onClick={guardarEgreso}
               {recargasFiltradas.map((r) => (
 
                 <tr key={r.id}>
+
+                  {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+                    <td style={styles.td}>
+                      <input
+                        type="checkbox"
+                        checked={recargasSeleccionadasBorrar.includes(Number(r.id))}
+                        onChange={(e) =>
+                          alternarSeleccionId(setRecargasSeleccionadasBorrar, r.id, e.target.checked)
+                        }
+                        aria-label={`Seleccionar recarga ${r.id}`}
+                      />
+                    </td>
+                  )}
 
                   <td style={styles.td}>
                     {formatearFechaHora(r.fecha_base)}
@@ -20945,6 +21271,34 @@ onClick={guardarEgreso}
       <span style={styles.recordsBadge}>
         {ventasFiltradas.length} registros
       </span>
+      {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+        <>
+          <button
+            type="button"
+            style={styles.outlineButton}
+            disabled={eliminandoPruebas || ventasFiltradas.length === 0}
+            onClick={() =>
+              setVentasSeleccionadasBorrar(
+                ventasSeleccionadasBorrar.length === ventasFiltradas.length
+                  ? []
+                  : ventasFiltradas.map((v) => Number(v.id))
+              )
+            }
+          >
+            {ventasSeleccionadasBorrar.length === ventasFiltradas.length && ventasFiltradas.length > 0
+              ? "Quitar selección"
+              : "Seleccionar todo"}
+          </button>
+          <button
+            type="button"
+            style={{...styles.deleteIconButton,padding:"9px 12px"}}
+            disabled={eliminandoPruebas || ventasSeleccionadasBorrar.length === 0}
+            onClick={eliminarVentasSeleccionadas}
+          >
+            Eliminar seleccionados ({ventasSeleccionadasBorrar.length})
+          </button>
+        </>
+      )}
       <button
         type="button"
         style={styles.exportButton}
@@ -20961,6 +21315,9 @@ onClick={guardarEgreso}
                       <table style={styles.table}>
                         <thead>
                           <tr>
+                            {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+                              <th style={styles.th}>Seleccionar</th>
+                            )}
                             <th style={styles.th}>Orden No</th>
                             <th style={styles.th}>Usuario</th>
                             <th style={styles.th}>Ubicación</th>
@@ -20978,6 +21335,18 @@ onClick={guardarEgreso}
                         <tbody>
                           {ventasFiltradas.map((v) => (
                             <tr key={v.id}>
+                              {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+                                <td style={styles.td}>
+                                  <input
+                                    type="checkbox"
+                                    checked={ventasSeleccionadasBorrar.includes(Number(v.id))}
+                                    onChange={(e) =>
+                                      alternarSeleccionId(setVentasSeleccionadasBorrar, v.id, e.target.checked)
+                                    }
+                                    aria-label={`Seleccionar venta ${v.id}`}
+                                  />
+                                </td>
+                              )}
                               <td style={styles.td}>#{v.id}</td>
                               <td style={styles.td}>{v.alumno_nombre}</td>
                               <td style={styles.td}>PRINCIPAL</td>
