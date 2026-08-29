@@ -13175,11 +13175,13 @@ if (!usuario) {
               </button>
               <button
                 type="button"
-                style={{...styles.deleteIconButton,padding:"9px 12px"}}
+                style={{...styles.deleteIconButton,padding:"7px 9px",minWidth:40,fontSize:16,lineHeight:1}}
                 disabled={eliminandoPruebas || cierresSeleccionadosBorrar.length === 0}
                 onClick={eliminarCierresSeleccionados}
+                title={`Eliminar ${cierresSeleccionadosBorrar.length} cierre(s) seleccionado(s)`}
+                aria-label="Eliminar cierres seleccionados"
               >
-                Eliminar seleccionados ({cierresSeleccionadosBorrar.length})
+                🗑️ {cierresSeleccionadosBorrar.length}
               </button>
             </>
           )}
@@ -13371,7 +13373,7 @@ if (!usuario) {
               <td style={styles.td}><div style={{display:"flex",gap:8}}>
                 <button style={styles.editIconButton} onClick={()=>verCierre(c)}>Ver</button>
                 {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
-                  <button style={styles.deleteIconButton} onClick={()=>eliminarCierre(c)}>Eliminar</button>
+                  <button style={{...styles.deleteIconButton,padding:"6px 8px",fontSize:16,lineHeight:1}} onClick={()=>eliminarCierre(c)} title="Eliminar cierre" aria-label="Eliminar cierre">🗑️</button>
                 )}
               </div></td>
             </tr>)}
@@ -13412,11 +13414,13 @@ if (!usuario) {
               </button>
               <button
                 type="button"
-                style={{...styles.deleteIconButton,padding:"9px 12px"}}
+                style={{...styles.deleteIconButton,padding:"7px 9px",minWidth:40,fontSize:16,lineHeight:1}}
                 disabled={eliminandoPruebas || jornadasSeleccionadasBorrar.length === 0}
                 onClick={eliminarJornadasSeleccionadas}
+                title={`Eliminar ${jornadasSeleccionadasBorrar.length} jornada(s) seleccionada(s)`}
+                aria-label="Eliminar jornadas seleccionadas"
               >
-                Eliminar jornadas ({jornadasSeleccionadasBorrar.length})
+                🗑️ {jornadasSeleccionadasBorrar.length}
               </button>
             </div>
           </div>
@@ -19623,11 +19627,13 @@ onClick={guardarEgreso}
               </button>
               <button
                 type="button"
-                style={{...styles.deleteIconButton,padding:"9px 12px"}}
+                style={{...styles.deleteIconButton,padding:"7px 9px",minWidth:40,fontSize:16,lineHeight:1}}
                 disabled={eliminandoPruebas || recargasSeleccionadasBorrar.length === 0}
                 onClick={eliminarRecargasSeleccionadas}
+                title={`Eliminar ${recargasSeleccionadasBorrar.length} recarga(s) seleccionada(s)`}
+                aria-label="Eliminar recargas seleccionadas"
               >
-                Eliminar seleccionados ({recargasSeleccionadasBorrar.length})
+                🗑️ {recargasSeleccionadasBorrar.length}
               </button>
             </>
           )}
@@ -21291,11 +21297,13 @@ onClick={guardarEgreso}
           </button>
           <button
             type="button"
-            style={{...styles.deleteIconButton,padding:"9px 12px"}}
+            style={{...styles.deleteIconButton,padding:"7px 9px",minWidth:40,fontSize:16,lineHeight:1}}
             disabled={eliminandoPruebas || ventasSeleccionadasBorrar.length === 0}
             onClick={eliminarVentasSeleccionadas}
+            title={`Eliminar ${ventasSeleccionadasBorrar.length} venta(s) seleccionada(s)`}
+            aria-label="Eliminar ventas seleccionadas"
           >
-            Eliminar seleccionados ({ventasSeleccionadasBorrar.length})
+            🗑️ {ventasSeleccionadasBorrar.length}
           </button>
         </>
       )}
