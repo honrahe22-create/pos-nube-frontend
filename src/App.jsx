@@ -299,16 +299,121 @@ const crearMiniaturaGaleria = (nombre, emoji, fondo = "#eef2ff") => {
 };
 
 const GALERIA_PRODUCTOS_BASE = [
-  ["Hamburguesa","🍔","#fff7ed"],["Empanada","🥟","#fefce8"],["Salchipapa","🍟","#fff1f2"],
-  ["Corviche","🌽","#fef9c3"],["Pizza","🍕","#fff7ed"],["Hot dog","🌭","#fef2f2"],
-  ["Sánduche","🥪","#f0fdf4"],["Pollo","🍗","#fff7ed"],["Papas fritas","🍟","#fefce8"],
-  ["Arroz","🍚","#f8fafc"],["Ensalada","🥗","#f0fdf4"],["Sopa","🍲","#fff7ed"],
-  ["Pastel","🍰","#fdf2f8"],["Dona","🍩","#fdf2f8"],["Galleta","🍪","#fff7ed"],
-  ["Helado","🍦","#eff6ff"],["Fruta","🍎","#f0fdf4"],["Jugo","🧃","#fff7ed"],
-  ["Agua","💧","#eff6ff"],["Gaseosa","🥤","#f5f3ff"],["Café","☕","#faf5ff"],
-  ["Chocolate","🍫","#fef2f2"],["Pan","🥖","#fff7ed"],["Snack","🍿","#fefce8"]
-].map(([nombre,emoji,fondo],indice)=>({
-  id:`base-${indice+1}`,nombre,imagen:crearMiniaturaGaleria(nombre,emoji,fondo),base:true
+  ["Hamburguesa","🍔","Comida rápida","#fff7ed"],
+  ["Hamburguesa con queso","🍔","Comida rápida","#fff7ed"],
+  ["Hamburguesa de pollo","🍔","Comida rápida","#fff7ed"],
+  ["Hot dog","🌭","Comida rápida","#fff7ed"],
+  ["Choripán","🌭","Comida rápida","#fff7ed"],
+  ["Salchipapa","🍟","Comida rápida","#fff7ed"],
+  ["Papi pollo","🍗","Comida rápida","#fff7ed"],
+  ["Pizza","🍕","Comida rápida","#fff7ed"],
+  ["Pizza de jamón","🍕","Comida rápida","#fff7ed"],
+  ["Pizza de pollo","🍕","Comida rápida","#fff7ed"],
+  ["Alitas BBQ","🍗","Comida rápida","#fff7ed"],
+  ["Nuggets de pollo","🍗","Comida rápida","#fff7ed"],
+  ["Papas fritas","🍟","Comida rápida","#fff7ed"],
+  ["Papas con queso","🍟","Comida rápida","#fff7ed"],
+  ["Burrito","🌯","Comida rápida","#fff7ed"],
+  ["Taco","🌮","Comida rápida","#fff7ed"],
+  ["Pincho de pollo","🍢","Comida rápida","#fff7ed"],
+  ["Pincho mixto","🍢","Comida rápida","#fff7ed"],
+  ["Bolón de queso","🟢","Tradicional","#fef9c3"],
+  ["Bolón de chicharrón","🟢","Tradicional","#fef9c3"],
+  ["Bolón mixto","🟢","Tradicional","#fef9c3"],
+  ["Tigrillo","🍳","Tradicional","#fef9c3"],
+  ["Humita","🌽","Tradicional","#fef9c3"],
+  ["Tamal de pollo","🫔","Tradicional","#fef9c3"],
+  ["Quimbolito","🧁","Tradicional","#fef9c3"],
+  ["Corviche","🌽","Tradicional","#fef9c3"],
+  ["Muchín de yuca","🥔","Tradicional","#fef9c3"],
+  ["Empanada de verde","🥟","Tradicional","#fef9c3"],
+  ["Empanada de viento","🥟","Tradicional","#fef9c3"],
+  ["Empanada de morocho","🥟","Tradicional","#fef9c3"],
+  ["Empanada de queso","🥟","Tradicional","#fef9c3"],
+  ["Empanada de pollo","🥟","Tradicional","#fef9c3"],
+  ["Empanada de carne","🥟","Tradicional","#fef9c3"],
+  ["Maduro con queso","🍌","Tradicional","#fef9c3"],
+  ["Patacones con queso","🍌","Tradicional","#fef9c3"],
+  ["Choclo con queso","🌽","Tradicional","#fef9c3"],
+  ["Mote con chicharrón","🍲","Tradicional","#fef9c3"],
+  ["Chochos con tostado","🥣","Tradicional","#fef9c3"],
+  ["Cevichochos","🥣","Tradicional","#fef9c3"],
+  ["Morocho","🥛","Tradicional","#fef9c3"],
+  ["Papa rellena","🥔","Tradicional","#fef9c3"],
+  ["Sánduche de jamón y queso","🥪","Sánduches","#f0fdf4"],
+  ["Sánduche de queso","🥪","Sánduches","#f0fdf4"],
+  ["Sánduche de pollo","🥪","Sánduches","#f0fdf4"],
+  ["Sánduche de atún","🥪","Sánduches","#f0fdf4"],
+  ["Sánduche mixto","🥪","Sánduches","#f0fdf4"],
+  ["Sánduche integral","🥪","Sánduches","#f0fdf4"],
+  ["Tostada de queso","🍞","Sánduches","#f0fdf4"],
+  ["Tostada mixta","🍞","Sánduches","#f0fdf4"],
+  ["Tostada de pollo","🍞","Sánduches","#f0fdf4"],
+  ["Pan de yuca","🥖","Panadería","#fff7ed"],
+  ["Croissant","🥐","Panadería","#fff7ed"],
+  ["Pan de queso","🥖","Panadería","#fff7ed"],
+  ["Pan de chocolate","🥐","Panadería","#fff7ed"],
+  ["Pastel de pollo","🥧","Panadería","#fff7ed"],
+  ["Pastel de carne","🥧","Panadería","#fff7ed"],
+  ["Donut","🍩","Panadería","#fff7ed"],
+  ["Muffin","🧁","Panadería","#fff7ed"],
+  ["Galleta de avena","🍪","Panadería","#fff7ed"],
+  ["Galleta de chocolate","🍪","Panadería","#fff7ed"],
+  ["Bizcocho","🥖","Panadería","#fff7ed"],
+  ["Torta de chocolate","🍰","Postres","#fdf2f8"],
+  ["Torta de zanahoria","🍰","Postres","#fdf2f8"],
+  ["Torta de naranja","🍰","Postres","#fdf2f8"],
+  ["Torta de banano","🍰","Postres","#fdf2f8"],
+  ["Cupcake","🧁","Postres","#fdf2f8"],
+  ["Gelatina","🍮","Postres","#fdf2f8"],
+  ["Flan","🍮","Postres","#fdf2f8"],
+  ["Helado","🍦","Postres","#fdf2f8"],
+  ["Paleta de fruta","🍧","Postres","#fdf2f8"],
+  ["Pie de manzana","🥧","Postres","#fdf2f8"],
+  ["Brownie","🍫","Postres","#fdf2f8"],
+  ["Fresas con crema","🍓","Postres","#fdf2f8"],
+  ["Manzana","🍎","Frutas","#f0fdf4"],
+  ["Banano","🍌","Frutas","#f0fdf4"],
+  ["Sandía","🍉","Frutas","#f0fdf4"],
+  ["Piña","🍍","Frutas","#f0fdf4"],
+  ["Uvas","🍇","Frutas","#f0fdf4"],
+  ["Fresas","🍓","Frutas","#f0fdf4"],
+  ["Naranja","🍊","Frutas","#f0fdf4"],
+  ["Mango","🥭","Frutas","#f0fdf4"],
+  ["Ensalada de frutas","🍓","Frutas","#f0fdf4"],
+  ["Brocheta de frutas","🍢","Frutas","#f0fdf4"],
+  ["Fruta con yogur y granola","🥣","Frutas","#f0fdf4"],
+  ["Agua","💧","Bebidas","#eff6ff"],
+  ["Agua mineral","💧","Bebidas","#eff6ff"],
+  ["Jugo de naranja","🧃","Bebidas","#eff6ff"],
+  ["Jugo de mora","🧃","Bebidas","#eff6ff"],
+  ["Jugo de maracuyá","🧃","Bebidas","#eff6ff"],
+  ["Jugo de tomate de árbol","🧃","Bebidas","#eff6ff"],
+  ["Limonada","🍋","Bebidas","#eff6ff"],
+  ["Batido de fruta","🥤","Bebidas","#eff6ff"],
+  ["Yogur","🥛","Bebidas","#eff6ff"],
+  ["Leche chocolatada","🥛","Bebidas","#eff6ff"],
+  ["Avena","🥛","Bebidas","#eff6ff"],
+  ["Café","☕","Bebidas","#eff6ff"],
+  ["Chocolate caliente","☕","Bebidas","#eff6ff"],
+  ["Aromática","🍵","Bebidas","#eff6ff"],
+  ["Té frío","🥤","Bebidas","#eff6ff"],
+  ["Arroz con pollo","🍛","Platos","#f8fafc"],
+  ["Arroz con menestra y carne","🍛","Platos","#f8fafc"],
+  ["Seco de pollo","🍗","Platos","#f8fafc"],
+  ["Seco de carne","🥩","Platos","#f8fafc"],
+  ["Lasaña","🍝","Platos","#f8fafc"],
+  ["Espagueti","🍝","Platos","#f8fafc"],
+  ["Encebollado","🍲","Platos","#f8fafc"],
+  ["Sopa del día","🍲","Platos","#f8fafc"],
+  ["Ensalada","🥗","Platos","#f8fafc"],
+  ["Menú del día","🍽️","Platos","#f8fafc"],
+  ["Canguil","🍿","Snacks","#fefce8"],
+  ["Chifles","🍌","Snacks","#fefce8"],
+  ["Tostado","🌽","Snacks","#fefce8"],
+  ["Granola","🥣","Snacks","#fefce8"]
+].map(([nombre,emoji,categoria,fondo],indice)=>({
+  id:`base-${indice+1}`,nombre,categoria,imagen:crearMiniaturaGaleria(nombre,emoji,fondo),base:true
 }));
 
 export default function App() {
@@ -554,6 +659,7 @@ const [cargandoCrearCuenta, setCargandoCrearCuenta] = useState(false);
   const [editandoProductoId, setEditandoProductoId] = useState(null);
   const [galeriaProductos, setGaleriaProductos] = useState([]);
   const [galeriaBusqueda, setGaleriaBusqueda] = useState("");
+  const [galeriaCategoria, setGaleriaCategoria] = useState("TODAS");
   const [cargandoGaleria, setCargandoGaleria] = useState(false);
   const inputGaleriaFotoRef = useRef(null);
 
@@ -21890,16 +21996,23 @@ onClick={guardarEgreso}
               </div>
             </div>
             <div style={{...styles.box,marginBottom:16}}>
-              <input value={galeriaBusqueda} onChange={(e)=>setGaleriaBusqueda(e.target.value)} placeholder="Buscar imagen: hamburguesa, pizza, jugo..." style={styles.input}/>
-              <div style={{marginTop:8,fontSize:12,color:"#64748b"}}>Fotos propias: JPG, JPEG, PNG o WEBP · máximo 2 MB · recomendado 600 × 600 px (1:1).</div>
+              <div style={{display:"grid",gridTemplateColumns:esPantallaCompacta?"1fr":"minmax(0,1fr) 240px",gap:10}}>
+                <input value={galeriaBusqueda} onChange={(e)=>setGaleriaBusqueda(e.target.value)} placeholder="Buscar imagen: hamburguesa, bolón, jugo..." style={styles.input}/>
+                <select value={galeriaCategoria} onChange={(e)=>setGaleriaCategoria(e.target.value)} style={styles.input}>
+                  <option value="TODAS">Todas las categorías</option>
+                  {[...new Set(GALERIA_PRODUCTOS_BASE.map((f)=>f.categoria))].map((categoria)=><option key={categoria} value={categoria}>{categoria}</option>)}
+                </select>
+              </div>
+              <div style={{marginTop:8,fontSize:12,color:"#64748b"}}>{GALERIA_PRODUCTOS_BASE.length} imágenes base organizadas por categoría. Fotos propias: JPG, JPEG, PNG o WEBP · máximo 2 MB · recomendado 600 × 600 px (1:1).</div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:esPantallaCompacta?"repeat(2,minmax(0,1fr))":"repeat(5,minmax(0,1fr))",gap:12}}>
               {[...GALERIA_PRODUCTOS_BASE,...galeriaProductos]
+                .filter((f)=>galeriaCategoria==="TODAS"||String(f.categoria||"PERSONALIZADAS")===galeriaCategoria)
                 .filter((f)=>!galeriaBusqueda.trim()||String(f.nombre||"").toLowerCase().includes(galeriaBusqueda.trim().toLowerCase()))
                 .map((foto)=>(
                 <div key={`${foto.base?"b":"p"}-${foto.id}`} style={{background:"#fff",border:"1px solid #e5e7eb",borderRadius:14,padding:10,boxShadow:"0 6px 16px rgba(15,23,42,.06)"}}>
                   <img src={foto.imagen} alt={foto.nombre} style={{width:"100%",aspectRatio:"1 / 1",objectFit:"cover",borderRadius:10,background:"#f8fafc"}}/>
-                  <div style={{fontWeight:900,fontSize:13,marginTop:8,textAlign:"center"}}>{foto.nombre}</div>
+                  <div style={{fontWeight:900,fontSize:13,marginTop:8,textAlign:"center"}}>{foto.nombre}</div><div style={{fontSize:11,color:"#64748b",textAlign:"center",marginTop:2}}>{foto.categoria || "Personalizadas"}</div>
                   <button type="button" style={{...styles.button,width:"100%",marginTop:8,padding:"8px 6px"}} onClick={()=>{setProductoForm((prev)=>({...prev,imagen:foto.imagen}));setVista("productos");setMostrarFormularioProducto(true);}}>Usar imagen</button>
                   {!foto.base && <button type="button" title="Eliminar foto de la galería" onClick={()=>eliminarFotoGaleria(foto)} style={{...styles.deleteIconButton,width:"100%",marginTop:6}}>🗑️</button>}
                 </div>
