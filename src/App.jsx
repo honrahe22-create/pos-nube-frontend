@@ -293,6 +293,24 @@ const normalizarUbicacionFrontend = (valor) => {
   return texto;
 };
 
+const crearMiniaturaGaleria = (nombre, emoji, fondo = "#eef2ff") => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600"><rect width="600" height="600" rx="48" fill="${fondo}"/><circle cx="300" cy="255" r="155" fill="#ffffff" opacity="0.94"/><text x="300" y="320" text-anchor="middle" font-size="190" font-family="Arial, sans-serif">${emoji}</text><rect x="55" y="455" width="490" height="82" rx="26" fill="#ffffff" opacity="0.96"/><text x="300" y="507" text-anchor="middle" font-size="29" font-weight="700" font-family="Arial, sans-serif" fill="#172554">${nombre}</text></svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+};
+
+const GALERIA_PRODUCTOS_BASE = [
+  ["Hamburguesa","🍔","#fff7ed"],["Empanada","🥟","#fefce8"],["Salchipapa","🍟","#fff1f2"],
+  ["Corviche","🌽","#fef9c3"],["Pizza","🍕","#fff7ed"],["Hot dog","🌭","#fef2f2"],
+  ["Sánduche","🥪","#f0fdf4"],["Pollo","🍗","#fff7ed"],["Papas fritas","🍟","#fefce8"],
+  ["Arroz","🍚","#f8fafc"],["Ensalada","🥗","#f0fdf4"],["Sopa","🍲","#fff7ed"],
+  ["Pastel","🍰","#fdf2f8"],["Dona","🍩","#fdf2f8"],["Galleta","🍪","#fff7ed"],
+  ["Helado","🍦","#eff6ff"],["Fruta","🍎","#f0fdf4"],["Jugo","🧃","#fff7ed"],
+  ["Agua","💧","#eff6ff"],["Gaseosa","🥤","#f5f3ff"],["Café","☕","#faf5ff"],
+  ["Chocolate","🍫","#fef2f2"],["Pan","🥖","#fff7ed"],["Snack","🍿","#fefce8"]
+].map(([nombre,emoji,fondo],indice)=>({
+  id:`base-${indice+1}`,nombre,imagen:crearMiniaturaGaleria(nombre,emoji,fondo),base:true
+}));
+
 export default function App() {
   const [correo, setCorreo] = useState("");
 const [password, setPassword] = useState("");
@@ -531,8 +549,13 @@ const [cargandoCrearCuenta, setCargandoCrearCuenta] = useState(false);
     stock: "",
     stock_minimo: "",
     categoria: "",
+    imagen: "",
   });
   const [editandoProductoId, setEditandoProductoId] = useState(null);
+  const [galeriaProductos, setGaleriaProductos] = useState([]);
+  const [galeriaBusqueda, setGaleriaBusqueda] = useState("");
+  const [cargandoGaleria, setCargandoGaleria] = useState(false);
+  const inputGaleriaFotoRef = useRef(null);
 
   const [alumnos, setAlumnos] = useState([]);
   const [alumnoForm, setAlumnoForm] = useState({
@@ -8041,6 +8064,69 @@ if (institucionIdLogin) {
     window.URL.revokeObjectURL(url);
   };
 
+  const cargarGaleriaProductos = async () => {
+    if (!["ADMIN","SUPER_ADMIN"].includes(rolActual)) return [];
+    const token = localStorage.getItem("token");
+    const institucionId = obtenerInstitucionActivaId();
+    if (!token || !institucionId) return [];
+    setCargandoGaleria(true);
+    try {
+      const res = await fetch(`${API_URL}/api/productos/galeria?institucion_id=${institucionId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => []);
+      const propias = res.ok && Array.isArray(data) ? data : [];
+      setGaleriaProductos(propias);
+      return propias;
+    } catch (error) {
+      console.error("Error cargando galería:", error);
+      return [];
+    } finally {
+      setCargandoGaleria(false);
+    }
+  };
+
+  const subirFotoGaleria = async (archivo) => {
+    if (!["ADMIN","SUPER_ADMIN"].includes(rolActual) || !archivo) return;
+    const permitidos = ["image/jpeg","image/png","image/webp"];
+    if (!permitidos.includes(String(archivo.type || "").toLowerCase())) {
+      alert("Formato no permitido. Usa JPG, JPEG, PNG o WEBP."); return;
+    }
+    if (archivo.size > 2 * 1024 * 1024) {
+      alert("La imagen supera 2 MB."); return;
+    }
+    const lector = new FileReader();
+    lector.onload = async () => {
+      const nombre = window.prompt("Nombre para esta foto en la galería:", archivo.name.replace(/\.[^.]+$/, ""));
+      if (!nombre) return;
+      try {
+        const token = localStorage.getItem("token");
+        const institucionId = obtenerInstitucionActivaId();
+        const res = await fetch(`${API_URL}/api/productos/galeria`, {
+          method:"POST",
+          headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},
+          body:JSON.stringify({institucion_id:Number(institucionId),nombre:String(nombre).trim(),imagen:String(lector.result||"")}),
+        });
+        const data = await res.json().catch(()=>({}));
+        if(!res.ok){alert(data.message||data.error||"No se pudo guardar la foto");return;}
+        await cargarGaleriaProductos();
+      } catch(error){console.error(error);alert("No se pudo guardar la foto");}
+    };
+    lector.readAsDataURL(archivo);
+  };
+
+  const eliminarFotoGaleria = async (foto) => {
+    if (!foto?.id || foto?.base || !window.confirm(`¿Eliminar de la galería ${foto.nombre || "esta foto"}?`)) return;
+    try {
+      const token=localStorage.getItem("token");
+      const institucionId=obtenerInstitucionActivaId();
+      const res=await fetch(`${API_URL}/api/productos/galeria/${foto.id}?institucion_id=${institucionId}`,{method:"DELETE",headers:{Authorization:`Bearer ${token}`}});
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok){alert(data.message||data.error||"No se pudo eliminar");return;}
+      await cargarGaleriaProductos();
+    } catch(error){console.error(error);alert("No se pudo eliminar la foto");}
+  };
+
     const crearProducto = async (e) => {
     e.preventDefault();
 
@@ -8069,6 +8155,7 @@ if (institucionIdLogin) {
           stock: Number(productoForm.stock || 0),
           stock_minimo:Number(productoForm.stock_minimo||0),
           categoria:productoForm.categoria,
+          imagen:productoForm.imagen||null,
           concepto_inicial:"COMPRA",
           observacion_inicial:"Producto creado desde Menú Cafetería",
         }),
@@ -8135,6 +8222,7 @@ if (institucionIdLogin) {
         codigo: String(productoForm.codigo || "").trim() || null,
         precio: precioNuevo,
         categoria: String(productoForm.categoria || "").trim() || null,
+        imagen: productoForm.imagen || null,
         activo: productoActual?.activo ?? true,
       };
 
@@ -12701,13 +12789,21 @@ if (!usuario) {
       accion: () => setVista("productos_forma_pago"),
     },
     {
+      id: "galeria_productos",
+      icono: "▧",
+      texto: "Galería de Productos",
+      activo: vista === "galeria_productos",
+      visible: ["ADMIN","SUPER_ADMIN"].includes(rolActual),
+      accion: () => { setVista("galeria_productos"); cargarGaleriaProductos(); },
+    },
+    {
       id: "configuracion",
       icono: "⚙",
       texto: "Configuración",
       activo: vista === "configuracion",
       accion: () => setVista("configuracion"),
     },
-  ].filter((opcion) => puedeAccederMenu(opcion.id)).map((opcion) => (
+  ].filter((opcion) => opcion.visible !== false && puedeAccederMenu(opcion.id)).map((opcion) => (
     <button
       key={opcion.id}
       type="button"
@@ -15171,21 +15267,17 @@ onClick={guardarEgreso}
             </div>
           </div>
 
-          <div style={styles.filterField}>
-            <label style={styles.label}>Imagen (URL)</label>
-            <input
-              type="text"
-              value={productoForm.imagen || ""}
-              onChange={(e) =>
-                setProductoForm({
-                  ...productoForm,
-                  imagen: e.target.value,
-                })
-              }
-              style={styles.input}
-              placeholder="https://..."
-            />
-          </div>
+          {["ADMIN","SUPER_ADMIN"].includes(rolActual) && (
+            <div style={styles.filterField}>
+              <label style={styles.label}>Imagen del producto</label>
+              <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+                {productoForm.imagen ? <img src={productoForm.imagen} alt="Seleccionada" style={{width:72,height:72,objectFit:"cover",borderRadius:12,border:"1px solid #d1d5db"}} /> : null}
+                <button type="button" style={styles.outlineButton} onClick={()=>{setVista("galeria_productos");cargarGaleriaProductos();}}>Elegir de la galería</button>
+                {productoForm.imagen && <button type="button" style={styles.outlineButton} onClick={()=>setProductoForm({...productoForm,imagen:""})}>Sin imagen</button>}
+              </div>
+              <small style={{color:"#64748b"}}>La galería usa imágenes cuadradas. Las fotos cargadas admiten JPG, JPEG, PNG o WEBP, máximo 2 MB; recomendado 600 × 600 px.</small>
+            </div>
+          )}
 
           <div style={styles.filterButtons}>
             <button type="submit" style={styles.button}>
@@ -21788,6 +21880,35 @@ onClick={guardarEgreso}
             </div>
           </>
         )}
+        {vista === "galeria_productos" && ["ADMIN","SUPER_ADMIN"].includes(rolActual) && (
+          <div>
+            <div style={styles.pageHeader}>
+              <div><h1 style={styles.dashboardTitle}>Galería de Productos</h1><p style={{margin:"6px 0 0",color:"#64748b"}}>Selecciona una imagen para el producto que estás creando o editando. Solo ADMIN puede administrar esta galería.</p></div>
+              <div style={styles.headerActions}>
+                <input ref={inputGaleriaFotoRef} type="file" accept="image/jpeg,image/png,image/webp" style={{display:"none"}} onChange={(e)=>{const f=e.target.files?.[0];if(f)subirFotoGaleria(f);e.target.value="";}} />
+                <button type="button" style={styles.secondaryButton} onClick={()=>inputGaleriaFotoRef.current?.click()}>＋ Agregar foto</button>
+              </div>
+            </div>
+            <div style={{...styles.box,marginBottom:16}}>
+              <input value={galeriaBusqueda} onChange={(e)=>setGaleriaBusqueda(e.target.value)} placeholder="Buscar imagen: hamburguesa, pizza, jugo..." style={styles.input}/>
+              <div style={{marginTop:8,fontSize:12,color:"#64748b"}}>Fotos propias: JPG, JPEG, PNG o WEBP · máximo 2 MB · recomendado 600 × 600 px (1:1).</div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:esPantallaCompacta?"repeat(2,minmax(0,1fr))":"repeat(5,minmax(0,1fr))",gap:12}}>
+              {[...GALERIA_PRODUCTOS_BASE,...galeriaProductos]
+                .filter((f)=>!galeriaBusqueda.trim()||String(f.nombre||"").toLowerCase().includes(galeriaBusqueda.trim().toLowerCase()))
+                .map((foto)=>(
+                <div key={`${foto.base?"b":"p"}-${foto.id}`} style={{background:"#fff",border:"1px solid #e5e7eb",borderRadius:14,padding:10,boxShadow:"0 6px 16px rgba(15,23,42,.06)"}}>
+                  <img src={foto.imagen} alt={foto.nombre} style={{width:"100%",aspectRatio:"1 / 1",objectFit:"cover",borderRadius:10,background:"#f8fafc"}}/>
+                  <div style={{fontWeight:900,fontSize:13,marginTop:8,textAlign:"center"}}>{foto.nombre}</div>
+                  <button type="button" style={{...styles.button,width:"100%",marginTop:8,padding:"8px 6px"}} onClick={()=>{setProductoForm((prev)=>({...prev,imagen:foto.imagen}));setVista("productos");setMostrarFormularioProducto(true);}}>Usar imagen</button>
+                  {!foto.base && <button type="button" title="Eliminar foto de la galería" onClick={()=>eliminarFotoGaleria(foto)} style={{...styles.deleteIconButton,width:"100%",marginTop:6}}>🗑️</button>}
+                </div>
+              ))}
+            </div>
+            {cargandoGaleria && <p>Cargando galería...</p>}
+          </div>
+        )}
+
         {vista === "configuracion" &&
           ["ADMIN", "SUPER_ADMIN"].includes(rolActual) && (
           <ConfiguracionModulo
