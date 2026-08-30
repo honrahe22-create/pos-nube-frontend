@@ -588,8 +588,11 @@ const [ventasSeleccionadasBorrar, setVentasSeleccionadasBorrar] = useState([]);
 const [recargasSeleccionadasBorrar, setRecargasSeleccionadasBorrar] = useState([]);
 const [cierresSeleccionadosBorrar, setCierresSeleccionadosBorrar] = useState([]);
 const [jornadasSeleccionadasBorrar, setJornadasSeleccionadasBorrar] = useState([]);
+const [productosMenuSeleccionadosBorrar, setProductosMenuSeleccionadosBorrar] = useState([]);
+const [productosStockSeleccionadosBorrar, setProductosStockSeleccionadosBorrar] = useState([]);
 const [jornadasHistorial, setJornadasHistorial] = useState([]);
 const [eliminandoPruebas, setEliminandoPruebas] = useState(false);
+const [eliminandoProductosPrueba, setEliminandoProductosPrueba] = useState(false);
 
   const [ventas, setVentas] = useState([]);
   const [ventaForm, setVentaForm] = useState({
@@ -11163,6 +11166,119 @@ Disponible: ${formatearMoneda(
     });
   };
 
+  const eliminarProductosPruebaSeleccionados = async ({
+    ids,
+    origen = "menu",
+  }) => {
+    const seleccion = [...new Set((ids || []).map(Number).filter(Boolean))];
+
+    if (!["SUPER_ADMIN", "ADMIN"].includes(rolActual)) {
+      alert("Solo ADMIN o SUPER_ADMIN puede eliminar productos.");
+      return;
+    }
+
+    if (!seleccion.length) {
+      alert("Selecciona al menos un producto.");
+      return;
+    }
+
+    const textoOrigen = origen === "stock" ? "Stock" : "Menú Cafetería";
+    const confirmado = window.confirm(
+      `¿Eliminar definitivamente ${seleccion.length} producto(s) seleccionado(s) desde ${textoOrigen}?\n\n` +
+      "Se eliminarán también sus existencias y movimientos de inventario. " +
+      "Por seguridad, el sistema NO permitirá borrar productos que ya tengan ventas registradas."
+    );
+
+    if (!confirmado) return;
+
+    try {
+      setEliminandoProductosPrueba(true);
+
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      if (!token || !institucionId) {
+        throw new Error("Sesión o institución no válida.");
+      }
+
+      const endpoint =
+        origen === "stock"
+          ? `${API_URL}/api/inventario/productos/eliminar-seleccionados`
+          : `${API_URL}/api/productos/eliminar-seleccionados`;
+
+      const respuesta = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          institucion_id: Number(institucionId),
+          ids: seleccion,
+        }),
+      });
+
+      const data = await respuesta.json().catch(() => ({}));
+
+      if (!respuesta.ok) {
+        throw new Error(
+          data.message ||
+          data.error ||
+          "No se pudieron eliminar los productos seleccionados."
+        );
+      }
+
+      setProductosMenuSeleccionadosBorrar([]);
+      setProductosStockSeleccionadosBorrar([]);
+      setProductosSeleccionados({});
+
+      if (
+        productoDetalle &&
+        seleccion.includes(Number(productoDetalle.id))
+      ) {
+        setProductoDetalle(null);
+      }
+
+      if (
+        productoEditando &&
+        seleccion.includes(Number(productoEditando.id))
+      ) {
+        setProductoEditando(null);
+        setMostrarFormularioProducto(false);
+      }
+
+      await Promise.all([
+        cargarProductos(),
+        cargarExistenciasInventario(),
+      ]);
+
+      alert(
+        data.message ||
+        `${seleccion.length} producto(s) eliminado(s) correctamente.`
+      );
+    } catch (error) {
+      console.error("Error eliminando productos seleccionados:", error);
+      alert(
+        error.message ||
+        "No se pudieron eliminar los productos seleccionados."
+      );
+    } finally {
+      setEliminandoProductosPrueba(false);
+    }
+  };
+
+  const eliminarProductosMenuSeleccionados = () =>
+    eliminarProductosPruebaSeleccionados({
+      ids: productosMenuSeleccionadosBorrar,
+      origen: "menu",
+    });
+
+  const eliminarProductosStockSeleccionados = () =>
+    eliminarProductosPruebaSeleccionados({
+      ids: productosStockSeleccionadosBorrar,
+      origen: "stock",
+    });
+
   const eliminarVentasSeleccionadas = async () => {
     if (!ventasSeleccionadasBorrar.length) return alert("Selecciona al menos una venta.");
     if (!window.confirm(`¿Eliminar ${ventasSeleccionadasBorrar.length} venta(s) seleccionada(s)? El sistema devolverá el stock y corregirá saldo/crédito automáticamente.`)) return;
@@ -15106,6 +15222,73 @@ onClick={guardarEgreso}
             )}
           </select>
 
+          {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (() => {
+            const visibles = productos
+              .filter((p) => {
+                const coincideTexto = String(p.nombre || "")
+                  .toLowerCase()
+                  .includes(busquedaProductos.toLowerCase());
+
+                const coincideCategoria =
+                  !filtroCategoriaProductos ||
+                  String(p.categoria || "") === filtroCategoriaProductos;
+
+                return coincideTexto && coincideCategoria;
+              })
+              .map((p) => Number(p.id));
+
+            const todosMarcados =
+              visibles.length > 0 &&
+              visibles.every((id) =>
+                productosMenuSeleccionadosBorrar.includes(id)
+              );
+
+            return (
+              <>
+                <button
+                  type="button"
+                  style={styles.outlineButton}
+                  disabled={eliminandoProductosPrueba || visibles.length === 0}
+                  onClick={() =>
+                    setProductosMenuSeleccionadosBorrar((actual) => {
+                      const actuales = new Set((actual || []).map(Number));
+
+                      if (todosMarcados) {
+                        visibles.forEach((id) => actuales.delete(id));
+                      } else {
+                        visibles.forEach((id) => actuales.add(id));
+                      }
+
+                      return Array.from(actuales);
+                    })
+                  }
+                >
+                  {todosMarcados ? "Quitar selección" : "Seleccionar todo"}
+                </button>
+
+                <button
+                  type="button"
+                  style={{
+                    ...styles.deleteIconButton,
+                    padding:"7px 9px",
+                    minWidth:40,
+                    fontSize:16,
+                    lineHeight:1,
+                  }}
+                  disabled={
+                    eliminandoProductosPrueba ||
+                    productosMenuSeleccionadosBorrar.length === 0
+                  }
+                  onClick={eliminarProductosMenuSeleccionados}
+                  title={`Eliminar ${productosMenuSeleccionadosBorrar.length} producto(s) seleccionado(s)`}
+                  aria-label="Eliminar productos seleccionados del menú"
+                >
+                  🗑️ {productosMenuSeleccionadosBorrar.length}
+                </button>
+              </>
+            );
+          })()}
+
           <button
             type="button"
             style={styles.button}
@@ -15181,7 +15364,9 @@ onClick={guardarEgreso}
         <table style={styles.table}>
           <thead>
             <tr>
-              <th style={styles.th}></th>
+              {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+                <th style={styles.th}>Seleccionar</th>
+              )}
               <th style={styles.th}>Nombre</th>
               <th style={styles.th}>Código</th>
               <th style={styles.th}>Precio</th>
@@ -15192,7 +15377,9 @@ onClick={guardarEgreso}
             </tr>
 
             <tr>
-              <th style={styles.th}></th>
+              {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+                <th style={styles.th}></th>
+              )}
               <th style={styles.th}></th>
               <th style={styles.th}></th>
               <th style={styles.th}></th>
@@ -15249,20 +15436,25 @@ onClick={guardarEgreso}
                         : {}
                     }
                   >
-                    <td style={styles.td}>
-  <input
-    type="checkbox"
-    checked={!!productosSeleccionados[producto.id]}
-    onChange={(e) =>
-      setProductosSeleccionados((prev) => ({
-        ...prev,
-        [producto.id]: e.target.checked,
-      }))
-    }
-    title={`Seleccionar ${producto.nombre}`}
-    onClick={(e) => e.stopPropagation()}
-  />
-</td>
+                    {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+                      <td style={styles.td}>
+                        <input
+                          type="checkbox"
+                          checked={productosMenuSeleccionadosBorrar.includes(
+                            Number(producto.id)
+                          )}
+                          onChange={(e) =>
+                            alternarSeleccionId(
+                              setProductosMenuSeleccionadosBorrar,
+                              producto.id,
+                              e.target.checked
+                            )
+                          }
+                          title={`Seleccionar ${producto.nombre}`}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </td>
+                    )}
 
                     <td style={styles.td}>
                       {producto.nombre}
@@ -15315,31 +15507,33 @@ onClick={guardarEgreso}
                           ✎
                         </button>
 
-                      <button
-  type="button"
-  style={styles.deleteIconButton}
-  title={estaInactivo ? "Reactivar producto" : "Desactivar producto"}
-  onClick={() => {
-    if (estaInactivo) {
-      const confirmado = window.confirm(
-        `¿Deseas reactivar el producto ${producto.nombre}?`
-      );
-      if (!confirmado) return;
+                      {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+                        <button
+                          type="button"
+                          style={styles.deleteIconButton}
+                          title={estaInactivo ? "Reactivar producto" : "Desactivar producto"}
+                          onClick={() => {
+                            if (estaInactivo) {
+                              const confirmado = window.confirm(
+                                `¿Deseas reactivar el producto ${producto.nombre}?`
+                              );
+                              if (!confirmado) return;
 
-      reactivarProducto(producto.id);
-      return;
-    }
+                              reactivarProducto(producto.id);
+                              return;
+                            }
 
-    const confirmado = window.confirm(
-      `¿Deseas desactivar el producto ${producto.nombre}?`
-    );
-    if (!confirmado) return;
+                            const confirmado = window.confirm(
+                              `¿Deseas desactivar el producto ${producto.nombre}?`
+                            );
+                            if (!confirmado) return;
 
-    desactivarProducto(producto.id);
-  }}
->
-  {estaInactivo ? "🔓" : "🗑"}
-</button>
+                            desactivarProducto(producto.id);
+                          }}
+                        >
+                          {estaInactivo ? "🔓" : "🗑"}
+                        </button>
+                      )}
 
                       </div>
                     </td>
@@ -19253,12 +19447,72 @@ onClick={guardarEgreso}
             independiente y no se registran como egresos manuales de Stock.
           </p>
         </div>
+
+        {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (() => {
+          const visibles = productos
+            .filter((p)=>p?.activo!==false)
+            .map((p)=>Number(p.id));
+
+          const todosMarcados =
+            visibles.length > 0 &&
+            visibles.every((id) =>
+              productosStockSeleccionadosBorrar.includes(id)
+            );
+
+          return (
+            <div style={styles.headerActions}>
+              <button
+                type="button"
+                style={styles.outlineButton}
+                disabled={eliminandoProductosPrueba || visibles.length === 0}
+                onClick={() =>
+                  setProductosStockSeleccionadosBorrar((actual) => {
+                    const actuales = new Set((actual || []).map(Number));
+
+                    if (todosMarcados) {
+                      visibles.forEach((id) => actuales.delete(id));
+                    } else {
+                      visibles.forEach((id) => actuales.add(id));
+                    }
+
+                    return Array.from(actuales);
+                  })
+                }
+              >
+                {todosMarcados ? "Quitar selección" : "Seleccionar todo"}
+              </button>
+
+              <button
+                type="button"
+                style={{
+                  ...styles.deleteIconButton,
+                  padding:"7px 9px",
+                  minWidth:40,
+                  fontSize:16,
+                  lineHeight:1,
+                }}
+                disabled={
+                  eliminandoProductosPrueba ||
+                  productosStockSeleccionadosBorrar.length === 0
+                }
+                onClick={eliminarProductosStockSeleccionados}
+                title={`Eliminar ${productosStockSeleccionadosBorrar.length} producto(s) seleccionado(s)`}
+                aria-label="Eliminar productos seleccionados de stock"
+              >
+                🗑️ {productosStockSeleccionadosBorrar.length}
+              </button>
+            </div>
+          );
+        })()}
       </div>
 
       <div style={{...styles.tableWrap,marginTop:16}}>
         <table style={styles.table}>
           <thead>
             <tr>
+              {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+                <th style={styles.th}>Seleccionar</th>
+              )}
               <th style={styles.th}>Producto</th>
               <th style={styles.th}>Código</th>
               <th style={styles.th}>Familia</th>
@@ -19280,6 +19534,24 @@ onClick={guardarEgreso}
 
                 return (
                   <tr key={producto.id}>
+                    {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+                      <td style={styles.td}>
+                        <input
+                          type="checkbox"
+                          checked={productosStockSeleccionadosBorrar.includes(
+                            Number(producto.id)
+                          )}
+                          onChange={(e) =>
+                            alternarSeleccionId(
+                              setProductosStockSeleccionadosBorrar,
+                              producto.id,
+                              e.target.checked
+                            )
+                          }
+                          title={`Seleccionar ${producto.nombre}`}
+                        />
+                      </td>
+                    )}
                     <td style={{...styles.td,fontWeight:800}}>
                       {producto.nombre}
                     </td>
