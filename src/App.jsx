@@ -2988,6 +2988,74 @@ const guardarStockProducto = async (producto) => {
   }
 };
 
+
+const encerarStockProductoAdmin = async (producto) => {
+  if (!["ADMIN","SUPER_ADMIN"].includes(rolActual)) {
+    alert("Solo ADMIN puede encerar existencias desde esta pantalla.");
+    return;
+  }
+
+  const existenciasProducto = existenciasInventario.filter(
+    (e) => Number(e.producto_id) === Number(producto?.id)
+  );
+  const totalActual = existenciasProducto.reduce(
+    (s, e) => s + Number(e.stock || 0),
+    0
+  );
+
+  if (totalActual === 0) {
+    alert(`${producto.nombre} ya tiene stock en 0.`);
+    return;
+  }
+
+  const detalle = existenciasProducto.length
+    ? existenciasProducto
+        .filter((e) => Number(e.stock || 0) !== 0)
+        .map((e) => `${e.ubicacion}: ${Number(e.stock || 0)}`)
+        .join(" | ")
+    : `TOTAL: ${totalActual}`;
+
+  const confirmar = window.confirm(
+    `¿ENCERAR el stock de ${producto.nombre}?\n\n` +
+    `${detalle}\n\n` +
+    `El stock total quedará en 0. El ajuste quedará registrado en movimientos de inventario.`
+  );
+
+  if (!confirmar) return;
+
+  try {
+    const token = localStorage.getItem("token");
+    const institucionId = obtenerInstitucionActivaId();
+
+    const res = await fetch(`${API_URL}/api/inventario/encerar-producto`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        institucion_id: Number(institucionId),
+        producto_id: Number(producto.id),
+        observacion: "Encerado manual de stock desde Existencias actuales",
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(
+        data.message || data.error || "No se pudo encerar el stock."
+      );
+    }
+
+    await Promise.all([cargarProductos(), cargarExistenciasInventario()]);
+    alert(`${producto.nombre}: stock actualizado correctamente a 0.`);
+  } catch (error) {
+    console.error("Error encerando stock:", error);
+    alert(error.message || "No se pudo encerar el stock.");
+  }
+};
+
 const desactivarProducto = async (productoId) => {
   setProductos((prev) =>
     prev.map((p) =>
@@ -19738,6 +19806,9 @@ onClick={guardarEgreso}
               <th style={styles.th}>Familia</th>
               <th style={styles.th}>Stock por puntos</th>
               <th style={styles.th}>Total</th>
+              {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+                <th style={styles.th}>Acción</th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -19789,6 +19860,29 @@ onClick={guardarEgreso}
                     <td style={{...styles.td,fontWeight:900}}>
                       {total}
                     </td>
+                    {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+                      <td style={styles.td}>
+                        <button
+                          type="button"
+                          onClick={() => encerarStockProductoAdmin(producto)}
+                          disabled={total === 0}
+                          style={{
+                            ...styles.outlineButton,
+                            padding:"7px 10px",
+                            fontSize:13,
+                            whiteSpace:"nowrap",
+                            opacity:total===0?0.5:1,
+                          }}
+                          title={
+                            total === 0
+                              ? "El producto ya está en cero"
+                              : `Editar stock de ${producto.nombre} y encerar a 0`
+                          }
+                        >
+                          ✏️ Encerar
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
