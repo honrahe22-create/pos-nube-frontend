@@ -2501,8 +2501,21 @@ const importarStockArchivo = (event) => {
                   : {}),
                 ubicacion_inicial:
                   jornadaActiva?.punto_nombre ||
-                  puntoInventarioSeleccionado ||
-                  "PRINCIPAL",
+                  (
+                    ["ADMIN","SUPER_ADMIN"].includes(rolImportacion)
+                      ? (
+                          (puntosOperacion || []).find(
+                            (p) =>
+                              p?.activo !== false &&
+                              normalizarUbicacionFrontend(p?.nombre) ===
+                                normalizarUbicacionFrontend(puntoInventarioSeleccionado)
+                          )?.nombre ||
+                          (puntosOperacion || []).find((p) => p?.activo !== false)?.nombre ||
+                          puntoInventarioSeleccionado ||
+                          "PRINCIPAL"
+                        )
+                      : (puntoInventarioSeleccionado || "PRINCIPAL")
+                  ),
                 concepto_inicial: "COMPRA",
                 observacion_inicial: "Producto creado mediante importación masiva",
               }),
