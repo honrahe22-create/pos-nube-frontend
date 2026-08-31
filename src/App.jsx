@@ -12038,7 +12038,29 @@ if (esPortalPadresPublico && !esRolPortal) {
               </button>
             </div>
 
-            {mensaje && <p style={styles.message}>{mensaje}</p>}
+            {mensaje && (
+              <div
+                style={
+                  String(mensaje)
+                    .toLowerCase()
+                    .includes("cuenta creada correctamente")
+                    ? {
+                        marginTop: 16,
+                        padding: "12px 14px",
+                        borderRadius: 10,
+                        background: "#ecfdf5",
+                        border: "1px solid #10b981",
+                        color: "#166534",
+                        fontWeight: 800,
+                        lineHeight: 1.45,
+                        textAlign: "center",
+                      }
+                    : styles.message
+                }
+              >
+                {mensaje}
+              </div>
+            )}
           </>
         ) : (
           <>
@@ -12127,34 +12149,52 @@ if (esPortalPadresPublico && !esRolPortal) {
               />
 
               <label style={styles.label}>Crear contraseña</label>
-              <input
-                type="password"
-                value={registroPadrePortal.password}
-                onChange={(e) =>
-                  setRegistroPadrePortal({
-                    ...registroPadrePortal,
-                    password: e.target.value,
-                  })
-                }
-                style={styles.input}
-                minLength={8}
-                required
-              />
+              <div style={styles.passwordWrap}>
+                <input
+                  type={verPasswordNueva ? "text" : "password"}
+                  value={registroPadrePortal.password}
+                  onChange={(e) =>
+                    setRegistroPadrePortal({
+                      ...registroPadrePortal,
+                      password: e.target.value,
+                    })
+                  }
+                  style={styles.inputPassword}
+                  minLength={8}
+                  required
+                />
+                <button
+                  type="button"
+                  style={styles.eyeButton}
+                  onClick={() => setVerPasswordNueva(!verPasswordNueva)}
+                >
+                  {verPasswordNueva ? "Ocultar" : "Ver"}
+                </button>
+              </div>
 
               <label style={styles.label}>Confirmar contraseña</label>
-              <input
-                type="password"
-                value={registroPadrePortal.confirmar_password}
-                onChange={(e) =>
-                  setRegistroPadrePortal({
-                    ...registroPadrePortal,
-                    confirmar_password: e.target.value,
-                  })
-                }
-                style={styles.input}
-                minLength={8}
-                required
-              />
+              <div style={styles.passwordWrap}>
+                <input
+                  type={verPasswordConfirmar ? "text" : "password"}
+                  value={registroPadrePortal.confirmar_password}
+                  onChange={(e) =>
+                    setRegistroPadrePortal({
+                      ...registroPadrePortal,
+                      confirmar_password: e.target.value,
+                    })
+                  }
+                  style={styles.inputPassword}
+                  minLength={8}
+                  required
+                />
+                <button
+                  type="button"
+                  style={styles.eyeButton}
+                  onClick={() => setVerPasswordConfirmar(!verPasswordConfirmar)}
+                >
+                  {verPasswordConfirmar ? "Ocultar" : "Ver"}
+                </button>
+              </div>
 
               <button
                 type="submit"
@@ -12179,7 +12219,27 @@ if (esPortalPadresPublico && !esRolPortal) {
             </button>
 
             {mensajeRegistroPadre && (
-              <p style={styles.message}>{mensajeRegistroPadre}</p>
+              <div
+                style={
+                  String(mensajeRegistroPadre)
+                    .toLowerCase()
+                    .includes("cuenta creada correctamente")
+                    ? {
+                        marginTop: 16,
+                        padding: "12px 14px",
+                        borderRadius: 10,
+                        background: "#ecfdf5",
+                        border: "1px solid #10b981",
+                        color: "#166534",
+                        fontWeight: 800,
+                        lineHeight: 1.45,
+                        textAlign: "center",
+                      }
+                    : styles.message
+                }
+              >
+                {mensajeRegistroPadre}
+              </div>
             )}
           </>
         )}
