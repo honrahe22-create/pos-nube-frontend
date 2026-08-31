@@ -3002,12 +3002,6 @@ const encerarStockProductoAdmin = async (producto) => {
     (s, e) => s + Number(e.stock || 0),
     0
   );
-
-  if (totalActual === 0) {
-    alert(`${producto.nombre} ya tiene stock en 0.`);
-    return;
-  }
-
   const detalle = existenciasProducto.length
     ? existenciasProducto
         .filter((e) => Number(e.stock || 0) !== 0)
@@ -3078,14 +3072,9 @@ const encerarStockSeleccionadosAdmin = async () => {
       .reduce((s,e)=>s+Number(e.stock||0),0);
     return total!==0;
   });
-
-  if(!conStock.length){
-    alert("Todos los productos seleccionados ya tienen stock en 0.");
-    return;
-  }
-
-  const idsConStock=conStock.map((p)=>Number(p.id));
-
+  const idsConStock = conStock.length
+    ? conStock.map((p)=>Number(p.id))
+    : ids;
   const confirmar=window.confirm(
     `¿ENCERAR ${idsConStock.length} producto(s) seleccionado(s)?\n\n`+
     "El servidor verificará que todas sus existencias queden realmente en 0 "+
