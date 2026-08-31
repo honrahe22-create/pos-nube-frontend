@@ -3071,10 +3071,25 @@ const encerarStockSeleccionadosAdmin = async () => {
     return;
   }
 
+  const seleccionados=productos.filter((p)=>ids.includes(Number(p.id)));
+  const conStock=seleccionados.filter((producto)=>{
+    const total=existenciasInventario
+      .filter((e)=>Number(e.producto_id)===Number(producto.id))
+      .reduce((s,e)=>s+Number(e.stock||0),0);
+    return total!==0;
+  });
+
+  if(!conStock.length){
+    alert("Todos los productos seleccionados ya tienen stock en 0.");
+    return;
+  }
+
+  const idsConStock=conStock.map((p)=>Number(p.id));
+
   const confirmar=window.confirm(
-    `¿ENCERAR ${ids.length} producto(s) seleccionado(s)?\n\n`+
-    "Todos quedarán con stock 0 en todas sus ubicaciones. "+
-    "Los ajustes quedarán registrados en movimientos de inventario."
+    `¿ENCERAR ${idsConStock.length} producto(s) seleccionado(s)?\n\n`+
+    "El servidor verificará que todas sus existencias queden realmente en 0 "+
+    "antes de confirmar la operación."
   );
   if(!confirmar)return;
 
@@ -3090,19 +3105,39 @@ const encerarStockSeleccionadosAdmin = async () => {
       },
       body:JSON.stringify({
         institucion_id:Number(institucionId),
-        ids,
+        ids:idsConStock,
         observacion:"Encerado masivo manual desde Existencias actuales",
       }),
     });
 
-    const data=await res.json();
-    if(!res.ok)throw new Error(data.message||data.error||"No se pudo encerar.");
+    let data={};
+    try{data=await res.json();}catch(_e){}
+
+    if(!res.ok){
+      throw new Error(
+        data.message||data.error||"No se pudieron encerar los productos."
+      );
+    }
+
+    if(data.verificado!==true){
+      throw new Error(
+        "El servidor no pudo verificar que todos los stocks quedaran en 0."
+      );
+    }
 
     setProductosStockSeleccionadosBorrar([]);
-    await Promise.all([cargarProductos(),cargarExistenciasInventario()]);
-    alert(`${Number(data.productos_afectados||0)} producto(s) actualizado(s) a stock 0.`);
+
+    // Recarga real desde PostgreSQL, sin caché.
+    await cargarExistenciasInventario();
+    await cargarProductos();
+
+    alert(
+      `${Number(data.productos_afectados||idsConStock.length)} producto(s) `+
+      `encerado(s) y verificado(s) correctamente en stock 0.`
+    );
   }catch(error){
     console.error("Error encerando seleccionados:",error);
+    await cargarExistenciasInventario();
     alert(error.message||"No se pudieron encerar los productos.");
   }
 };
