@@ -2450,10 +2450,13 @@ const importarStockArchivo = (event) => {
       return;
     }
 
-    // Para crear productos nuevos el backend exige una jornada abierta.
-    // Si todos fueran productos existentes, podrían actualizarse sin crear;
-    // pero para una matriz general es mejor detenerse y avisar claramente.
-    if (!jornadaActiva?.id) {
+    // Solo los roles operativos trabajan ligados a una jornada.
+    // ADMIN / SUPER_ADMIN pueden importar y administrar productos sin abrir caja.
+    const rolImportacion = normalizarRol(usuario?.rol);
+    const requiereJornadaImportacion =
+      ["ENCARGADO_LOCAL", "CAJERO"].includes(rolImportacion);
+
+    if (requiereJornadaImportacion && !jornadaActiva?.id) {
       alert(
         "Debes tener una jornada abierta antes de importar productos nuevos."
       );
@@ -2488,14 +2491,14 @@ const importarStockArchivo = (event) => {
         const payload = {
           institucion_id: Number(institucionId),
 
-          // IMPORTANTE:
-          // El backend exige una jornada abierta cuando se CREA un producto.
-          // Antes la importación flexible no enviaba jornada_id, aunque el
-          // administrador sí tuviera una jornada abierta en pantalla.
+          // ENCARGADO_LOCAL / CAJERO envían su jornada.
+          // ADMIN / SUPER_ADMIN administran sin jornada y eligen ubicación.
           ...(existente
             ? {}
             : {
-                jornada_id: Number(jornadaActiva?.id || 0),
+                ...(requiereJornadaImportacion
+                  ? { jornada_id: Number(jornadaActiva?.id || 0) }
+                  : {}),
                 ubicacion_inicial:
                   jornadaActiva?.punto_nombre ||
                   puntoInventarioSeleccionado ||
@@ -4230,13 +4233,17 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
 };
 
 const crearProductoDesdeStock=async(e)=>{
-  e.preventDefault();if(!jornadaActiva?.id)return alert("Debes abrir una jornada.");
+  e.preventDefault();
+  const rolCrearProductoStock=normalizarRol(usuario?.rol);
+  const requiereJornadaCrearProducto=["ENCARGADO_LOCAL","CAJERO"].includes(rolCrearProductoStock);
+  if(requiereJornadaCrearProducto&&!jornadaActiva?.id)return alert("Debes abrir una jornada.");
   const cantidad=Number(nuevoProductoStockForm.cantidad_inicial||0);
   if(!nuevoProductoStockForm.nombre.trim())return alert("Nombre obligatorio.");
   if(!Number.isInteger(cantidad)||cantidad<0)return alert("Cantidad inicial inválida.");
   try{const token=localStorage.getItem("token"),institucionId=obtenerInstitucionActivaId();
     const res=await fetch(`${API_URL}/api/productos`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({
-      institucion_id:Number(institucionId),jornada_id:Number(jornadaActiva.id),
+      institucion_id:Number(institucionId),
+      ...(requiereJornadaCrearProducto?{jornada_id:Number(jornadaActiva?.id||0)}:{}),
       nombre:nuevoProductoStockForm.nombre.trim(),codigo:nuevoProductoStockForm.codigo.trim()||null,
       precio:Number(nuevoProductoStockForm.precio||0),stock:cantidad,stock_minimo:Number(nuevoProductoStockForm.stock_minimo||0),
       categoria:nuevoProductoStockForm.categoria.trim()||null,concepto_inicial:nuevoProductoStockForm.concepto_inicial,
@@ -18310,7 +18317,9 @@ onClick={guardarEgreso}
       }}>
         <div>
           <strong style={{fontSize:18}}>
-            Punto de trabajo: {jornadaActiva?.punto_nombre||"SIN JORNADA"}
+            {["ADMIN","SUPER_ADMIN"].includes(rolActual)
+              ? "Administración: jornada no requerida"
+              : `Punto de trabajo: ${jornadaActiva?.punto_nombre||"SIN JORNADA"}`}
           </strong>
           <div style={{color:"#64748b",marginTop:6}}>
             Operador:{" "}
