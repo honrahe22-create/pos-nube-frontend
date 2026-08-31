@@ -428,6 +428,8 @@ const [cargandoLoginPuntos, setCargandoLoginPuntos] = useState(false);
 const [mostrarRegistroPadrePortal, setMostrarRegistroPadrePortal] = useState(false);
 const [registroPadrePortal, setRegistroPadrePortal] = useState({
   cedula: "",
+  nombres: "",
+  apellidos: "",
   correo: "",
   password: "",
   confirmar_password: "",
@@ -5654,6 +5656,8 @@ const exportarVentasExcel = () => {
     setMensajeRegistroPadre("");
 
     const cedula = String(registroPadrePortal.cedula || "").trim();
+    const nombresRegistro = String(registroPadrePortal.nombres || "").trim();
+    const apellidosRegistro = String(registroPadrePortal.apellidos || "").trim();
     const correoRegistro = String(registroPadrePortal.correo || "")
       .trim()
       .toLowerCase();
@@ -5664,9 +5668,15 @@ const exportarVentasExcel = () => {
       return;
     }
 
-    if (!cedula || !correoRegistro || !passwordRegistro) {
+    if (
+      !cedula ||
+      !nombresRegistro ||
+      !apellidosRegistro ||
+      !correoRegistro ||
+      !passwordRegistro
+    ) {
       setMensajeRegistroPadre(
-        "Cédula, correo y contraseña son obligatorios."
+        "Cédula, nombres, apellidos, correo y contraseña son obligatorios."
       );
       return;
     }
@@ -5697,6 +5707,8 @@ const exportarVentasExcel = () => {
           body: JSON.stringify({
             institucion_id: Number(loginInstitucionId),
             cedula,
+            nombres: nombresRegistro,
+            apellidos: apellidosRegistro,
             correo: correoRegistro,
             password: passwordRegistro,
           }),
@@ -5713,6 +5725,8 @@ const exportarVentasExcel = () => {
       setPassword("");
       setRegistroPadrePortal({
         cedula: "",
+        nombres: "",
+        apellidos: "",
         correo: "",
         password: "",
         confirmar_password: "",
@@ -12032,8 +12046,8 @@ if (esPortalPadresPublico && !esRolPortal) {
               Crear cuenta de padre
             </h2>
             <p style={{ ...styles.subtitle, marginBottom: 18 }}>
-              Tu cédula será tu usuario. Debes constar previamente en la base
-              de representantes cargada por la institución.
+              Crea tu cuenta directamente. Después de iniciar sesión entrarás
+              al Panel de Padres y desde allí podrás vincular a tu hijo.
             </p>
 
             <form onSubmit={handleRegistroPortalPadres} style={styles.form}>
@@ -12067,7 +12081,37 @@ if (esPortalPadresPublico && !esRolPortal) {
                 required
               />
 
-              <label style={styles.label}>Correo registrado</label>
+              <label style={styles.label}>Nombres del representante</label>
+              <input
+                type="text"
+                value={registroPadrePortal.nombres}
+                onChange={(e) =>
+                  setRegistroPadrePortal({
+                    ...registroPadrePortal,
+                    nombres: e.target.value,
+                  })
+                }
+                style={styles.input}
+                placeholder="Nombres"
+                required
+              />
+
+              <label style={styles.label}>Apellidos del representante</label>
+              <input
+                type="text"
+                value={registroPadrePortal.apellidos}
+                onChange={(e) =>
+                  setRegistroPadrePortal({
+                    ...registroPadrePortal,
+                    apellidos: e.target.value,
+                  })
+                }
+                style={styles.input}
+                placeholder="Apellidos"
+                required
+              />
+
+              <label style={styles.label}>Correo electrónico</label>
               <input
                 type="email"
                 value={registroPadrePortal.correo}
@@ -12078,7 +12122,7 @@ if (esPortalPadresPublico && !esRolPortal) {
                   })
                 }
                 style={styles.input}
-                placeholder="Debe coincidir con el registrado por la institución"
+                placeholder="Correo para ingresar al Portal"
                 required
               />
 
