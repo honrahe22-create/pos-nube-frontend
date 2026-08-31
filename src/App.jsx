@@ -15364,8 +15364,45 @@ onClick={guardarEgreso}
     )}
 
     {mostrarFormularioProducto && (
-      <div style={{ ...styles.box, marginBottom: 20 }}>
-        <div style={styles.pageHeaderSmall}>
+      <>
+        <div
+          onClick={() => {
+            setMostrarFormularioProducto(false);
+            setProductoEditando(null);
+          }}
+          style={{
+            position:"fixed",
+            inset:0,
+            background:"rgba(15,23,42,0.28)",
+            zIndex:1198,
+          }}
+        />
+        <div
+          style={{
+            ...styles.box,
+            position:"fixed",
+            top:esPantallaCompacta?18:24,
+            left:esPantallaCompacta?12:292,
+            right:esPantallaCompacta?12:24,
+            zIndex:1199,
+            margin:0,
+            maxHeight:"calc(100vh - 48px)",
+            overflowY:"auto",
+            boxShadow:"0 22px 60px rgba(15,23,42,0.28)",
+            border:"1px solid #dbe3ee",
+          }}
+        >
+        <div
+          style={{
+            ...styles.pageHeaderSmall,
+            position:"sticky",
+            top:0,
+            zIndex:2,
+            background:"#fff",
+            paddingBottom:12,
+            borderBottom:"1px solid #e5e7eb",
+          }}
+        >
           <h2 style={{ margin: 0 }}>
             {productoEditando ? "Editar alimento" : "Crear alimento"}
           </h2>
@@ -15480,6 +15517,7 @@ onClick={guardarEgreso}
           </div>
         </form>
       </div>
+      </>
     )}
 
     <div style={styles.box}>
