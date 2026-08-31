@@ -1471,12 +1471,16 @@ const recargasFiltradas = useMemo(() => {
       const tipo = (recarga.tipo_visual || "").toLowerCase();
       const observacion = (recarga.observacion || "").toLowerCase();
       const documento = String(recarga.documento_visual || "").toLowerCase();
+      const numeroOrden = String(recarga.id || "").toLowerCase();
+      const numeroOrdenConPrefijo = `#${numeroOrden}`;
 
       return (
         nombre.includes(texto) ||
         tipo.includes(texto) ||
         observacion.includes(texto) ||
-        documento.includes(texto)
+        documento.includes(texto) ||
+        numeroOrden.includes(texto.replace(/^#/, "")) ||
+        numeroOrdenConPrefijo.includes(texto)
       );
     });
   }
@@ -11637,25 +11641,107 @@ Disponible: ${formatearMoneda(
     });
 
   const eliminarVentasSeleccionadas = async () => {
-    if (!ventasSeleccionadasBorrar.length) return alert("Selecciona al menos una venta.");
-    if (!window.confirm(`¿Eliminar ${ventasSeleccionadasBorrar.length} venta(s) seleccionada(s)? El sistema devolverá el stock y corregirá saldo/crédito automáticamente.`)) return;
+    const ids = [...new Set((ventasSeleccionadasBorrar || []).map(Number).filter(Boolean))];
+
+    if (!ids.length) {
+      return alert("Selecciona al menos una venta.");
+    }
+
+    if (
+      !window.confirm(
+        `¿Eliminar ${ids.length} venta(s) seleccionada(s)?\n\n` +
+        "El sistema procesará cada venta por separado. Las ventas que tengan " +
+        "pagos/créditos relacionados se conservarán y se informarán al final."
+      )
+    ) {
+      return;
+    }
 
     try {
       setEliminandoPruebas(true);
+
       const token = localStorage.getItem("token");
       const institucionId = obtenerInstitucionActivaId();
-      const respuesta = await fetch(`${API_URL}/api/ventas/eliminar-seleccionadas`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ institucion_id: Number(institucionId), ids: ventasSeleccionadasBorrar }),
-      });
-      const data = await respuesta.json();
-      if (!respuesta.ok) throw new Error(data.message || "No se pudieron eliminar las ventas seleccionadas");
-      setVentasSeleccionadasBorrar([]);
-      await Promise.all([cargarVentas(), cargarProductos(), cargarAlumnos(), cargarProfesores()]);
-      alert(data.message || "Ventas eliminadas correctamente.");
+
+      let eliminadas = [];
+      let bloqueadas = [];
+
+      for (const id of ids) {
+        try {
+          const respuesta = await fetch(
+            `${API_URL}/api/ventas/eliminar-seleccionadas`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                institucion_id: Number(institucionId),
+                ids: [Number(id)],
+              }),
+            }
+          );
+
+          const data = await respuesta.json().catch(() => ({}));
+
+          if (!respuesta.ok) {
+            bloqueadas.push({
+              id: Number(id),
+              motivo:
+                data.message ||
+                data.error ||
+                "No se pudo eliminar esta venta.",
+            });
+            continue;
+          }
+
+          eliminadas.push(Number(id));
+        } catch (errorVenta) {
+          bloqueadas.push({
+            id: Number(id),
+            motivo:
+              errorVenta.message ||
+              "No se pudo eliminar esta venta.",
+          });
+        }
+      }
+
+      setVentasSeleccionadasBorrar(
+        bloqueadas.map((item) => Number(item.id))
+      );
+
+      await Promise.all([
+        cargarVentas(),
+        cargarProductos(),
+        cargarAlumnos(),
+        cargarProfesores(),
+      ]);
+
+      let mensaje =
+        `Proceso terminado.\n\n` +
+        `Ventas eliminadas: ${eliminadas.length}\n` +
+        `Ventas pendientes: ${bloqueadas.length}`;
+
+      if (bloqueadas.length) {
+        mensaje +=
+          `\n\nPendientes:\n` +
+          bloqueadas
+            .slice(0, 10)
+            .map((item) => `#${item.id}: ${item.motivo}`)
+            .join("\n");
+
+        if (bloqueadas.length > 10) {
+          mensaje += `\n... y ${bloqueadas.length - 10} más.`;
+        }
+      }
+
+      alert(mensaje);
     } catch (error) {
-      alert(error.message || "No se pudieron eliminar las ventas seleccionadas.");
+      alert(
+        error.message ||
+        "No se pudieron procesar las ventas seleccionadas."
+      );
     } finally {
       setEliminandoPruebas(false);
     }
@@ -20220,6 +20306,22 @@ onClick={guardarEgreso}
     <div style={styles.box}>
       <div style={styles.filtersGridPaymon}>
 
+        <div style={styles.filterFieldWide}>
+          <label style={styles.filterLabelTop}>Buscar recarga</label>
+          <input
+            type="text"
+            value={recargasFiltros.texto}
+            onChange={(e) =>
+              setRecargasFiltros({
+                ...recargasFiltros,
+                texto: e.target.value,
+              })
+            }
+            style={styles.searchInput}
+            placeholder="Orden #, nombre, comprobante..."
+          />
+        </div>
+
         <div style={styles.filterField}>
           <label style={styles.filterLabelTop}>Fecha inicial</label>
           <input
@@ -20381,6 +20483,7 @@ onClick={guardarEgreso}
                 {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
                   <th style={styles.th}>Seleccionar</th>
                 )}
+                <th style={styles.th}>Orden</th>
                 <th style={styles.th}>Fecha</th>
                 <th style={styles.th}>Nombre</th>
                 <th style={styles.th}>Entregado</th>
@@ -20412,6 +20515,10 @@ onClick={guardarEgreso}
                       />
                     </td>
                   )}
+
+                  <td style={{...styles.td,fontWeight:800}}>
+                    #{r.id}
+                  </td>
 
                   <td style={styles.td}>
                     {formatearFechaHora(r.fecha_base)}
