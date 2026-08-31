@@ -3056,6 +3056,57 @@ const encerarStockProductoAdmin = async (producto) => {
   }
 };
 
+
+const encerarStockSeleccionadosAdmin = async () => {
+  if (!["ADMIN","SUPER_ADMIN"].includes(rolActual)) return;
+
+  const ids=[...new Set(
+    (productosStockSeleccionadosBorrar||[])
+      .map(Number)
+      .filter((id)=>Number.isInteger(id)&&id>0)
+  )];
+
+  if(!ids.length){
+    alert("Selecciona al menos un producto.");
+    return;
+  }
+
+  const confirmar=window.confirm(
+    `¿ENCERAR ${ids.length} producto(s) seleccionado(s)?\n\n`+
+    "Todos quedarán con stock 0 en todas sus ubicaciones. "+
+    "Los ajustes quedarán registrados en movimientos de inventario."
+  );
+  if(!confirmar)return;
+
+  try{
+    const token=localStorage.getItem("token");
+    const institucionId=obtenerInstitucionActivaId();
+
+    const res=await fetch(`${API_URL}/api/inventario/encerar-seleccionados`,{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        Authorization:`Bearer ${token}`,
+      },
+      body:JSON.stringify({
+        institucion_id:Number(institucionId),
+        ids,
+        observacion:"Encerado masivo manual desde Existencias actuales",
+      }),
+    });
+
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.message||data.error||"No se pudo encerar.");
+
+    setProductosStockSeleccionadosBorrar([]);
+    await Promise.all([cargarProductos(),cargarExistenciasInventario()]);
+    alert(`${Number(data.productos_afectados||0)} producto(s) actualizado(s) a stock 0.`);
+  }catch(error){
+    console.error("Error encerando seleccionados:",error);
+    alert(error.message||"No se pudieron encerar los productos.");
+  }
+};
+
 const desactivarProducto = async (productoId) => {
   setProductos((prev) =>
     prev.map((p) =>
@@ -19806,6 +19857,25 @@ onClick={guardarEgreso}
                 }
               >
                 {todosMarcados ? "Quitar selección" : "Seleccionar todo"}
+              </button>
+
+              <button
+                type="button"
+                style={{
+                  ...styles.outlineButton,
+                  padding:"7px 10px",
+                  minWidth:44,
+                  fontSize:13,
+                  whiteSpace:"nowrap",
+                }}
+                disabled={
+                  eliminandoProductosPrueba ||
+                  productosStockSeleccionadosBorrar.length === 0
+                }
+                onClick={encerarStockSeleccionadosAdmin}
+                title={`Encerar ${productosStockSeleccionadosBorrar.length} producto(s) seleccionado(s)`}
+              >
+                ✏️ Encerar {productosStockSeleccionadosBorrar.length}
               </button>
 
               <button
