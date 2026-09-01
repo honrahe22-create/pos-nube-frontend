@@ -8865,7 +8865,7 @@ if (institucionIdLogin) {
         apellidos: alumnoForm.apellidos,
         curso: alumnoForm.curso,
         paralelo: alumnoForm.paralelo,
-        saldo: Number(alumnoForm.saldo || 0),
+        // saldo no se envía: todo alumno nuevo inicia en $0.00,
       };
 
       const res = await fetch(`${API_URL}/api/alumnos`, {
@@ -8913,7 +8913,7 @@ if (institucionIdLogin) {
         apellidos: alumnoForm.apellidos,
         curso: alumnoForm.curso,
         paralelo: alumnoForm.paralelo,
-        saldo: Number(alumnoForm.saldo || 0),
+        // saldo no se envía: el saldo solo cambia mediante recargas/consumos,
       };
 
       const res = await fetch(`${API_URL}/api/alumnos/${editandoAlumnoId}`, {
@@ -8949,7 +8949,7 @@ if (institucionIdLogin) {
       apellidos: alumno.apellidos || "",
       curso: alumno.curso || "",
       paralelo: alumno.paralelo || "",
-      saldo: alumno.saldo ?? "",
+      saldo: "",
     });
     setVista("alumnos");
   };

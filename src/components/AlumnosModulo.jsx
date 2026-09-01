@@ -1248,6 +1248,66 @@ export default function AlumnosModulo({
     }
   };
 
+  const corregirSaldoHuerfanoCero = async () => {
+    if (!alumnoDetalle?.id) return;
+
+    const saldoActual = Number(alumnoDetalle.saldo || 0);
+
+    if (saldoActual <= 0) {
+      alert("El alumno ya tiene saldo $0.00.");
+      return;
+    }
+
+    const confirmado = window.confirm(
+      `¿Corregir el saldo de ${alumnoDetalle.nombres || "este alumno"} de ${formatearMoneda(
+        saldoActual
+      )} a $0.00?\n\nEsta opción solo funciona si NO existen recargas válidas registradas para el alumno.`
+    );
+
+    if (!confirmado) return;
+
+    try {
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      const respuesta = await fetch(
+        `${API_URL}/api/alumnos/${alumnoDetalle.id}/corregir-saldo-cero`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            institucion_id: Number(institucionId),
+          }),
+        }
+      );
+
+      const data = await respuesta.json().catch(() => ({}));
+
+      if (!respuesta.ok) {
+        throw new Error(
+          data.message || data.error || "No se pudo corregir el saldo"
+        );
+      }
+
+      setAlumnoDetalle((actual) => ({
+        ...(actual || {}),
+        ...(data.alumno || {}),
+        saldo: 0,
+      }));
+
+      await cargarAlumnos();
+      if (typeof cargarRecargas === "function") await cargarRecargas();
+
+      alert(data.message || "Saldo corregido a $0.00 correctamente.");
+    } catch (error) {
+      console.error("Error corrigiendo saldo:", error);
+      alert(error.message || "No se pudo corregir el saldo.");
+    }
+  };
+
   return (
   <>
     {mostrarModalRecarga && alumnoDetalle && (
@@ -1645,6 +1705,26 @@ export default function AlumnosModulo({
               >
                 Recargar
               </button>
+              {["ADMIN", "SUPER_ADMIN"].includes(String(rolActual || "").toUpperCase()) &&
+                Number(alumnoDetalle.saldo || 0) > 0 && (
+                  <button
+                    type="button"
+                    onClick={corregirSaldoHuerfanoCero}
+                    style={{
+                      marginTop: 10,
+                      width: "100%",
+                      minHeight: 42,
+                      borderRadius: 10,
+                      border: "1px solid #dc2626",
+                      background: "#fff",
+                      color: "#dc2626",
+                      fontWeight: 800,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Corregir saldo sin recarga a $0
+                  </button>
+                )}
             </div>
           </div>
 
@@ -2218,7 +2298,6 @@ export default function AlumnosModulo({
           <input type="text" placeholder="Apellidos" value={alumnoForm.apellidos} onChange={(e) => setAlumnoForm({ ...alumnoForm, apellidos: e.target.value })} style={styles.input} required />
           <input type="text" placeholder="Curso" value={alumnoForm.curso} onChange={(e) => setAlumnoForm({ ...alumnoForm, curso: e.target.value })} style={styles.input} />
           <input type="text" placeholder="Paralelo" value={alumnoForm.paralelo} onChange={(e) => setAlumnoForm({ ...alumnoForm, paralelo: e.target.value })} style={styles.input} />
-          <input type="number" step="0.01" placeholder="Saldo inicial" value={alumnoForm.saldo} onChange={(e) => setAlumnoForm({ ...alumnoForm, saldo: e.target.value })} style={styles.input} />
 
           <button type="submit" style={{ ...styles.button, minHeight: 48 }}>
             {editandoAlumnoId ? "Actualizar alumno" : "Guardar alumno"}
