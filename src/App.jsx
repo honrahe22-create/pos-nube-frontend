@@ -1209,6 +1209,7 @@ const [egresosFiltros, setEgresosFiltros] = useState({
 });
 
 const [egresosDiarios, setEgresosDiarios] = useState([]);
+const [egresosSeleccionadosBorrar, setEgresosSeleccionadosBorrar] = useState([]);
 const [mostrarCrearEgreso, setMostrarCrearEgreso] = useState(false);
 const [editandoEgresoId, setEditandoEgresoId] = useState(null);
 const [cierresCaja, setCierresCaja] = useState([]);
@@ -10962,7 +10963,11 @@ Disponible: ${formatearMoneda(
       });
       const data = await respuesta.json();
       if (!respuesta.ok) throw new Error(data.message || data.error || "No se pudieron cargar los egresos");
-      setEgresosDiarios(Array.isArray(data) ? data : []);
+      const listaEgresos = Array.isArray(data) ? data : [];
+      setEgresosDiarios(listaEgresos);
+      setEgresosSeleccionadosBorrar((actuales) =>
+        actuales.filter((id) => listaEgresos.some((egreso) => Number(egreso.id) === Number(id)))
+      );
     } catch (error) {
       console.error("Error cargando egresos:", error);
       alert(error.message || "No se pudieron cargar los egresos.");
@@ -11243,8 +11248,15 @@ Disponible: ${formatearMoneda(
     }
   };
 
+  const esAdminEgresos =
+    ["ADMIN", "SUPER_ADMIN"].includes(normalizarRol(usuario?.rol));
+
   const eliminarEgreso = async (egreso) => {
-    if (!window.confirm("¿Deseas eliminar este egreso?")) return;
+    if (!esAdminEgresos) {
+      alert("Solo ADMIN puede eliminar egresos.");
+      return;
+    }
+    if (!window.confirm("¿Deseas eliminar este egreso de prueba?")) return;
     try {
       const token = localStorage.getItem("token");
       const institucionId = obtenerInstitucionActivaId();
@@ -11258,9 +11270,86 @@ Disponible: ${formatearMoneda(
       });
       const data = await respuesta.json();
       if (!respuesta.ok) throw new Error(data.message || data.error || "No se pudo eliminar");
+      setEgresosSeleccionadosBorrar((actuales) =>
+        actuales.filter((id) => Number(id) !== Number(egreso.id))
+      );
       await cargarEgresos();
     } catch (error) {
       alert(error.message || "No se pudo eliminar el egreso.");
+    }
+  };
+
+  const alternarEgresoSeleccionadoBorrar = (id) => {
+    if (!esAdminEgresos) return;
+    const numero = Number(id);
+    setEgresosSeleccionadosBorrar((actuales) =>
+      actuales.some((actual) => Number(actual) === numero)
+        ? actuales.filter((actual) => Number(actual) !== numero)
+        : [...actuales, numero]
+    );
+  };
+
+  const seleccionarTodosEgresosVisibles = () => {
+    if (!esAdminEgresos) return;
+    const idsVisibles = obtenerEgresosFiltrados().map((egreso) => Number(egreso.id));
+    const todosMarcados =
+      idsVisibles.length > 0 &&
+      idsVisibles.every((id) =>
+        egresosSeleccionadosBorrar.some((actual) => Number(actual) === id)
+      );
+
+    setEgresosSeleccionadosBorrar((actuales) => {
+      if (todosMarcados) {
+        return actuales.filter((id) => !idsVisibles.includes(Number(id)));
+      }
+      return Array.from(new Set([...actuales.map(Number), ...idsVisibles]));
+    });
+  };
+
+  const eliminarEgresosSeleccionados = async () => {
+    if (!esAdminEgresos) {
+      alert("Solo ADMIN puede eliminar egresos.");
+      return;
+    }
+
+    const ids = Array.from(
+      new Set(egresosSeleccionadosBorrar.map(Number).filter((id) => id > 0))
+    );
+    if (!ids.length) {
+      alert("Selecciona al menos un egreso.");
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `¿Eliminar ${ids.length} egreso(s) seleccionado(s)? Esta acción es solo para limpiar registros de prueba.`
+      )
+    ) return;
+
+    try {
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+      const respuesta = await fetch(`${API_URL}/api/egresos/eliminar-seleccionados`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          institucion_id: Number(institucionId),
+          ids,
+        }),
+      });
+      const data = await respuesta.json();
+      if (!respuesta.ok) {
+        throw new Error(data.message || data.error || "No se pudieron eliminar los egresos");
+      }
+
+      setEgresosSeleccionadosBorrar([]);
+      await cargarEgresos();
+      alert(`${Number(data.eliminados || ids.length)} egreso(s) eliminado(s) correctamente.`);
+    } catch (error) {
+      alert(error.message || "No se pudieron eliminar los egresos seleccionados.");
     }
   };
 
@@ -15287,12 +15376,35 @@ onClick={guardarEgreso}
       >
         EXPORTAR PDF
       </button>
+
+      {esAdminEgresos && (
+        <>
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={seleccionarTodosEgresosVisibles}
+          >
+            Seleccionar todo
+          </button>
+
+          <button
+            type="button"
+            style={styles.deleteIconButton}
+            disabled={!egresosSeleccionadosBorrar.length}
+            onClick={eliminarEgresosSeleccionados}
+            title="Eliminar egresos seleccionados"
+          >
+            🗑️ {egresosSeleccionadosBorrar.length || ""}
+          </button>
+        </>
+      )}
     </div>
 
     <div style={{ marginTop: 20, overflowX: "auto" }}>
       <table style={styles.table}>
         <thead>
           <tr>
+            {esAdminEgresos && <th style={styles.th}>Sel.</th>}
             <th style={styles.th}>Local</th>
             <th style={styles.th}>Fecha</th>
             <th style={styles.th}>Nombre del proveedor</th>
@@ -15329,6 +15441,18 @@ onClick={guardarEgreso}
             })
             .map((egreso) => (
               <tr key={egreso.id}>
+                {esAdminEgresos && (
+                  <td style={styles.td}>
+                    <input
+                      type="checkbox"
+                      checked={egresosSeleccionadosBorrar.some(
+                        (id) => Number(id) === Number(egreso.id)
+                      )}
+                      onChange={() => alternarEgresoSeleccionadoBorrar(egreso.id)}
+                      aria-label={`Seleccionar egreso ${egreso.id}`}
+                    />
+                  </td>
+                )}
                 <td style={styles.td}>{egreso.negocio}</td>
                 <td style={styles.td}>{formatearSoloFecha(egreso.fecha)}</td>
                 <td style={styles.td}>{egreso.nombre_egreso}</td>
@@ -15375,12 +15499,15 @@ onClick={guardarEgreso}
                         ✎
                       </button>
 
-                      <button
-                        style={styles.deleteIconButton}
-                        onClick={() => eliminarEgreso(egreso)}
-                      >
-                        🗑
-                      </button>
+                      {esAdminEgresos && (
+                        <button
+                          style={styles.deleteIconButton}
+                          onClick={() => eliminarEgreso(egreso)}
+                          title="Eliminar egreso"
+                        >
+                          🗑
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <span style={{ color: "#64748b" }}>Solo consulta</span>
