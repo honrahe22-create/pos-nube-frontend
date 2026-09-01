@@ -4314,6 +4314,7 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
           body:JSON.stringify({
             institucion_id:Number(institucionId),
             jornada_id:Number(jornadaActiva?.id),
+            ubicacion_operacion:String(puntoInventarioSeleccionado||jornadaActiva?.punto_nombre||"PRINCIPAL"),
             tipo_egreso:confirmacionActual.tipo,
             destinatario_cortesia:
               confirmacionActual.tipo==="CORTESIA"
