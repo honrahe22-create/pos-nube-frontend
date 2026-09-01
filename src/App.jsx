@@ -436,6 +436,15 @@ const [registroPadrePortal, setRegistroPadrePortal] = useState({
 });
 const [mensajeRegistroPadre, setMensajeRegistroPadre] = useState("");
 const [cargandoRegistroPadre, setCargandoRegistroPadre] = useState(false);
+const [eventoInstalacionPadres, setEventoInstalacionPadres] = useState(null);
+const [appPadresInstalada, setAppPadresInstalada] = useState(() => {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia?.("(display-mode: standalone)")?.matches ||
+    window.navigator?.standalone === true
+  );
+});
+const [mensajeInstalacionPadres, setMensajeInstalacionPadres] = useState("");
 const clicksAccesoAdminPadresRef = useRef({ cantidad: 0, ultimoClick: 0 });
 const [esPantallaCompacta, setEsPantallaCompacta] = useState(() =>
   detectarPantallaCompacta()
@@ -470,9 +479,12 @@ useEffect(() => {
 }, []);
 
 
-// PWA POS NUBE
+// PWA POS NUBE / PORTAL DE PADRES
 useEffect(() => {
   if (typeof document === "undefined" || typeof window === "undefined") return;
+
+  const paramsPwa = new URLSearchParams(window.location.search);
+  const esPortalPadresPwa = paramsPwa.get("portal") === "padres";
 
   let manifestLink = document.querySelector('link[rel="manifest"]');
   if (!manifestLink) {
@@ -480,49 +492,51 @@ useEffect(() => {
     manifestLink.setAttribute("rel", "manifest");
     document.head.appendChild(manifestLink);
   }
-  manifestLink.setAttribute("href", "/manifest.webmanifest");
+
+  manifestLink.setAttribute(
+    "href",
+    esPortalPadresPwa
+      ? "/manifest-padres.webmanifest?v=1"
+      : "/manifest.webmanifest?v=1"
+  );
+
+  document.title = esPortalPadresPwa ? "POS NUBE Padres" : "POS NUBE";
 
   const asegurarMeta = (selector, atributos) => {
     let meta = document.querySelector(selector);
     if (!meta) {
       meta = document.createElement("meta");
-      Object.entries(atributos).forEach(([clave, valor]) => {
-        meta.setAttribute(clave, valor);
-      });
       document.head.appendChild(meta);
-    } else {
-      Object.entries(atributos).forEach(([clave, valor]) => {
-        meta.setAttribute(clave, valor);
-      });
     }
+    Object.entries(atributos).forEach(([clave, valor]) => {
+      meta.setAttribute(clave, valor);
+    });
   };
 
-  asegurarMeta('meta[name="theme-color"]', {
-    name: "theme-color",
-    content: "#1d4ed8",
-  });
-  asegurarMeta('meta[name="mobile-web-app-capable"]', {
-    name: "mobile-web-app-capable",
-    content: "yes",
-  });
-  asegurarMeta('meta[name="apple-mobile-web-app-capable"]', {
-    name: "apple-mobile-web-app-capable",
-    content: "yes",
-  });
-  asegurarMeta('meta[name="apple-mobile-web-app-status-bar-style"]', {
-    name: "apple-mobile-web-app-status-bar-style",
-    content: "black-translucent",
-  });
+  const asegurarLink = (selector, atributos) => {
+    let link = document.querySelector(selector);
+    if (!link) {
+      link = document.createElement("link");
+      document.head.appendChild(link);
+    }
+    Object.entries(atributos).forEach(([clave, valor]) => {
+      link.setAttribute(clave, valor);
+    });
+  };
+
+  asegurarMeta('meta[name="theme-color"]', { name: "theme-color", content: "#1d4ed8" });
+  asegurarMeta('meta[name="mobile-web-app-capable"]', { name: "mobile-web-app-capable", content: "yes" });
+  asegurarMeta('meta[name="apple-mobile-web-app-capable"]', { name: "apple-mobile-web-app-capable", content: "yes" });
+  asegurarMeta('meta[name="apple-mobile-web-app-status-bar-style"]', { name: "apple-mobile-web-app-status-bar-style", content: "default" });
   asegurarMeta('meta[name="apple-mobile-web-app-title"]', {
     name: "apple-mobile-web-app-title",
-    content: "POS NUBE",
+    content: esPortalPadresPwa ? "POS NUBE Padres" : "POS NUBE",
   });
+  asegurarLink('link[rel="apple-touch-icon"]', { rel: "apple-touch-icon", href: "/pwa-icon-192.png" });
 
   if ("serviceWorker" in navigator) {
     const registrar = async () => {
       try {
-        // Limpia cualquier caché PWA vieja que pueda apuntar a bundles
-        // de Vite que ya no existen después de un deploy de Render.
         if ("caches" in window) {
           const claves = await caches.keys();
           await Promise.all(
@@ -531,30 +545,72 @@ useEffect(() => {
               .map((clave) => caches.delete(clave))
           );
         }
-
-        const registro = await navigator.serviceWorker.register(
-          "/sw.js?v=8",
-          { scope: "/" }
-        );
-
-        if (registro?.update) {
-          registro.update().catch(() => {});
-        }
-
+        const registro = await navigator.serviceWorker.register("/sw.js?v=9", { scope: "/" });
+        if (registro?.update) registro.update().catch(() => {});
         console.log("POS NUBE PWA activa:", registro.scope);
       } catch (error) {
         console.error("No se pudo registrar la PWA:", error);
       }
     };
-
-    if (document.readyState === "complete") {
-      registrar();
-    } else {
-      window.addEventListener("load", registrar, { once: true });
-    }
+    if (document.readyState === "complete") registrar();
+    else window.addEventListener("load", registrar, { once: true });
   }
 }, []);
 
+useEffect(() => {
+  if (typeof window === "undefined") return undefined;
+
+  const capturarInstalacion = (event) => {
+    event.preventDefault();
+    setEventoInstalacionPadres(event);
+    setMensajeInstalacionPadres("");
+  };
+  const confirmarInstalacion = () => {
+    setAppPadresInstalada(true);
+    setEventoInstalacionPadres(null);
+    setMensajeInstalacionPadres("App de Padres instalada correctamente.");
+  };
+
+  window.addEventListener("beforeinstallprompt", capturarInstalacion);
+  window.addEventListener("appinstalled", confirmarInstalacion);
+  return () => {
+    window.removeEventListener("beforeinstallprompt", capturarInstalacion);
+    window.removeEventListener("appinstalled", confirmarInstalacion);
+  };
+}, []);
+
+const instalarAppPadres = async () => {
+  if (appPadresInstalada) {
+    setMensajeInstalacionPadres("La App de Padres ya está instalada.");
+    return;
+  }
+
+  if (eventoInstalacionPadres) {
+    try {
+      await eventoInstalacionPadres.prompt();
+      const eleccion = await eventoInstalacionPadres.userChoice;
+      setMensajeInstalacionPadres(
+        eleccion?.outcome === "accepted"
+          ? "Instalando POS NUBE Padres..."
+          : "Instalación cancelada."
+      );
+      setEventoInstalacionPadres(null);
+      return;
+    } catch (error) {
+      console.error("No se pudo mostrar la instalación PWA:", error);
+    }
+  }
+
+  const esIOS =
+    /iphone|ipad|ipod/i.test(window.navigator.userAgent || "") &&
+    !window.MSStream;
+
+  setMensajeInstalacionPadres(
+    esIOS
+      ? "En iPhone/iPad: toca Compartir y luego “Añadir a pantalla de inicio”."
+      : "En el menú del navegador selecciona “Instalar app” o “Añadir a pantalla de inicio”."
+  );
+};
 
 const registrarClickAccesoAdminPadres = () => {
   const ahora = Date.now();
@@ -11970,6 +12026,43 @@ if (esPortalPadresPublico && !esRolPortal) {
           >
             Consulta saldo, consumos y recargas de tus hijos.
           </p>
+
+          {!appPadresInstalada && (
+            <button
+              type="button"
+              onClick={instalarAppPadres}
+              style={{
+                marginTop: 14,
+                padding: "10px 15px",
+                borderRadius: 12,
+                border: "1px solid #bfdbfe",
+                background: "#eff6ff",
+                color: "#1d4ed8",
+                fontWeight: 800,
+                cursor: "pointer",
+              }}
+            >
+              📲 Instalar POS NUBE Padres
+            </button>
+          )}
+
+          {mensajeInstalacionPadres && (
+            <div
+              style={{
+                marginTop: 10,
+                padding: "9px 11px",
+                borderRadius: 10,
+                background: "#f0fdf4",
+                border: "1px solid #bbf7d0",
+                color: "#166534",
+                fontSize: 13,
+                fontWeight: 700,
+                lineHeight: 1.4,
+              }}
+            >
+              {mensajeInstalacionPadres}
+            </div>
+          )}
         </div>
 
         {!mostrarRegistroPadrePortal ? (

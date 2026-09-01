@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "pos-nube-pwa-";
-const CACHE_VERSION = "v8";
+const CACHE_VERSION = "v9";
 
 self.addEventListener("install", function () {
   self.skipWaiting();
@@ -10,9 +10,7 @@ self.addEventListener("activate", function (event) {
     caches.keys().then(function (keys) {
       return Promise.all(
         keys.map(function (key) {
-          if (String(key).indexOf(CACHE_PREFIX) === 0) {
-            return caches.delete(key);
-          }
+          if (String(key).indexOf(CACHE_PREFIX) === 0) return caches.delete(key);
           return Promise.resolve();
         })
       );
@@ -22,15 +20,11 @@ self.addEventListener("activate", function (event) {
   );
 });
 
-// PWA online segura:
-// el Service Worker existe para instalación/standalone,
-// pero NO cachea index.html ni bundles JS/CSS de Vite.
-// Así cada deploy de Render usa siempre los archivos actuales.
+// PWA online segura: no conserva index.html ni bundles antiguos de Vite.
 self.addEventListener("fetch", function (event) {
   if (event.request.method !== "GET") return;
-
   event.respondWith(
-    fetch(event.request).catch(function () {
+    fetch(event.request, { cache: "no-store" }).catch(function () {
       return Response.error();
     })
   );
