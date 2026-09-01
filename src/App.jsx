@@ -10650,7 +10650,7 @@ if (institucionIdLogin) {
         profesorVentaSeleccionado.saldo || 0
       );
 
-      if (saldoFavorProfesor > 0.0001) {
+      if (false && saldoFavorProfesor > 0.0001) {
         alert(
           `El crédito del profesor está bloqueado mientras exista saldo a favor.\nSaldo disponible: ${formatearMoneda(
             saldoFavorProfesor
@@ -22171,8 +22171,8 @@ onClick={guardarEgreso}
                   // la identificación filtrada por profesores.
                   if (nuevoMetodo === "CREDITO_PROFESOR") {
                     if (
-                      profesorVentaSeleccionado &&
-                      Number(profesorVentaSeleccionado.saldo || 0) > 0.0001
+                      false &&
+                      Number(profesorVentaSeleccionado?.saldo || 0) > 0.0001
                     ) {
                       alert(
                         `El crédito del profesor se habilita únicamente cuando su saldo a favor llegue a $0.00.\nSaldo actual: ${formatearMoneda(
@@ -22231,11 +22231,11 @@ onClick={guardarEgreso}
                     value="CREDITO_PROFESOR"
                     disabled={
                       profesorVentaSeleccionado.credito_habilitado !== true ||
-                      Number(profesorVentaSeleccionado.saldo || 0) > 0.0001
+                      false
                     }
                   >
-                    {Number(profesorVentaSeleccionado.saldo || 0) > 0.0001
-                      ? `Crédito del profesor (bloqueado: saldo ${formatearMoneda(
+                    {false && Number(profesorVentaSeleccionado.saldo || 0) > 0.0001
+                      ? `Crédito del profesor (saldo ${formatearMoneda(
                           profesorVentaSeleccionado.saldo || 0
                         )})`
                       : profesorVentaSeleccionado.credito_habilitado === true
@@ -22259,7 +22259,7 @@ onClick={guardarEgreso}
                       lineHeight: 1.4,
                     }}
                   >
-                    Crédito del profesor bloqueado mientras tenga saldo a favor.
+                    Saldo a favor del profesor disponible.
                     Saldo actual:{" "}
                     {formatearMoneda(profesorVentaSeleccionado.saldo || 0)}
                   </div>
