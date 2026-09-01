@@ -2967,15 +2967,28 @@ const stockProductoEnPunto = (productoId, ubicacion) => {
     );
   }
 
-  // IMPORTANTE: Nueva Orden y Stock deben mostrar exactamente la existencia
-  // real por ubicación que usa el backend al vender. productos.stock es un
-  // total/compatibilidad histórica y no puede usarse como stock de PRINCIPAL.
+  // Compatibilidad segura:
+  // si el producto todavía no tiene NINGUNA fila real por ubicación,
+  // productos.stock representa su stock legacy y se muestra en PRINCIPAL.
+  // Si ya existe cualquier fila por punto (BAR/KIOSKO/PRINCIPAL), no usamos
+  // productos.stock como fallback para evitar inventar o duplicar stock.
+  const filasProducto = existenciasInventario.filter(
+    (item) => Number(item.producto_id) === Number(productoId)
+  );
+
+  if (punto === "PRINCIPAL" && filasProducto.length === 0) {
+    const producto = productos.find(
+      (p) => Number(p.id) === Number(productoId)
+    );
+    return Number(producto?.stock || 0);
+  }
+
   return 0;
 };
 
 const resumenStockPorPuntos = (producto) => {
   const filas = existenciasDeProducto(producto.id);
-  if (!filas.length) return "PRINCIPAL: 0";
+  if (!filas.length) return `PRINCIPAL: ${Number(producto.stock || 0)}`;
 
   const detalle = filas
     .filter((fila) => Number(fila.stock || 0) !== 0 || fila.ubicacion === "PRINCIPAL")
