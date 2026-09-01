@@ -2953,34 +2953,44 @@ const existenciasDeProducto = (productoId) =>
 const stockProductoEnPunto = (productoId, ubicacion) => {
   const punto = normalizarUbicacionFrontend(ubicacion);
 
-  const filas = existenciasInventario.filter(
-    (item) =>
-      Number(item.producto_id) === Number(productoId) &&
-      normalizarUbicacionFrontend(item?.ubicacion) === punto
-  );
-
-  // Si quedaron filas históricas equivalentes, se suman como una sola ubicación.
-  if (filas.length) {
-    return filas.reduce(
-      (total, fila) => total + Number(fila?.stock || 0),
-      0
-    );
-  }
-
-  // Compatibilidad segura:
-  // si el producto todavía no tiene NINGUNA fila real por ubicación,
-  // productos.stock representa su stock legacy y se muestra en PRINCIPAL.
-  // Si ya existe cualquier fila por punto (BAR/KIOSKO/PRINCIPAL), no usamos
-  // productos.stock como fallback para evitar inventar o duplicar stock.
   const filasProducto = existenciasInventario.filter(
     (item) => Number(item.producto_id) === Number(productoId)
   );
 
-  if (punto === "PRINCIPAL" && filasProducto.length === 0) {
-    const producto = productos.find(
-      (p) => Number(p.id) === Number(productoId)
+  const filasPunto = filasProducto.filter(
+    (item) =>
+      normalizarUbicacionFrontend(item?.ubicacion) === punto
+  );
+
+  // 1) Si la ubicación solicitada tiene stock real, siempre manda ese valor.
+  const stockPunto = filasPunto.reduce(
+    (total, fila) => total + Number(fila?.stock || 0),
+    0
+  );
+
+  if (stockPunto > 0) {
+    return stockPunto;
+  }
+
+  // 2) Compatibilidad legacy segura para PRINCIPAL.
+  // Muchos productos antiguos quedaron con una fila de existencia en 0,
+  // pero productos.stock todavía conserva el stock real. La condición clave
+  // es que TODAS las existencias por punto estén en 0. Si hay stock positivo
+  // en BAR/KIOSKO/u otro punto, no inventamos stock adicional en PRINCIPAL.
+  if (punto === "PRINCIPAL") {
+    const totalRealPorPuntos = filasProducto.reduce(
+      (total, fila) => total + Number(fila?.stock || 0),
+      0
     );
-    return Number(producto?.stock || 0);
+
+    if (totalRealPorPuntos <= 0) {
+      const producto = productos.find(
+        (p) => Number(p.id) === Number(productoId)
+      );
+
+      const stockLegacy = Number(producto?.stock || 0);
+      if (stockLegacy > 0) return stockLegacy;
+    }
   }
 
   return 0;
