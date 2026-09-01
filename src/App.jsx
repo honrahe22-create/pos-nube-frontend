@@ -2919,12 +2919,43 @@ const cargarExistenciasInventario = async ({
         ubicacionForzada || jornadaActiva?.punto_nombre || ""
       );
       const actualNormalizado = normalizarUbicacionFrontend(actual);
+      const recomendada = normalizarUbicacionFrontend(
+        data?.ubicacion_recomendada || ""
+      );
 
-      return puntosUnicos.includes(puntoJornada)
-        ? puntoJornada
-        : puntosUnicos.includes(actualNormalizado)
-        ? actualNormalizado
-        : "PRINCIPAL";
+      // Los operadores siguen ligados SIEMPRE al punto de su jornada.
+      if (jornadaActiva?.id && puntosUnicos.includes(puntoJornada)) {
+        return puntoJornada;
+      }
+
+      // ADMIN/SUPER_ADMIN no tienen jornada. Si PRINCIPAL es únicamente
+      // un punto lógico/placeholder sin stock y BAR/KIOSKO sí tiene stock,
+      // usamos automáticamente la ubicación real recomendada por el backend.
+      const stockTotalUbicacion = (ubicacion) =>
+        listaExistencias
+          .filter(
+            (fila) =>
+              normalizarUbicacionFrontend(fila?.ubicacion) ===
+              normalizarUbicacionFrontend(ubicacion)
+          )
+          .reduce((total, fila) => total + Math.max(0, Number(fila?.stock || 0)), 0);
+
+      const actualTieneStock = stockTotalUbicacion(actualNormalizado) > 0;
+      const recomendadaTieneStock = stockTotalUbicacion(recomendada) > 0;
+
+      if (actualTieneStock && puntosUnicos.includes(actualNormalizado)) {
+        return actualNormalizado;
+      }
+
+      if (recomendadaTieneStock && puntosUnicos.includes(recomendada)) {
+        return recomendada;
+      }
+
+      if (puntosUnicos.includes(actualNormalizado)) {
+        return actualNormalizado;
+      }
+
+      return puntosUnicos[0] || "PRINCIPAL";
     });
 
     return true;
