@@ -5508,7 +5508,7 @@ const exportarVentasExcel = () => {
       setMostrarAbrirJornadaAdmin(false);
 
       const estadoDespuesAbrir=
-        data.estado_operativo==="CIERRE_PENDIENTE"
+        false && data.estado_operativo==="CIERRE_PENDIENTE"
           ? {
               permitido:false,
               estado_operativo:"CIERRE_PENDIENTE",
@@ -5678,7 +5678,7 @@ const exportarVentasExcel = () => {
     aplicarJornada(data.jornada);
 
     const estadoIngresoOperativo=
-      data.estado_operativo==="CIERRE_PENDIENTE"
+      false && data.estado_operativo==="CIERRE_PENDIENTE"
         ? {
             permitido:false,
             estado_operativo:"CIERRE_PENDIENTE",
@@ -11468,6 +11468,36 @@ Disponible: ${formatearMoneda(
       }
       setMostrarCrearCierre(false);
       setCierreDetalle(data.cierre || null);
+
+      // CIERRE CONTINUO:
+      // El backend devuelve una nueva jornada abierta automáticamente en el mismo punto.
+      // Si existe, el operador sigue trabajando de inmediato y NO pasa por el flujo antiguo
+      // que lo enviaba nuevamente al login.
+      if (data?.nueva_jornada?.id) {
+        const nuevaJornada = data.nueva_jornada;
+
+        setJornadaActiva(nuevaJornada);
+        localStorage.setItem("jornadaActiva", JSON.stringify(nuevaJornada));
+
+        setEstadoOperativoCaja({
+          permitido: true,
+          estado_operativo: "OPERATIVA",
+          requiere_abrir_jornada: false,
+          requiere_cerrar_pendiente: false,
+          jornada: nuevaJornada,
+          message:
+            "Cierre realizado. La nueva jornada quedó abierta automáticamente.",
+        });
+
+        setMostrarSelectorJornada(false);
+        await cargarCierres();
+
+        alert(
+          "Cierre guardado correctamente. Puedes seguir vendiendo; las nuevas ventas quedarán para el próximo cierre."
+        );
+
+        return;
+      }
 
       // Recordamos el acceso operativo que acaba de cerrar la caja para
       // que la siguiente jornada se pueda abrir sin volver a escoger todo.
