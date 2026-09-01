@@ -2967,19 +2967,15 @@ const stockProductoEnPunto = (productoId, ubicacion) => {
     );
   }
 
-  if (punto === "PRINCIPAL") {
-    const producto = productos.find(
-      (p) => Number(p.id) === Number(productoId)
-    );
-    return Number(producto?.stock || 0);
-  }
-
+  // IMPORTANTE: Nueva Orden y Stock deben mostrar exactamente la existencia
+  // real por ubicación que usa el backend al vender. productos.stock es un
+  // total/compatibilidad histórica y no puede usarse como stock de PRINCIPAL.
   return 0;
 };
 
 const resumenStockPorPuntos = (producto) => {
   const filas = existenciasDeProducto(producto.id);
-  if (!filas.length) return `PRINCIPAL: ${Number(producto.stock || 0)}`;
+  if (!filas.length) return "PRINCIPAL: 0";
 
   const detalle = filas
     .filter((fila) => Number(fila.stock || 0) !== 0 || fila.ubicacion === "PRINCIPAL")
