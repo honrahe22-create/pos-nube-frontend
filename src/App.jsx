@@ -3027,6 +3027,34 @@ const stockProductoEnPunto = (productoId, ubicacion) => {
   return 0;
 };
 
+// Los paquetes de almuerzo son cupos generales de alimentación y no stock físico
+// de un bar específico. Si el punto de venta no tiene cupos propios, pueden consumir
+// el cupo registrado en PRINCIPAL sin mezclar el resto de productos entre locales.
+const esPaqueteAlmuerzo = (producto) =>
+  normalizarTexto(producto?.nombre || "").startsWith("PAQUETE ALMUERZO");
+
+const ubicacionStockVentaProducto = (producto, ubicacionVenta) => {
+  const ubicacion = normalizarUbicacionFrontend(ubicacionVenta);
+  const stockLocal = Number(stockProductoEnPunto(producto?.id, ubicacion) || 0);
+
+  if (stockLocal > 0) return ubicacion;
+
+  if (esPaqueteAlmuerzo(producto)) {
+    const stockPrincipal = Number(stockProductoEnPunto(producto?.id, "PRINCIPAL") || 0);
+    if (stockPrincipal > 0) return "PRINCIPAL";
+  }
+
+  return ubicacion;
+};
+
+const stockDisponibleVentaProducto = (producto, ubicacionVenta) =>
+  Number(
+    stockProductoEnPunto(
+      producto?.id,
+      ubicacionStockVentaProducto(producto, ubicacionVenta)
+    ) || 0
+  );
+
 const resumenStockPorPuntos = (producto) => {
   const filas = existenciasDeProducto(producto.id);
   if (!filas.length) return `PRINCIPAL: ${Number(producto.stock || 0)}`;
@@ -10452,11 +10480,23 @@ if (institucionIdLogin) {
       return;
     }
 
+    const ubicacionVentaActual =
+      jornadaActiva?.punto_nombre || localNuevaOrden || "PRINCIPAL";
+
     const itemsLimpios = ventaItems
-      .map((item) => ({
-        producto_id: Number(item.producto_id),
-        cantidad: Number(item.cantidad || 0),
-      }))
+      .map((item) => {
+        const producto = productosActivos.find(
+          (p) => Number(p.id) === Number(item.producto_id)
+        );
+
+        return {
+          producto_id: Number(item.producto_id),
+          cantidad: Number(item.cantidad || 0),
+          ubicacion_stock: producto
+            ? ubicacionStockVentaProducto(producto, ubicacionVentaActual)
+            : normalizarUbicacionFrontend(ubicacionVentaActual),
+        };
+      })
       .filter(
         (item) =>
           item.producto_id > 0 &&
@@ -10491,11 +10531,9 @@ if (institucionIdLogin) {
         return;
       }
 
-      const stockDisponible = Number(
-        stockProductoEnPunto(
-          producto.id,
-          jornadaActiva?.punto_nombre || localNuevaOrden
-        ) || 0
+      const stockDisponible = stockDisponibleVentaProducto(
+        producto,
+        ubicacionVentaActual
       );
 
       if (stockDisponible < 1) {
@@ -21516,11 +21554,9 @@ onClick={guardarEgreso}
                   Number.isFinite(Number(p.precio)) &&
                   Number(p.precio) > 0;
 
-                const stockDisponible = Number(
-                  stockProductoEnPunto(
-                    p.id,
-                    jornadaActiva?.punto_nombre || localNuevaOrden
-                  ) || 0
+                const stockDisponible = stockDisponibleVentaProducto(
+                  p,
+                  jornadaActiva?.punto_nombre || localNuevaOrden
                 );
 
                 const tieneStock = stockDisponible >= 1;
@@ -21543,7 +21579,10 @@ onClick={guardarEgreso}
                 );
 
                 const sinStock =
-                  stockProductoEnPunto(producto.id, jornadaActiva?.punto_nombre || localNuevaOrden) <= 0;
+                  stockDisponibleVentaProducto(
+                    producto,
+                    jornadaActiva?.punto_nombre || localNuevaOrden
+                  ) <= 0;
 
                 return (
                   <article
@@ -21726,7 +21765,7 @@ onClick={guardarEgreso}
                             overflowWrap: "anywhere",
                           }}
                         >
-                          Stock {jornadaActiva?.punto_nombre || localNuevaOrden}: {stockProductoEnPunto(producto.id, jornadaActiva?.punto_nombre || localNuevaOrden)}
+                          Stock {jornadaActiva?.punto_nombre || localNuevaOrden}: {stockDisponibleVentaProducto(producto, jornadaActiva?.punto_nombre || localNuevaOrden)}
                         </div>
                       </div>
                     </div>
@@ -21819,8 +21858,8 @@ onClick={guardarEgreso}
                           max={Math.max(
                             1,
                             Number(
-                              stockProductoEnPunto(
-                                producto.id,
+                              stockDisponibleVentaProducto(
+                                producto,
                                 jornadaActiva?.punto_nombre || localNuevaOrden
                               ) || 0
                             )
@@ -21837,8 +21876,8 @@ onClick={guardarEgreso}
                             if (indice < 0) return;
 
                             const disponible = Number(
-                              stockProductoEnPunto(
-                                producto.id,
+                              stockDisponibleVentaProducto(
+                                producto,
                                 jornadaActiva?.punto_nombre || localNuevaOrden
                               ) || 0
                             );
