@@ -20298,8 +20298,29 @@ onClick={guardarEgreso}
         </div>
 
         {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (() => {
+          const textoBusquedaStock=String(busquedaInventario||"")
+            .trim()
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g,"");
+
           const visibles = productos
             .filter((p)=>p?.activo!==false)
+            .filter((p)=>{
+              if(!textoBusquedaStock) return true;
+              const contenido=[
+                p?.nombre,
+                p?.codigo,
+                p?.categoria,
+                p?.familia,
+              ]
+                .map((valor)=>String(valor||"")
+                  .toLowerCase()
+                  .normalize("NFD")
+                  .replace(/[\u0300-\u036f]/g,""))
+                .join(" ");
+              return contenido.includes(textoBusquedaStock);
+            })
             .map((p)=>Number(p.id));
 
           const todosMarcados =
@@ -20374,6 +20395,39 @@ onClick={guardarEgreso}
         })()}
       </div>
 
+      <div
+        style={{
+          marginTop:16,
+          marginBottom:12,
+          display:"flex",
+          gap:10,
+          alignItems:"center",
+          flexWrap:"wrap",
+        }}
+      >
+        <input
+          type="search"
+          value={busquedaInventario}
+          onChange={(e)=>setBusquedaInventario(e.target.value)}
+          placeholder="Buscar producto por nombre, código o familia..."
+          style={{
+            ...styles.input,
+            maxWidth:520,
+            minWidth:280,
+            background:"#ffffff",
+          }}
+        />
+        {busquedaInventario && (
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={()=>setBusquedaInventario("")}
+          >
+            Limpiar búsqueda
+          </button>
+        )}
+      </div>
+
       <div style={{...styles.tableWrap,marginTop:16}}>
         <table style={styles.table}>
           <thead>
@@ -20394,6 +20448,26 @@ onClick={guardarEgreso}
           <tbody>
             {productos
               .filter((p)=>p?.activo!==false)
+              .filter((p)=>{
+                const texto=String(busquedaInventario||"")
+                  .trim()
+                  .toLowerCase()
+                  .normalize("NFD")
+                  .replace(/[\u0300-\u036f]/g,"");
+                if(!texto) return true;
+                const contenido=[
+                  p?.nombre,
+                  p?.codigo,
+                  p?.categoria,
+                  p?.familia,
+                ]
+                  .map((valor)=>String(valor||"")
+                    .toLowerCase()
+                    .normalize("NFD")
+                    .replace(/[\u0300-\u036f]/g,""))
+                  .join(" ");
+                return contenido.includes(texto);
+              })
               .map((producto)=>{
                 const existencias=existenciasInventario.filter(
                   (e)=>Number(e.producto_id)===Number(producto.id)
