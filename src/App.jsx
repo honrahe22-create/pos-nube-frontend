@@ -278,6 +278,15 @@ const granTotalCierre = (cierre) =>
 
 // Normaliza nombres equivalentes de ubicación para que una existencia histórica
 // guardada como KIOSCO siga perteneciendo al punto actual KIOSKO.
+// Normalizador general disponible para todo App.jsx.
+// Debe estar fuera del importador de Stock porque también se usa en Ventas.
+const normalizarTexto = (valor) =>
+  String(valor ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase();
+
 const normalizarUbicacionFrontend = (valor) => {
   const texto = String(valor || "PRINCIPAL")
     .trim()
