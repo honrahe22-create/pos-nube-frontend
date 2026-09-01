@@ -1219,6 +1219,9 @@ const [cierreDetalle, setCierreDetalle] = useState(null);
 const [guardandoCierre, setGuardandoCierre] = useState(false);
 const [cargandoCierres, setCargandoCierres] = useState(false);
 const [resumenCierreServidor, setResumenCierreServidor] = useState(null);
+// Jornada elegida exclusivamente para realizar un cierre desde ADMIN/SUPER_ADMIN.
+// No convierte al administrador en operador ni se guarda como jornada activa.
+const [jornadaCierreSeleccionada, setJornadaCierreSeleccionada] = useState(null);
 const [cierreConsolidado, setCierreConsolidado] = useState(null);
 const [cargandoConsolidado, setCargandoConsolidado] = useState(false);
 
@@ -1237,6 +1240,32 @@ const cajasPendientesVisuales = (() => {
   return jornadaPendienteCierreVisual?.id
     ? [jornadaPendienteCierreVisual]
     : [];
+})();
+
+// ADMIN / SUPER_ADMIN no trabajan con una jornada propia.
+// Para cerrar caja desde administración se muestran las jornadas ABIERTAS
+// de los operadores y el administrador elige exactamente cuál caja cerrar.
+const cajasAbiertasAdmin = (() => {
+  if (!["SUPER_ADMIN", "ADMIN"].includes(rolActual)) return [];
+
+  const idsPendientes = new Set(
+    cajasPendientesVisuales.map((fila) => Number(fila.id || 0)).filter(Boolean)
+  );
+
+  return (Array.isArray(jornadasHistorial) ? jornadasHistorial : [])
+    .map((fila) => ({
+      ...fila,
+      id: Number(fila.id || fila.jornada_id || 0),
+      fecha_operativa_texto:
+        fila.fecha_operativa_texto ||
+        fila.fecha_operativa ||
+        null,
+    }))
+    .filter((fila) =>
+      fila.id &&
+      String(fila.estado || "").trim().toUpperCase() === "ABIERTA" &&
+      !idsPendientes.has(Number(fila.id))
+    );
 })();
 const [cierreForm, setCierreForm] = useState({
   fecha: obtenerFechaEcuadorISO(),
@@ -11459,6 +11488,7 @@ Disponible: ${formatearMoneda(
       const jornadaObjetivo =
         jornadaForzada ||
         jornadaPendiente ||
+        jornadaCierreSeleccionada ||
         jornadaActiva ||
         null;
 
@@ -11570,12 +11600,17 @@ Disponible: ${formatearMoneda(
       jornadaPendiente?.fecha_operativa
     );
 
-    setJornadaActiva(jornadaPendiente);
-
-    localStorage.setItem(
-      "jornadaActiva",
-      JSON.stringify(jornadaPendiente)
-    );
+    if (["SUPER_ADMIN", "ADMIN"].includes(rolActual)) {
+      // El administrador solo selecciona la jornada del operador para el cierre.
+      // NO adopta esa jornada y NO se guarda en localStorage.
+      setJornadaCierreSeleccionada(jornadaPendiente);
+    } else {
+      setJornadaActiva(jornadaPendiente);
+      localStorage.setItem(
+        "jornadaActiva",
+        JSON.stringify(jornadaPendiente)
+      );
+    }
 
     setEstadoOperativoCaja({
       permitido: false,
@@ -11617,7 +11652,19 @@ Disponible: ${formatearMoneda(
       setGuardandoCierre(true);
       const token = localStorage.getItem("token");
       const institucionId = obtenerInstitucionActivaId();
+      const jornadaParaCerrar = ["SUPER_ADMIN", "ADMIN"].includes(rolActual)
+        ? jornadaCierreSeleccionada
+        : jornadaActiva;
+
       if (!cierreForm.fecha) return alert("Selecciona la fecha del cierre.");
+      if (!jornadaParaCerrar?.id) {
+        return alert(
+          ["SUPER_ADMIN", "ADMIN"].includes(rolActual)
+            ? "Selecciona primero la caja del operador que deseas cerrar."
+            : "No existe una jornada activa para realizar el cierre."
+        );
+      }
+
       const respuesta = await fetch(`${API_URL}/api/cierres`, {
         method: "POST",
         headers: {
@@ -11626,7 +11673,7 @@ Disponible: ${formatearMoneda(
         },
         body: JSON.stringify({
           institucion_id: Number(institucionId),
-          jornada_id: Number(jornadaActiva?.id || 0),
+          jornada_id: Number(jornadaParaCerrar?.id || 0),
           fecha: cierreForm.fecha,
           negocio: "POS NUBE",
           efectivo_contado: totalEfectivoContado,
@@ -11653,6 +11700,25 @@ Disponible: ${formatearMoneda(
       // que lo enviaba nuevamente al login.
       if (data?.nueva_jornada?.id) {
         const nuevaJornada = data.nueva_jornada;
+
+        // IMPORTANTE: ADMIN / SUPER_ADMIN nunca adoptan la jornada del operador.
+        // El backend puede abrir automáticamente la siguiente jornada del MISMO
+        // operador para que la caja continúe, pero la sesión administrativa queda
+        // totalmente separada y sin jornada propia.
+        if (["SUPER_ADMIN", "ADMIN"].includes(rolActual)) {
+          localStorage.removeItem("jornadaActiva");
+          setJornadaActiva(null);
+          setJornadaCierreSeleccionada(null);
+          setEstadoOperativoCaja(null);
+          setMostrarSelectorJornada(false);
+          await cargarCierres();
+
+          alert(
+            "Cierre de caja guardado correctamente. La sesión de administrador continúa sin jornada propia."
+          );
+
+          return;
+        }
 
         setJornadaActiva(nuevaJornada);
         localStorage.setItem("jornadaActiva", JSON.stringify(nuevaJornada));
@@ -13783,47 +13849,49 @@ if (!usuario) {
         <button style={styles.refreshButton} onClick={() => { cargarCierres(); cargarVentas(); cargarRecargas(); cargarEgresos(); }}>
           Refrescar
         </button>
-        <button
-          style={styles.button}
-          onClick={async () => {
-            const jornadaPendiente =
-              estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE"
-                ? estadoOperativoCaja?.jornada
-                : null;
+        {!(["SUPER_ADMIN","ADMIN"].includes(rolActual)) && (
+          <button
+            style={styles.button}
+            onClick={async () => {
+              const jornadaPendiente =
+                estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE"
+                  ? estadoOperativoCaja?.jornada
+                  : null;
 
-            const fechaPendiente = normalizarFechaISO(
-              jornadaPendiente?.fecha_operativa_texto ||
-              jornadaPendiente?.fecha_operativa
-            );
-
-            const fechaObjetivo =
-              fechaPendiente ||
-              normalizarFechaISO(jornadaActiva?.fecha_operativa) ||
-              obtenerFechaEcuadorISO();
-
-            if(jornadaPendiente?.id){
-              setJornadaActiva(jornadaPendiente);
-              localStorage.setItem(
-                "jornadaActiva",
-                JSON.stringify(jornadaPendiente)
+              const fechaPendiente = normalizarFechaISO(
+                jornadaPendiente?.fecha_operativa_texto ||
+                jornadaPendiente?.fecha_operativa
               );
-            }
 
-            setCierreForm((actual) => ({
-              ...actual,
-              fecha: fechaObjetivo,
-            }));
+              const fechaObjetivo =
+                fechaPendiente ||
+                normalizarFechaISO(jornadaActiva?.fecha_operativa) ||
+                obtenerFechaEcuadorISO();
 
-            setMostrarCrearCierre(true);
+              if(jornadaPendiente?.id){
+                setJornadaActiva(jornadaPendiente);
+                localStorage.setItem(
+                  "jornadaActiva",
+                  JSON.stringify(jornadaPendiente)
+                );
+              }
 
-            await cargarResumenCierre(
-              fechaObjetivo,
-              jornadaPendiente || jornadaActiva
-            );
-          }}
-        >
-          Crear cierre de caja
-        </button>
+              setCierreForm((actual) => ({
+                ...actual,
+                fecha: fechaObjetivo,
+              }));
+
+              setMostrarCrearCierre(true);
+
+              await cargarResumenCierre(
+                fechaObjetivo,
+                jornadaPendiente || jornadaActiva
+              );
+            }}
+          >
+            Crear cierre de caja
+          </button>
+        )}
 
         {["SUPER_ADMIN","ADMIN"].includes(rolActual)&&(
           <>
@@ -14166,6 +14234,48 @@ if (!usuario) {
           )}
         </div>
       </div>
+      {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+        <div style={{marginBottom:14}}>
+          <div style={{fontWeight:1000,fontSize:18,marginBottom:8}}>
+            Cajas abiertas de operadores
+          </div>
+          <div style={{fontSize:13,color:"#475569",marginBottom:10}}>
+            Administración no abre ni usa una jornada propia. Selecciona la caja del operador que deseas cerrar.
+          </div>
+
+          {cajasAbiertasAdmin.length === 0 ? (
+            <div style={{padding:"12px",border:"1px solid #cbd5e1",borderRadius:10,background:"#f8fafc",color:"#475569"}}>
+              No hay cajas abiertas disponibles para cierre en este momento.
+            </div>
+          ) : (
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:10}}>
+              {cajasAbiertasAdmin.map((caja) => (
+                <div
+                  key={`caja-abierta-admin-${caja.id}`}
+                  style={{border:"2px solid #2563eb",borderRadius:12,padding:"12px",background:"#eff6ff"}}
+                >
+                  <div style={{fontWeight:1000,fontSize:17,color:"#1e3a8a"}}>
+                    {caja.punto_nombre || "PUNTO"}
+                  </div>
+                  <div style={{fontSize:13,lineHeight:1.5,marginTop:4,color:"#1e40af"}}>
+                    Jornada #{caja.id}
+                    {" · "}Operador: {caja.usuario_nombre || caja.usuario_correo || "Operador"}
+                    {" · "}Fecha: {formatearSoloFecha(caja.fecha_operativa_texto || caja.fecha_operativa)}
+                  </div>
+                  <button
+                    type="button"
+                    style={{...styles.button,width:"100%",marginTop:10}}
+                    onClick={() => abrirCajaPendienteDesdeListado(caja)}
+                  >
+                    Cerrar esta caja
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {cajasPendientesVisuales.length > 0 && (
         <div style={{display:"grid",gap:10,marginBottom:12}}>
           {cajasPendientesVisuales.map((pendiente) => (
