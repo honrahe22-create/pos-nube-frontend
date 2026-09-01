@@ -22204,14 +22204,13 @@ onClick={guardarEgreso}
                 style={styles.input}
               >
                 {/*
-                  Cuando la orden viene desde la ficha de un alumno,
-                  solo se permiten SALDO y CRÉDITO del alumno.
-                  En la Nueva Orden general se conservan Efectivo y Transferencia.
+                  REGLAS DE PAGO:
+                  - Consumidor final: Efectivo / Transferencia.
+                  - Profesor seleccionado: Efectivo / Transferencia siempre disponibles.
+                  - Alumno seleccionado: conserva Saldo / Crédito del alumno.
+                  - Crédito profesor conserva sus bloqueos actuales.
                 */}
-                {!(
-                  alumnoVentaSeleccionado ||
-                  profesorVentaSeleccionado
-                ) && (
+                {!alumnoVentaSeleccionado && (
                   <>
                     <option value="EFECTIVO">Efectivo</option>
                     <option value="TRANSFERENCIA">Transferencia</option>
@@ -22219,15 +22218,15 @@ onClick={guardarEgreso}
                 )}
 
                 {modoNuevaOrden !== "consumidor_final" &&
-                  alumnoVentaSeleccionado && !profesorVentaSeleccionado && (
-                  <>
-                    <option value="RECARGA">Saldo del alumno</option>
-                    <option value="CREDITO">Crédito del alumno</option>
-                  </>
-                )}
+                  alumnoVentaSeleccionado &&
+                  !profesorVentaSeleccionado && (
+                    <>
+                      <option value="RECARGA">Saldo del alumno</option>
+                      <option value="CREDITO">Crédito del alumno</option>
+                    </>
+                  )}
 
-                {modoNuevaOrden !== "consumidor_final" &&
-                  profesorVentaSeleccionado && (
+                {profesorVentaSeleccionado && (
                   <option
                     value="CREDITO_PROFESOR"
                     disabled={
@@ -22243,10 +22242,6 @@ onClick={guardarEgreso}
                       ? "Crédito del profesor"
                       : "Crédito del profesor (inhabilitado)"}
                   </option>
-                )}
-
-                {false && (
-                  <option value="CREDITO_PROFESOR">Crédito del profesor</option>
                 )}
               </select>
 
