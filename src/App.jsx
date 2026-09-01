@@ -3991,7 +3991,11 @@ const abrirConfirmacionStock=(confirmacion)=>{
 };
 
 const prepararConfirmacionOperacionStock=()=>{
-  if(!jornadaActiva?.id){
+  // ADMIN / SUPER_ADMIN administran Stock sin abrir/cerrar jornada.
+  // ENCARGADO_LOCAL / CAJERO conservan el flujo obligatorio de jornada.
+  const rolStockActual=normalizarRol(usuario?.rol);
+  const requiereJornadaStock=["ENCARGADO_LOCAL","CAJERO"].includes(rolStockActual);
+  if(requiereJornadaStock&&!jornadaActiva?.id){
     alert("Debes iniciar una jornada antes de operar Stock.");
     return;
   }
@@ -4136,6 +4140,7 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
             body:JSON.stringify({
               institucion_id:Number(institucionId),
               jornada_id:Number(jornadaActiva?.id),
+              ubicacion_operacion:String(puntoInventarioSeleccionado||jornadaActiva?.punto_nombre||"PRINCIPAL"),
               tipo_ingreso:confirmacionActual.tipo,
               proveedor_id:
                 confirmacionActual.tipo==="COMPRA"
@@ -4180,6 +4185,7 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
               body:JSON.stringify({
                 institucion_id:Number(institucionId),
                 jornada_id:Number(jornadaActiva?.id),
+                ubicacion_operacion:String(puntoInventarioSeleccionado||jornadaActiva?.punto_nombre||"PRINCIPAL"),
                 producto_id:Number(item.producto_id),
                 ubicacion_destino:String(
                   stockOperacionForm.ubicacion_destino||""
@@ -4214,6 +4220,7 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
               body:JSON.stringify({
                 institucion_id:Number(institucionId),
                 jornada_id:Number(jornadaActiva?.id),
+                ubicacion_operacion:String(puntoInventarioSeleccionado||jornadaActiva?.punto_nombre||"PRINCIPAL"),
                 producto_id:Number(item.producto_id),
                 institucion_destino_id:Number(
                   stockOperacionForm.institucion_destino_id
