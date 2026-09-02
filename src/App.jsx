@@ -287,7 +287,7 @@ const normalizarTexto = (valor) =>
     .trim()
     .toUpperCase();
 
-const normalizarUbicacionFrontend = (valor) => {
+const normalizarUbicacionFrontend = (valor, institucionId = null) => {
   const texto = String(valor || "PRINCIPAL")
     .trim()
     .toUpperCase()
@@ -296,7 +296,19 @@ const normalizarUbicacionFrontend = (valor) => {
     .replace(/\s+/g, " ");
 
   if (["KIOSCO", "KIOSKO"].includes(texto)) return "KIOSKO";
-  if (["BAR", "BAR PRINCIPAL"].includes(texto)) return "BAR PRINCIPAL";
+
+  // MARISTA: ADMINISTRACIÓN + BAR. No existe BAR PRINCIPAL como punto
+  // de inventario/venta y cualquier alias histórico se representa como BAR.
+  if (
+    Number(institucionId || 0) === 1 &&
+    ["PRINCIPAL", "BAR", "BAR PRINCIPAL"].includes(texto)
+  ) {
+    return "BAR";
+  }
+
+  // En otras instituciones conservamos los nombres reales.
+  if (texto === "BAR") return "BAR";
+  if (texto === "BAR PRINCIPAL") return "BAR PRINCIPAL";
   if (!texto || texto === "PRINCIPAL") return "PRINCIPAL";
 
   return texto;
@@ -2608,8 +2620,14 @@ const importarStockArchivo = (event) => {
                           (puntosOperacion || []).find(
                             (p) =>
                               p?.activo !== false &&
-                              normalizarUbicacionFrontend(p?.nombre) ===
-                                normalizarUbicacionFrontend(puntoInventarioSeleccionado)
+                              normalizarUbicacionFrontend(
+                                p?.nombre,
+                                Number(institucionId)
+                              ) ===
+                                normalizarUbicacionFrontend(
+                                  puntoInventarioSeleccionado,
+                                  Number(institucionId)
+                                )
                           )?.nombre ||
                           (puntosOperacion || []).find((p) => p?.activo !== false)?.nombre ||
                           puntoInventarioSeleccionado ||
@@ -2923,17 +2941,23 @@ const cargarExistenciasInventario = async ({
     const listaExistencias = Array.isArray(data.existencias)
       ? data.existencias.map((item) => ({
           ...item,
-          ubicacion: normalizarUbicacionFrontend(item?.ubicacion),
+          ubicacion: normalizarUbicacionFrontend(
+            item?.ubicacion,
+            institucionId
+          ),
         }))
       : [];
 
     const puntosRecibidos = Array.isArray(data.puntos)
       ? data.puntos
-          .map((p) => normalizarUbicacionFrontend(p))
+          .map((p) => normalizarUbicacionFrontend(p, institucionId))
           .filter(Boolean)
       : [];
 
-    if (!puntosRecibidos.includes("PRINCIPAL")) {
+    if (institucionId === 1) {
+      // MARISTA: el único punto operativo de inventario/venta es BAR.
+      puntosRecibidos.splice(0, puntosRecibidos.length, "BAR");
+    } else if (!puntosRecibidos.includes("PRINCIPAL")) {
       puntosRecibidos.unshift("PRINCIPAL");
     }
 
@@ -2946,19 +2970,27 @@ const cargarExistenciasInventario = async ({
     setPuntosInventario(puntosUnicos);
 
     setPuntoInventarioSeleccionado((actual) => {
-      const actualNormalizado = normalizarUbicacionFrontend(actual);
+      const actualNormalizado = normalizarUbicacionFrontend(
+        actual,
+        institucionId
+      );
       return puntosUnicos.includes(actualNormalizado)
         ? actualNormalizado
-        : "PRINCIPAL";
+        : (institucionId === 1 ? "BAR" : "PRINCIPAL");
     });
 
     setLocalNuevaOrden((actual) => {
       const puntoJornada = normalizarUbicacionFrontend(
-        ubicacionForzada || jornadaActiva?.punto_nombre || ""
+        ubicacionForzada || jornadaActiva?.punto_nombre || "",
+        institucionId
       );
-      const actualNormalizado = normalizarUbicacionFrontend(actual);
+      const actualNormalizado = normalizarUbicacionFrontend(
+        actual,
+        institucionId
+      );
       const recomendada = normalizarUbicacionFrontend(
-        data?.ubicacion_recomendada || ""
+        data?.ubicacion_recomendada || "",
+        institucionId
       );
 
       // Los operadores siguen ligados SIEMPRE al punto de su jornada.
@@ -2973,8 +3005,8 @@ const cargarExistenciasInventario = async ({
         listaExistencias
           .filter(
             (fila) =>
-              normalizarUbicacionFrontend(fila?.ubicacion) ===
-              normalizarUbicacionFrontend(ubicacion)
+              normalizarUbicacionFrontend(fila?.ubicacion, institucionId) ===
+              normalizarUbicacionFrontend(ubicacion, institucionId)
           )
           .reduce((total, fila) => total + Math.max(0, Number(fila?.stock || 0)), 0);
 
@@ -3020,7 +3052,8 @@ const existenciasDeProducto = (productoId) =>
   );
 
 const stockProductoEnPunto = (productoId, ubicacion) => {
-  const punto = normalizarUbicacionFrontend(ubicacion);
+  const institucionId = obtenerInstitucionActivaId();
+  const punto = normalizarUbicacionFrontend(ubicacion, institucionId);
 
   const filasProducto = existenciasInventario.filter(
     (item) => Number(item.producto_id) === Number(productoId)
@@ -3028,7 +3061,7 @@ const stockProductoEnPunto = (productoId, ubicacion) => {
 
   const filasPunto = filasProducto.filter(
     (item) =>
-      normalizarUbicacionFrontend(item?.ubicacion) === punto
+      normalizarUbicacionFrontend(item?.ubicacion, institucionId) === punto
   );
 
   // 1) Si la ubicación solicitada tiene stock real, siempre manda ese valor.
@@ -3072,7 +3105,10 @@ const esPaqueteAlmuerzo = (producto) =>
   normalizarTexto(producto?.nombre || "").startsWith("PAQUETE ALMUERZO");
 
 const ubicacionStockVentaProducto = (producto, ubicacionVenta) => {
-  const ubicacion = normalizarUbicacionFrontend(ubicacionVenta);
+  const ubicacion = normalizarUbicacionFrontend(
+    ubicacionVenta,
+    obtenerInstitucionActivaId()
+  );
   const stockLocal = Number(stockProductoEnPunto(producto?.id, ubicacion) || 0);
 
   if (stockLocal > 0) return ubicacion;
@@ -5147,7 +5183,8 @@ const exportarVentasExcel = () => {
     if(!j)return;
 
     const punto=normalizarUbicacionFrontend(
-      j.punto_nombre||"PRINCIPAL"
+      j.punto_nombre||"PRINCIPAL",
+      Number(j?.institucion_id || obtenerInstitucionActivaId())
     );
 
     const jornadaNormalizada={
@@ -5301,7 +5338,8 @@ const exportarVentasExcel = () => {
         );
 
         const punto=normalizarUbicacionFrontend(
-          data.jornada.punto_nombre||"PRINCIPAL"
+          data.jornada.punto_nombre||"PRINCIPAL",
+          institucionId
         );
 
         setPuntoInventarioSeleccionado(punto);
@@ -10532,7 +10570,7 @@ if (institucionIdLogin) {
           cantidad: Number(item.cantidad || 0),
           ubicacion_stock: producto
             ? ubicacionStockVentaProducto(producto, ubicacionVentaActual)
-            : normalizarUbicacionFrontend(ubicacionVentaActual),
+            : normalizarUbicacionFrontend(ubicacionVentaActual, institucionId),
         };
       })
       .filter(
