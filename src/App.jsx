@@ -5057,7 +5057,10 @@ const exportarVentasExcel = () => {
   const datos = ventasFiltradas.map((v) => ({
     "Orden No": `#${v.id}`,
     Usuario: v.alumno_nombre || "",
-    "Ubicación": v.ubicacion_visual || v.ubicacion || "PRINCIPAL",
+    "Ubicación": normalizarUbicacionFrontend(
+      v.ubicacion_visual || v.ubicacion || "PRINCIPAL",
+      institucionActivaId
+    ),
     "Fecha de Consumo": formatearSoloFecha(v.fecha_base),
     "Fecha de Pago": formatearSoloFecha(v.fecha_base),
     "Fecha de Creación": formatearSoloFecha(v.fecha_base),
