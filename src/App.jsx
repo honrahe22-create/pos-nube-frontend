@@ -11712,6 +11712,105 @@ Disponible: ${formatearMoneda(
     );
   }, [cierreForm.denominaciones]);
 
+  const abrirDiagnosticoCierre = async (cierre) => {
+    try {
+      if (!cierre?.id) {
+        alert("No se pudo identificar el cierre.");
+        return;
+      }
+
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      if (!token || !institucionId) {
+        alert("Sesión o institución no válida.");
+        return;
+      }
+
+      const respuesta = await fetch(
+        `${API_URL}/api/cierres/diagnostico/${Number(cierre.id)}?institucion_id=${Number(institucionId)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          cache: "no-store",
+        }
+      );
+
+      const data = await respuesta.json();
+
+      if (!respuesta.ok) {
+        throw new Error(
+          data.message || data.error || "No se pudo generar el diagnóstico."
+        );
+      }
+
+      const ventana = window.open("", "_blank");
+
+      if (!ventana) {
+        console.log("DIAGNÓSTICO DE CIERRE:", data);
+        alert(
+          "El navegador bloqueó la ventana. El diagnóstico quedó impreso en la consola."
+        );
+        return;
+      }
+
+      const jsonSeguro = JSON.stringify(data, null, 2)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+      ventana.document.write(`
+        <!doctype html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <title>Diagnóstico cierre ${String(cierre.codigo_cierre || cierre.id)}</title>
+            <style>
+              body {
+                margin: 0;
+                padding: 24px;
+                font-family: Arial, Helvetica, sans-serif;
+                background: #f8fafc;
+                color: #0f172a;
+              }
+              h1 { margin-top: 0; }
+              .aviso {
+                padding: 12px 14px;
+                border: 1px solid #bfdbfe;
+                border-radius: 10px;
+                background: #eff6ff;
+                margin-bottom: 16px;
+                font-weight: 700;
+              }
+              pre {
+                white-space: pre-wrap;
+                overflow-wrap: anywhere;
+                background: #fff;
+                border: 1px solid #e2e8f0;
+                border-radius: 12px;
+                padding: 18px;
+                font-size: 14px;
+                line-height: 1.45;
+              }
+            </style>
+          </head>
+          <body>
+            <h1>Diagnóstico de cierre</h1>
+            <div class="aviso">
+              SOLO LECTURA: esta pantalla no modifica ventas, cierres ni egresos.
+            </div>
+            <pre>${jsonSeguro}</pre>
+          </body>
+        </html>
+      `);
+      ventana.document.close();
+    } catch (error) {
+      console.error("Error diagnóstico cierre:", error);
+      alert(error.message || "No se pudo abrir el diagnóstico.");
+    }
+  };
+
   const guardarCierre = async () => {
     try {
       setGuardandoCierre(true);
@@ -15007,7 +15106,26 @@ if (!usuario) {
     {cierreDetalle && createPortal((
       <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, width:"100vw", height:"100dvh", minHeight:"100vh", background:"rgba(15,23,42,.65)", zIndex:100000, padding:"8px", boxSizing:"border-box", overflow:"hidden", display:"flex", alignItems:"stretch", justifyContent:"center" }}>
         <div style={{width:"100%",maxWidth:900,minWidth:0,height:"calc(100dvh - 16px)",maxHeight:"calc(100dvh - 16px)",margin:"0 auto",background:"white",borderRadius:14,boxSizing:"border-box",overflow:"hidden",display:"flex",flexDirection:"column"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",padding:"14px",borderBottom:"1px solid #e5e7eb",flex:"0 0 auto",background:"#fff",position:"relative",zIndex:2}}><h2 style={{margin:"0",fontSize:"clamp(22px,4vw,32px)"}}>Detalle de cierre de caja</h2><button style={{...styles.outlineButton,flexShrink:0}} onClick={()=>setCierreDetalle(null)}>✕</button></div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",padding:"14px",borderBottom:"1px solid #e5e7eb",flex:"0 0 auto",background:"#fff",position:"relative",zIndex:2}}>
+            <h2 style={{margin:"0",fontSize:"clamp(22px,4vw,32px)"}}>Detalle de cierre de caja</h2>
+            <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+              {["ADMIN","SUPER_ADMIN"].includes(rolActual) && (
+                <button
+                  type="button"
+                  style={{...styles.outlineButton,flexShrink:0}}
+                  onClick={()=>abrirDiagnosticoCierre(cierreDetalle)}
+                >
+                  Diagnóstico
+                </button>
+              )}
+              <button
+                style={{...styles.outlineButton,flexShrink:0}}
+                onClick={()=>setCierreDetalle(null)}
+              >
+                ✕
+              </button>
+            </div>
+          </div>
           <div style={{flex:"1 1 auto",minHeight:0,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",touchAction:"pan-y",overscrollBehaviorY:"contain",padding:"14px",boxSizing:"border-box"}}>
           <div
             style={{
