@@ -1689,13 +1689,13 @@ const totalRecargasVista = useMemo(() => {
           venta.operador_nombre ||
           venta.operador_correo ||
           "Sistema",
-        ubicacion_visual:
-          venta.ubicacion_visual ||
-          venta.ubicacion ||
-          "PRINCIPAL",
+        ubicacion_visual: normalizarUbicacionFrontend(
+          venta.ubicacion_visual || venta.ubicacion || "PRINCIPAL",
+          institucionActivaId
+        ),
       };
     });
-  }, [ventas, alumnos]);
+  }, [ventas, alumnos, institucionActivaId]);
 
   const ventasFiltradas = useMemo(() => {
     let lista = [...ventasEnriquecidas];
