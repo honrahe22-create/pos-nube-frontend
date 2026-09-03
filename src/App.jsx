@@ -15008,7 +15008,15 @@ if (!usuario) {
               ["SUBTOTAL EGRESOS", formatearMoneda(subtotalEgresosCierre(cierreDetalle))],
               ["EFECTIVO ESPERADO", formatearMoneda(efectivoEsperadoCierre(cierreDetalle))],
               ["EFECTIVO CONTADO", formatearMoneda(cierreDetalle.efectivo_contado)],
-              ["DIFERENCIA", formatearMoneda(cierreDetalle.diferencia_general)],
+              ["DIFERENCIA EFECTIVO", formatearMoneda(
+                Number(cierreDetalle.efectivo_contado || 0) -
+                efectivoEsperadoCierre(cierreDetalle)
+              )],
+              ["TARJETA CONTADA", formatearMoneda(cierreDetalle.tarjeta_manual)],
+              ["DIFERENCIA TARJETA", formatearMoneda(cierreDetalle.diferencia_tarjeta)],
+              ["TRANSFERENCIA CONTADA", formatearMoneda(cierreDetalle.transferencia_manual)],
+              ["DIFERENCIA TRANSFERENCIA", formatearMoneda(cierreDetalle.diferencia_transferencia)],
+              ["DIFERENCIA GENERAL", formatearMoneda(cierreDetalle.diferencia_general)],
               ["GRAN TOTAL", formatearMoneda(granTotalCierre(cierreDetalle))],
               [
                 "Observación",
