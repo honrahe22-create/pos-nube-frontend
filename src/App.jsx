@@ -816,6 +816,18 @@ const [eliminandoProductosPrueba, setEliminandoProductosPrueba] = useState(false
     const rol = normalizarRol(guardado?.rol);
     return VISTA_INICIAL_POR_ROL[rol]?.ventas || "consultar";
   });
+
+  // Seguridad de interfaz:
+  // CAJERO y ENCARGADO_LOCAL no consultan el historial de ventas.
+  // Dentro de Ventas trabajan únicamente en Nueva Orden.
+  useEffect(() => {
+    if (
+      ["CAJERO", "ENCARGADO_LOCAL"].includes(rolActual) &&
+      vistaVentasInterna !== "registrar"
+    ) {
+      setVistaVentasInterna("registrar");
+    }
+  }, [rolActual, vistaVentasInterna]);
 const [menuComidasAbierto, setMenuComidasAbierto] = useState(true);
 const [menuVentasAbierto, setMenuVentasAbierto] = useState(false);
 const [menuReportesAbierto, setMenuReportesAbierto] = useState(false);
@@ -4886,6 +4898,115 @@ useEffect(() => {
     window.removeEventListener("focus", refrescarAlFoco);
   };
 }, [usuario, vista]);
+
+const corregirFormaPagoVenta = async (venta) => {
+  if (!["ADMIN", "SUPER_ADMIN"].includes(rolActual)) return;
+
+  const actual = String(venta?.metodo_pago || venta?.metodo_visual || "")
+    .trim()
+    .toUpperCase();
+
+  if (!["EFECTIVO", "TRANSFERENCIA"].includes(actual)) {
+    alert(
+      `Esta venta está registrada como ${actual || "otro método"}. ` +
+      "Por seguridad, esta herramienta solo corrige EFECTIVO ↔ TRANSFERENCIA."
+    );
+    return;
+  }
+
+  const nuevoMetodo = actual === "EFECTIVO" ? "TRANSFERENCIA" : "EFECTIVO";
+
+  const confirmar = window.confirm(
+    `Orden #${venta.id}\n` +
+    `Total: ${formatearMoneda(venta.total)}\n\n` +
+    `Cambiar forma de pago:\n${actual} → ${nuevoMetodo}\n\n` +
+    "Esto NO modifica stock, productos, total, saldo ni crédito."
+  );
+
+  if (!confirmar) return;
+
+  try {
+    const token = localStorage.getItem("token");
+    const institucionId = obtenerInstitucionActivaId();
+
+    const respuesta = await fetch(
+      `${API_URL}/api/ventas/${Number(venta.id)}/metodo-pago`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          institucion_id: Number(institucionId),
+          metodo_pago: nuevoMetodo,
+        }),
+      }
+    );
+
+    const data = await respuesta.json();
+
+    if (!respuesta.ok) {
+      throw new Error(
+        data.message || data.error || "No se pudo corregir la forma de pago."
+      );
+    }
+
+    const jornadaId = Number(data.jornada_id || venta.jornada_id || 0);
+
+    if (jornadaId > 0) {
+      try {
+        const cierresRes = await fetch(
+          `${API_URL}/api/cierres?institucion_id=${Number(institucionId)}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: "no-store",
+          }
+        );
+
+        const cierresData = await cierresRes.json();
+
+        if (cierresRes.ok && Array.isArray(cierresData)) {
+          const cierreRelacionado = cierresData.find(
+            (c) => Number(c.jornada_id || 0) === jornadaId
+          );
+
+          if (cierreRelacionado?.id) {
+            await fetch(
+              `${API_URL}/api/cierres/recalcular/${Number(cierreRelacionado.id)}`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                  institucion_id: Number(institucionId),
+                }),
+              }
+            );
+          }
+        }
+      } catch (errorRecalculo) {
+        console.warn(
+          "La venta se corrigió, pero falló el recálculo automático del cierre:",
+          errorRecalculo
+        );
+      }
+    }
+
+    await cargarVentas();
+    await cargarCierres();
+
+    alert(
+      `Orden #${venta.id}: forma de pago corregida a ${nuevoMetodo}.` +
+      "\nSi pertenecía a un cierre guardado, sus totales fueron recalculados."
+    );
+  } catch (error) {
+    console.error("Error corrigiendo forma de pago:", error);
+    alert(error.message || "No se pudo corregir la forma de pago.");
+  }
+};
 
 const limpiarFormularioVenta = () => {
   setVentaForm({
@@ -11849,10 +11970,20 @@ Disponible: ${formatearMoneda(
       });
       const data = await respuesta.json();
       if (!respuesta.ok) {
+        const detalleDescuadre =
+          data?.code === "DESCUADRE_TRANSFERENCIA"
+            ? `\nTransferencia contada: ${formatearMoneda(data.transferencia_contada)}\n` +
+              `Transferencia registrada: ${formatearMoneda(data.transferencia_esperada)}\n` +
+              `Diferencia: ${formatearMoneda(data.diferencia)}`
+            : data?.code === "DESCUADRE_TARJETA"
+            ? `\nTarjeta contada: ${formatearMoneda(data.tarjeta_contada)}\n` +
+              `Tarjeta registrada: ${formatearMoneda(data.tarjeta_esperada)}\n` +
+              `Diferencia: ${formatearMoneda(data.diferencia)}`
+            : "";
+
         throw new Error(
-          data.error ||
-            data.message ||
-            "No se pudo guardar el cierre"
+          (data.error || data.message || "No se pudo guardar el cierre") +
+          detalleDescuadre
         );
       }
       setMostrarCrearCierre(false);
@@ -21450,17 +21581,19 @@ onClick={guardarEgreso}
     Nueva Orden
   </button>
 
-  <button
-    type="button"
-    style={
-      vistaVentasInterna === "consultar"
-        ? styles.ventasTabActive
-        : styles.ventasTab
-    }
-    onClick={() => setVistaVentasInterna("consultar")}
-  >
-    Consultar ventas
-  </button>
+  {["ADMIN","SUPER_ADMIN"].includes(rolActual) && (
+    <button
+      type="button"
+      style={
+        vistaVentasInterna === "consultar"
+          ? styles.ventasTabActive
+          : styles.ventasTab
+      }
+      onClick={() => setVistaVentasInterna("consultar")}
+    >
+      Consultar ventas
+    </button>
+  )}
 
   {vistaVentasInterna === "registrar" && (
     <input
@@ -22763,7 +22896,8 @@ onClick={guardarEgreso}
     </form>
   </div>
 )}
-            {vistaVentasInterna === "consultar" && (
+            {vistaVentasInterna === "consultar" &&
+              ["ADMIN","SUPER_ADMIN"].includes(rolActual) && (
               <>
                 <div style={styles.box}>
                   <div style={styles.filtersGridPaymon}>
@@ -23031,6 +23165,29 @@ onClick={guardarEgreso}
                               <td style={styles.td}>{v.metodo_visual}</td>
                               <td style={styles.td}>Normal</td>
                               <td style={styles.td}>
+                                <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                                  {["SUPER_ADMIN","ADMIN"].includes(rolActual) &&
+                                    ["EFECTIVO","TRANSFERENCIA"].includes(
+                                      String(v.metodo_pago || "").trim().toUpperCase()
+                                    ) && (
+                                    <button
+                                      type="button"
+                                      style={{
+                                        border: "1px solid #b45309",
+                                        background: "#fffbeb",
+                                        color: "#92400e",
+                                        borderRadius: 7,
+                                        padding: "8px 11px",
+                                        fontWeight: 700,
+                                        cursor: "pointer",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                      onClick={() => corregirFormaPagoVenta(v)}
+                                      title={`Corregir forma de pago de la orden #${v.id}`}
+                                    >
+                                      ⇄ Corregir pago
+                                    </button>
+                                  )}
                                 <button
                                   type="button"
                                   style={{
@@ -23048,6 +23205,7 @@ onClick={guardarEgreso}
                                 >
                                   🖨 Reimprimir
                                 </button>
+                                </div>
                               </td>
                             </tr>
                           ))}
