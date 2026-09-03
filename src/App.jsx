@@ -7994,13 +7994,10 @@ if (institucionIdLogin) {
         .toUpperCase();
 
       lista = lista.filter((venta) => {
-        const ubicacionVenta = String(
-          venta.ubicacion_visual ||
-          venta.ubicacion ||
-          "PRINCIPAL"
-        )
-          .trim()
-          .toUpperCase();
+        const ubicacionVenta = normalizarUbicacionFrontend(
+          venta.ubicacion_visual || venta.ubicacion || "PRINCIPAL",
+          institucionActivaId
+        );
 
         return ubicacionVenta === ubicacionFiltro;
       });
@@ -15446,11 +15443,10 @@ if (!usuario) {
               String(p?.nombre || "").trim().toUpperCase()
             ),
             ...ventasEnriquecidas.map((venta) =>
-              String(
-                venta.ubicacion_visual ||
-                venta.ubicacion ||
-                ""
-              ).trim().toUpperCase()
+              normalizarUbicacionFrontend(
+                venta.ubicacion_visual || venta.ubicacion || "",
+                institucionActivaId
+              )
             ),
           ].filter((ubicacion) =>
             ubicacion &&
@@ -22991,7 +22987,11 @@ onClick={guardarEgreso}
                         style={styles.input}
                       >
                         <option value="">Selecciona</option>
-                        <option value="PRINCIPAL">Principal</option>
+                        {Number(institucionActivaId) === 1 ? (
+                          <option value="BAR">BAR</option>
+                        ) : (
+                          <option value="PRINCIPAL">Principal</option>
+                        )}
                       </select>
                     </div>
                     <div style={styles.filterField}>
@@ -23156,7 +23156,12 @@ onClick={guardarEgreso}
                               )}
                               <td style={styles.td}>#{v.id}</td>
                               <td style={styles.td}>{v.alumno_nombre}</td>
-                              <td style={styles.td}>PRINCIPAL</td>
+                              <td style={styles.td}>
+                                {normalizarUbicacionFrontend(
+                                  v.ubicacion_visual || v.ubicacion || "PRINCIPAL",
+                                  institucionActivaId
+                                )}
+                              </td>
                               <td style={styles.td}>{formatearSoloFecha(v.fecha_base)}</td>
                               <td style={styles.td}>{formatearSoloFecha(v.fecha_base)}</td>
                               <td style={styles.td}>{formatearSoloFecha(v.fecha_base)}</td>
