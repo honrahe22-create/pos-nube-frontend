@@ -5374,10 +5374,19 @@ const exportarVentasExcel = () => {
         }
 
         if(fechaPendiente){
-          setCierreForm((actual)=>({
-            ...actual,
-            fecha: fechaPendiente,
-          }));
+          setCierreForm({
+      fecha: fechaPendiente,
+      negocio: "POS NUBE",
+      tarjeta_manual: "0",
+      transferencia_manual: "0",
+      observacion: "",
+      denominaciones: {
+        billete_1: "", billete_2: "", billete_5: "", billete_10: "",
+        billete_20: "", billete_50: "", billete_100: "",
+        moneda_001: "", moneda_005: "", moneda_010: "",
+        moneda_025: "", moneda_050: "", moneda_1: "",
+      },
+    });
         }
 
         setMostrarSelectorJornada(false);
@@ -11668,10 +11677,19 @@ Disponible: ${formatearMoneda(
       message: "Existe una caja pendiente de cierre.",
     });
 
-    setCierreForm((actual) => ({
-      ...actual,
+    setCierreForm({
       fecha: fechaPendiente || obtenerFechaEcuadorISO(),
-    }));
+      negocio: "POS NUBE",
+      tarjeta_manual: "0",
+      transferencia_manual: "0",
+      observacion: "",
+      denominaciones: {
+        billete_1: "", billete_2: "", billete_5: "", billete_10: "",
+        billete_20: "", billete_50: "", billete_100: "",
+        moneda_001: "", moneda_005: "", moneda_010: "",
+        moneda_025: "", moneda_050: "", moneda_1: "",
+      },
+    });
 
     setMostrarCrearCierre(true);
 
@@ -11740,6 +11758,22 @@ Disponible: ${formatearMoneda(
       }
       setMostrarCrearCierre(false);
       setCierreDetalle(data.cierre || null);
+
+      // IMPORTANTE: cada cierre comienza con un conteo físico independiente.
+      // No conservar billetes, monedas, tarjeta ni transferencia del cierre anterior.
+      setCierreForm({
+        fecha: obtenerFechaEcuadorISO(),
+        negocio: "POS NUBE",
+        tarjeta_manual: "0",
+        transferencia_manual: "0",
+        observacion: "",
+        denominaciones: {
+          billete_1: "", billete_2: "", billete_5: "", billete_10: "",
+          billete_20: "", billete_50: "", billete_100: "",
+          moneda_001: "", moneda_005: "", moneda_010: "",
+          moneda_025: "", moneda_050: "", moneda_1: "",
+        },
+      });
 
       // CIERRE CONTINUO:
       // El backend devuelve una nueva jornada abierta automáticamente en el mismo punto.
