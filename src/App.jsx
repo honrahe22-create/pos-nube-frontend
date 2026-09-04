@@ -1797,6 +1797,69 @@ const totalRecargasVista = useMemo(() => {
     });
   };
 
+
+  const exportarReporteCierresExcel = () => {
+    if (!cierresCaja.length) {
+      alert("No hay cierres para exportar con los filtros actuales.");
+      return;
+    }
+
+    try {
+      const datos = cierresCaja.map((c) => ({
+        "Código cierre": obtenerCodigoCierre(c),
+        "Fecha": formatearSoloFecha(c.fecha),
+        "Ubicación": c.punto_nombre || "HISTÓRICO",
+        "Jornada": c.jornada_id ? `#${c.jornada_id}` : "-",
+        "Operador": c.usuario_nombre || c.usuario_correo || "Sistema",
+        "Hora apertura": c.periodo_desde_ecuador || "-",
+        "Hora cierre": c.periodo_hasta_ecuador || "-",
+        "Subtotal recargas": Number(subtotalRecargasCierre(c) || 0),
+        "Subtotal ventas": Number(subtotalVentasCierre(c) || 0),
+        "Subtotal egresos": Number(subtotalEgresosCierre(c) || 0),
+        "Efectivo esperado": Number(efectivoEsperadoCierre(c) || 0),
+        "Efectivo contado": Number(c.efectivo_contado || 0),
+        "Diferencia": Number(c.diferencia_general || 0),
+        "Gran total": Number(granTotalCierre(c) || 0),
+        "Observación":
+          c.observacion_automatica || c.observacion || "",
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(datos);
+
+      worksheet["!cols"] = [
+        { wch: 28 }, // Código
+        { wch: 14 }, // Fecha
+        { wch: 18 }, // Ubicación
+        { wch: 12 }, // Jornada
+        { wch: 30 }, // Operador
+        { wch: 22 }, // Apertura
+        { wch: 22 }, // Cierre
+        { wch: 18 }, // Recargas
+        { wch: 18 }, // Ventas
+        { wch: 18 }, // Egresos
+        { wch: 18 }, // Esperado
+        { wch: 18 }, // Contado
+        { wch: 16 }, // Diferencia
+        { wch: 16 }, // Gran total
+        { wch: 28 }, // Observación
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Cierres de caja");
+
+      const desde = cierreCajaFiltros.fecha_inicio || "todos";
+      const hasta = cierreCajaFiltros.fecha_fin || "todos";
+
+      XLSX.writeFile(
+        workbook,
+        `cierres_caja_${desde}_${hasta}.xlsx`
+      );
+    } catch (error) {
+      console.error("Error exportando cierres a Excel:", error);
+      alert("No se pudo exportar el reporte de cierres.");
+    }
+  };
+
   const cierreCajaResumen = useMemo(() => {
     let ventasLista = [...ventasEnriquecidas];
     let recargasLista = [...recargasEnriquecidas];
@@ -14382,12 +14445,72 @@ if (!usuario) {
     {estadoOperativoCaja?.estado_operativo !== "CIERRE_PENDIENTE" && (
       <div style={styles.box}>
         <div style={styles.filtersGridPaymon}>
-          <div style={styles.filterField}><label style={styles.filterLabelTop}>Fecha inicial</label><input type="date" value={cierreCajaFiltros.fecha_inicio} onChange={(e)=>setCierreCajaFiltros({...cierreCajaFiltros,fecha_inicio:e.target.value})} style={styles.input}/></div>
-          <div style={styles.filterField}><label style={styles.filterLabelTop}>Fecha final</label><input type="date" value={cierreCajaFiltros.fecha_fin} onChange={(e)=>setCierreCajaFiltros({...cierreCajaFiltros,fecha_fin:e.target.value})} style={styles.input}/></div>
+          <div style={styles.filterField}>
+            <label style={styles.filterLabelTop}>Fecha inicial</label>
+            <input
+              type="date"
+              value={cierreCajaFiltros.fecha_inicio}
+              onChange={(e)=>setCierreCajaFiltros({...cierreCajaFiltros,fecha_inicio:e.target.value})}
+              style={styles.input}
+            />
+          </div>
+
+          <div style={styles.filterField}>
+            <label style={styles.filterLabelTop}>Fecha final</label>
+            <input
+              type="date"
+              value={cierreCajaFiltros.fecha_fin}
+              min={cierreCajaFiltros.fecha_inicio || undefined}
+              onChange={(e)=>setCierreCajaFiltros({...cierreCajaFiltros,fecha_fin:e.target.value})}
+              style={styles.input}
+            />
+          </div>
+
+          {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+            <div style={styles.filterField}>
+              <label style={styles.filterLabelTop}>Ubicación</label>
+              <select
+                value={cierreCajaFiltros.punto_id}
+                onChange={(e)=>setCierreCajaFiltros({...cierreCajaFiltros,punto_id:e.target.value})}
+                style={styles.input}
+              >
+                <option value="">Todas las ubicaciones</option>
+                {puntosOperacion.map((p)=>(
+                  <option key={p.id} value={p.id}>{p.nombre || "PRINCIPAL"}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
+
         <div style={styles.filterButtons}>
-          <button type="button" style={styles.button} onClick={cargarCierres}>Consultar</button>
-          <button type="button" style={styles.outlineButton} onClick={() => { limpiarFiltrosCierreCaja(); setTimeout(cargarCierres, 0); }}>Borrar filtros</button>
+          <button
+            type="button"
+            style={styles.button}
+            onClick={() => {
+              if (
+                cierreCajaFiltros.fecha_inicio &&
+                cierreCajaFiltros.fecha_fin &&
+                cierreCajaFiltros.fecha_fin < cierreCajaFiltros.fecha_inicio
+              ) {
+                alert("La fecha final no puede ser anterior a la fecha inicial.");
+                return;
+              }
+              cargarCierres();
+            }}
+          >
+            Consultar
+          </button>
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={() => {
+              limpiarFiltrosCierreCaja();
+              setTimeout(cargarCierres, 0);
+            }}
+          >
+            Borrar filtros
+          </button>
         </div>
       </div>
     )}
@@ -14400,52 +14523,29 @@ if (!usuario) {
             <div>
               <h3 style={{margin:0}}>Reporte de cierres de caja</h3>
               <p style={{margin:"6px 0 0",color:"#64748b"}}>
-                Consulta los cierres por rango de fechas y ubicación.
+                El reporte utiliza el rango de fechas y la ubicación seleccionados arriba.
               </p>
             </div>
-            <button type="button" style={styles.outlineButton} onClick={()=>setMostrarReporteCierres(false)}>
-              Ocultar reporte
-            </button>
-          </div>
 
-          <div style={styles.filtersGridPaymon}>
-            <div style={styles.filterField}>
-              <label style={styles.filterLabelTop}>Fecha inicial</label>
-              <input type="date" value={cierreCajaFiltros.fecha_inicio}
-                onChange={(e)=>setCierreCajaFiltros({...cierreCajaFiltros,fecha_inicio:e.target.value})}
-                style={styles.input}/>
-            </div>
-            <div style={styles.filterField}>
-              <label style={styles.filterLabelTop}>Fecha final</label>
-              <input type="date" value={cierreCajaFiltros.fecha_fin}
-                onChange={(e)=>setCierreCajaFiltros({...cierreCajaFiltros,fecha_fin:e.target.value})}
-                style={styles.input}/>
-            </div>
-            <div style={styles.filterField}>
-              <label style={styles.filterLabelTop}>Ubicación</label>
-              <select value={cierreCajaFiltros.punto_id}
-                onChange={(e)=>setCierreCajaFiltros({...cierreCajaFiltros,punto_id:e.target.value})}
-                style={styles.input}>
-                <option value="">Todas las ubicaciones</option>
-                {puntosOperacion.map((p)=>(
-                  <option key={p.id} value={p.id}>{p.nombre || "PRINCIPAL"}</option>
-                ))}
-              </select>
+            <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+              <button
+                type="button"
+                style={styles.exportButton}
+                onClick={exportarReporteCierresExcel}
+                disabled={cargandoCierres || cierresCaja.length === 0}
+              >
+                Exportar Excel
+              </button>
+
+              <button
+                type="button"
+                style={styles.outlineButton}
+                onClick={()=>setMostrarReporteCierres(false)}
+              >
+                Ocultar reporte
+              </button>
             </div>
           </div>
-
-          <div style={styles.filterButtons}>
-            <button type="button" style={styles.button} onClick={cargarCierres}>Generar reporte</button>
-            <button type="button" style={styles.outlineButton}
-              onClick={()=>{
-                setCierreCajaFiltros({fecha_inicio:"",fecha_fin:"",punto_id:""});
-                setTimeout(cargarCierres,0);
-              }}>
-              Borrar filtros
-            </button>
-          </div>
-
-          <div style={{height:18}} />
           <div style={styles.tableWrap}>
             <table style={styles.table}>
               <thead><tr>
