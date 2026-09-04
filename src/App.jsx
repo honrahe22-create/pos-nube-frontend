@@ -903,6 +903,23 @@ const jornadaPendienteCierreVisual = (() => {
 })();
 const [mostrarSelectorJornada,setMostrarSelectorJornada]=useState(false);
 const [mostrarAbrirJornadaAdmin,setMostrarAbrirJornadaAdmin]=useState(false);
+
+useEffect(() => {
+  if (!["ADMIN", "SUPER_ADMIN"].includes(rolActual)) return;
+
+  /*
+   * REGLA FIJA:
+   * ADMINISTRACIÓN nunca tiene jornada propia.
+   * Limpia cualquier estado viejo dejado por versiones anteriores.
+   */
+  setJornadaActiva(null);
+  setMostrarAbrirJornadaAdmin(false);
+
+  try {
+    localStorage.removeItem("jornadaActiva");
+  } catch (_error) {}
+}, [rolActual]);
+
 const [puntoJornadaSeleccionado,setPuntoJornadaSeleccionado]=useState("");
 const [operadorJornadaCorreo,setOperadorJornadaCorreo]=useState("");
 const [operadorJornadaPassword,setOperadorJornadaPassword]=useState("");
@@ -1295,11 +1312,19 @@ const cajasAbiertasAdmin = (() => {
         fila.fecha_operativa ||
         null,
     }))
-    .filter((fila) =>
-      fila.id &&
-      String(fila.estado || "").trim().toUpperCase() === "ABIERTA" &&
-      !idsPendientes.has(Number(fila.id))
-    );
+    .filter((fila) => {
+      const rolOperador = String(fila.usuario_rol || "")
+        .trim()
+        .toUpperCase();
+
+      return (
+        fila.id &&
+        String(fila.estado || "").trim().toUpperCase() === "ABIERTA" &&
+        (!rolOperador ||
+          ["CAJERO", "ENCARGADO_LOCAL"].includes(rolOperador)) &&
+        !idsPendientes.has(Number(fila.id))
+      );
+    });
 })();
 const [cierreForm, setCierreForm] = useState({
   fecha: obtenerFechaEcuadorISO(),
@@ -14316,40 +14341,15 @@ if (!usuario) {
           </button>
         )}
 
-        {["SUPER_ADMIN","ADMIN"].includes(rolActual)&&(
-          <>
-            <button
-              type="button"
-              style={styles.outlineButton}
-              onClick={verCierreConsolidado}
-              disabled={cargandoConsolidado}
-            >
-              {cargandoConsolidado ? "Calculando..." : "Cierre total del local"}
-            </button>
-
-            <button
-              type="button"
-              style={{
-                ...styles.button,
-                background:"#16a34a",
-                borderColor:"#16a34a",
-              }}
-              onClick={async () => {
-                const puntos = await cargarPuntosOperacion();
-                const disponibles = obtenerPuntosJornadaDisponibles(puntos);
-
-                setPuntoJornadaSeleccionado(
-                  disponibles[0]?.id ? String(disponibles[0].id) : ""
-                );
-                setOperadorJornadaCorreo("");
-                setOperadorJornadaPassword("");
-                setVerPasswordOperadorJornada(false);
-                setMostrarAbrirJornadaAdmin(true);
-              }}
-            >
-              Abrir nueva jornada
-            </button>
-          </>
+        {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+          <button
+            type="button"
+            style={styles.outlineButton}
+            onClick={verCierreConsolidado}
+            disabled={cargandoConsolidado}
+          >
+            {cargandoConsolidado ? "Calculando..." : "Cierre total del local"}
+          </button>
         )}
         {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
           <button
@@ -14374,7 +14374,7 @@ if (!usuario) {
     </div>
 
     {mostrarAbrirJornadaAdmin &&
-      ["SUPER_ADMIN","ADMIN","ENCARGADO_LOCAL","CAJERO"].includes(rolActual) && (
+      ["ENCARGADO_LOCAL","CAJERO"].includes(rolActual) && (
         <div
           style={{
             position:"fixed",
@@ -14406,9 +14406,8 @@ if (!usuario) {
                   Abrir nueva jornada
                 </h2>
                 <p style={{margin:"0 0 18px",color:"#64748b",lineHeight:1.45}}>
-                  {["ADMIN","SUPER_ADMIN"].includes(rolActual)
-                    ? "Administración puede abrir una jornada para un operador autorizado. Al confirmar, la sesión cambiará al operador real para que las ventas queden registradas correctamente."
-                    : "Selecciona tu ubicación, confirma tu correo e ingresa tu contraseña. La nueva jornada se abrirá sin salir del sistema."}
+                  Selecciona tu ubicación, confirma tu correo e ingresa tu contraseña.
+                  Si ya tienes una jornada abierta, se recuperará la misma jornada sin crear otra.
                 </p>
               </div>
               <button
