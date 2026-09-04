@@ -5556,9 +5556,61 @@ const exportarVentasExcel = () => {
       }
 
       if(data?.estado_operativo==="SIN_JORNADA"){
+        /*
+         * Antes de pedir abrir otra jornada verificamos directamente
+         * si PostgreSQL todavía tiene una jornada ABIERTA para este operador.
+         *
+         * Esto cubre reinicio del iMin, cierre del navegador, pérdida de red,
+         * refresh o cualquier estado local desactualizado.
+         */
+        try {
+          const activaRes = await fetch(
+            `${API_URL}/api/jornadas/activa?institucion_id=${institucionId}&t=${Date.now()}`,
+            {
+              headers:{Authorization:`Bearer ${token}`},
+              cache:"no-store",
+            }
+          );
+
+          const activa = await activaRes.json();
+
+          if(activaRes.ok && activa?.id){
+            const recuperada={
+              permitido:true,
+              estado_operativo:"OPERATIVA",
+              requiere_abrir_jornada:false,
+              requiere_cerrar_pendiente:false,
+              jornada:activa,
+              message:"Jornada existente recuperada.",
+            };
+
+            setEstadoOperativoCaja(recuperada);
+            setJornadaActiva(activa);
+            localStorage.setItem(
+              "jornadaActiva",
+              JSON.stringify(activa)
+            );
+
+            const puntoRecuperado=normalizarUbicacionFrontend(
+              activa.punto_nombre||"PRINCIPAL",
+              institucionId
+            );
+
+            setPuntoInventarioSeleccionado(puntoRecuperado);
+            setLocalNuevaOrden(puntoRecuperado);
+
+            return recuperada;
+          }
+        } catch(errorRecuperacion) {
+          console.warn(
+            "No se pudo verificar jornada activa antes de pedir una nueva:",
+            errorRecuperacion
+          );
+        }
+
         volverAlLoginOperativoSinJornada(
           data?.message ||
-          "La caja está cerrada. Selecciona tu ubicación e inicia sesión para abrir una nueva jornada."
+          "No existe una jornada abierta. Selecciona tu ubicación e inicia sesión para comenzar."
         );
         return data;
       }
@@ -5788,24 +5840,22 @@ const exportarVentasExcel = () => {
       const institucionId=obtenerInstitucionActivaId();
       const rolQueAbre=normalizarRol(usuario?.rol);
 
-      // Para CAJERO / ENCARGADO_LOCAL usamos el mismo endpoint público
-      // que ya funciona correctamente en el login inicial.
-      // ADMIN / SUPER_ADMIN conservan /abrir porque abren una jornada
-      // para otro operador desde Administración.
+      // Solo CAJERO / ENCARGADO_LOCAL trabajan con jornada.
+      // ADMIN / SUPER_ADMIN nunca deben abrir una jornada propia.
       const esOperadorActual=
         ["ENCARGADO_LOCAL","CAJERO"].includes(rolQueAbre);
 
-      const urlAbrir=esOperadorActual
-        ? `${API_URL}/api/jornadas/abrir-publica`
-        : `${API_URL}/api/jornadas/abrir`;
+      if(!esOperadorActual){
+        throw new Error(
+          "Administración no utiliza jornada operativa."
+        );
+      }
+
+      const urlAbrir=`${API_URL}/api/jornadas/abrir-publica`;
 
       const headersAbrir={
         "Content-Type":"application/json",
       };
-
-      if(!esOperadorActual && tokenActual){
-        headersAbrir.Authorization=`Bearer ${tokenActual}`;
-      }
 
       const res=await fetch(urlAbrir,{
         method:"POST",
@@ -19735,13 +19785,9 @@ onClick={guardarEgreso}
         </div>
 
         {jornadaActiva?.id&&(
-          <button
-            type="button"
-            style={styles.outlineButton}
-            onClick={cerrarJornadaOperativa}
-          >
-            Cerrar jornada
-          </button>
+          <div style={{color:"#64748b",fontSize:13,fontWeight:600}}>
+            La jornada se mantiene abierta hasta realizar el cierre de caja.
+          </div>
         )}
       </div>
     </div>
