@@ -1224,6 +1224,7 @@ const [productosVendidos, setProductosVendidos] = useState([]);
     punto_id: "",
   });
   const [mostrarReporteCierres, setMostrarReporteCierres] = useState(false);
+  const [reporteCierresConsultado, setReporteCierresConsultado] = useState(false);
 
   const [productosPorDiaFiltros, setProductosPorDiaFiltros] = useState({
   fecha_inicio: "",
@@ -14300,9 +14301,15 @@ if (!usuario) {
             type="button"
             style={styles.outlineButton}
             onClick={async () => {
-              setMostrarReporteCierres((actual) => !actual);
+              if (mostrarReporteCierres) {
+                setMostrarReporteCierres(false);
+                setReporteCierresConsultado(false);
+                return;
+              }
+
+              setMostrarReporteCierres(true);
+              setReporteCierresConsultado(false);
               await cargarPuntosOperacion();
-              await cargarCierres();
             }}
           >
             Reporte cierres de caja
@@ -14442,80 +14449,7 @@ if (!usuario) {
         </div>
       )}
 
-    {estadoOperativoCaja?.estado_operativo !== "CIERRE_PENDIENTE" && (
-      <div style={styles.box}>
-        <div style={styles.filtersGridPaymon}>
-          <div style={styles.filterField}>
-            <label style={styles.filterLabelTop}>Fecha inicial</label>
-            <input
-              type="date"
-              value={cierreCajaFiltros.fecha_inicio}
-              onChange={(e)=>setCierreCajaFiltros({...cierreCajaFiltros,fecha_inicio:e.target.value})}
-              style={styles.input}
-            />
-          </div>
-
-          <div style={styles.filterField}>
-            <label style={styles.filterLabelTop}>Fecha final</label>
-            <input
-              type="date"
-              value={cierreCajaFiltros.fecha_fin}
-              min={cierreCajaFiltros.fecha_inicio || undefined}
-              onChange={(e)=>setCierreCajaFiltros({...cierreCajaFiltros,fecha_fin:e.target.value})}
-              style={styles.input}
-            />
-          </div>
-
-          {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
-            <div style={styles.filterField}>
-              <label style={styles.filterLabelTop}>Ubicación</label>
-              <select
-                value={cierreCajaFiltros.punto_id}
-                onChange={(e)=>setCierreCajaFiltros({...cierreCajaFiltros,punto_id:e.target.value})}
-                style={styles.input}
-              >
-                <option value="">Todas las ubicaciones</option>
-                {puntosOperacion.map((p)=>(
-                  <option key={p.id} value={p.id}>{p.nombre || "PRINCIPAL"}</option>
-                ))}
-              </select>
-            </div>
-          )}
-        </div>
-
-        <div style={styles.filterButtons}>
-          <button
-            type="button"
-            style={styles.button}
-            onClick={() => {
-              if (
-                cierreCajaFiltros.fecha_inicio &&
-                cierreCajaFiltros.fecha_fin &&
-                cierreCajaFiltros.fecha_fin < cierreCajaFiltros.fecha_inicio
-              ) {
-                alert("La fecha final no puede ser anterior a la fecha inicial.");
-                return;
-              }
-              cargarCierres();
-            }}
-          >
-            Consultar
-          </button>
-          <button
-            type="button"
-            style={styles.outlineButton}
-            onClick={() => {
-              limpiarFiltrosCierreCaja();
-              setTimeout(cargarCierres, 0);
-            }}
-          >
-            Borrar filtros
-          </button>
-        </div>
-      </div>
-    )}
-
-    {mostrarReporteCierres && ["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+        {mostrarReporteCierres && ["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
       <>
         <div style={{ height: 20 }} />
         <div style={styles.box}>
@@ -14523,79 +14457,223 @@ if (!usuario) {
             <div>
               <h3 style={{margin:0}}>Reporte de cierres de caja</h3>
               <p style={{margin:"6px 0 0",color:"#64748b"}}>
-                El reporte utiliza el rango de fechas y la ubicación seleccionados arriba.
+                Selecciona el rango de fechas y la ubicación, luego pulsa Consultar.
               </p>
             </div>
 
             <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-              <button
-                type="button"
-                style={styles.exportButton}
-                onClick={exportarReporteCierresExcel}
-                disabled={cargandoCierres || cierresCaja.length === 0}
-              >
-                Exportar Excel
-              </button>
+              {reporteCierresConsultado && (
+                <button
+                  type="button"
+                  style={styles.exportButton}
+                  onClick={exportarReporteCierresExcel}
+                  disabled={cargandoCierres || cierresCaja.length === 0}
+                >
+                  Exportar Excel
+                </button>
+              )}
 
               <button
                 type="button"
                 style={styles.outlineButton}
-                onClick={()=>setMostrarReporteCierres(false)}
+                onClick={() => {
+                  setMostrarReporteCierres(false);
+                  setReporteCierresConsultado(false);
+                }}
               >
                 Ocultar reporte
               </button>
             </div>
           </div>
-          <div style={styles.tableWrap}>
-            <table style={styles.table}>
-              <thead><tr>
-                <th style={styles.th}>Código cierre</th>
-                <th style={styles.th}>Fecha</th>
-                <th style={styles.th}>Ubicación</th>
-                <th style={styles.th}>Jornada</th>
-                <th style={styles.th}>Operador</th>
-                <th style={styles.th}>Hora apertura</th>
-                <th style={styles.th}>Hora cierre</th>
-                <th style={styles.th}>Subtotal recargas</th>
-                <th style={styles.th}>Subtotal ventas</th>
-                <th style={styles.th}>Subtotal egresos</th>
-                <th style={styles.th}>Efectivo esperado</th>
-                <th style={styles.th}>Efectivo contado</th>
-                <th style={styles.th}>Diferencia</th>
-                <th style={styles.th}>GRAN TOTAL</th>
-                <th style={styles.th}>Acción</th>
-              </tr></thead>
-              <tbody>
-                {cargandoCierres ? (
-                  <tr><td colSpan={15} style={styles.td}>Generando reporte...</td></tr>
-                ) : cierresCaja.length===0 ? (
-                  <tr><td colSpan={15} style={styles.td}>No existen cierres para los filtros seleccionados.</td></tr>
-                ) : cierresCaja.map((c)=>(
-                  <tr key={`reporte-${c.id}`}>
-                    <td style={{...styles.td,fontWeight:900,whiteSpace:"nowrap"}}>{obtenerCodigoCierre(c)}</td>
-                    <td style={styles.td}>{formatearSoloFecha(c.fecha)}</td>
-                    <td style={{...styles.td,fontWeight:800}}>{c.punto_nombre || "HISTÓRICO"}</td>
-                    <td style={styles.td}>{c.jornada_id ? `#${c.jornada_id}` : "-"}</td>
-                    <td style={styles.td}>{c.usuario_nombre || c.usuario_correo || "Sistema"}</td>
-                    <td style={styles.td}>{c.periodo_desde_ecuador || "-"}</td>
-                    <td style={styles.td}>{c.periodo_hasta_ecuador || "-"}</td>
-                    <td style={styles.td}>{formatearMoneda(subtotalRecargasCierre(c))}</td>
-                    <td style={styles.td}>{formatearMoneda(subtotalVentasCierre(c))}</td>
-                    <td style={styles.td}>{formatearMoneda(subtotalEgresosCierre(c))}</td>
-                    <td style={styles.td}>{formatearMoneda(efectivoEsperadoCierre(c))}</td>
-                    <td style={styles.td}>{formatearMoneda(c.efectivo_contado)}</td>
-                    <td style={{...styles.td,fontWeight:900,color:Number(c.diferencia_general||0)<0?"#dc2626":"#b45309"}}>
-                      {formatearMoneda(c.diferencia_general)}
-                    </td>
-                    <td style={{...styles.td,fontWeight:900}}>{formatearMoneda(granTotalCierre(c))}</td>
-                    <td style={styles.td}>
-                      <button style={styles.editIconButton} onClick={()=>verCierre(c)}>Ver</button>
-                    </td>
-                  </tr>
+
+          <div style={styles.filtersGridPaymon}>
+            <div style={styles.filterField}>
+              <label style={styles.filterLabelTop}>Fecha inicial</label>
+              <input
+                type="date"
+                value={cierreCajaFiltros.fecha_inicio}
+                onChange={(e)=>
+                  setCierreCajaFiltros({
+                    ...cierreCajaFiltros,
+                    fecha_inicio:e.target.value,
+                  })
+                }
+                style={styles.input}
+              />
+            </div>
+
+            <div style={styles.filterField}>
+              <label style={styles.filterLabelTop}>Fecha final</label>
+              <input
+                type="date"
+                value={cierreCajaFiltros.fecha_fin}
+                min={cierreCajaFiltros.fecha_inicio || undefined}
+                onChange={(e)=>
+                  setCierreCajaFiltros({
+                    ...cierreCajaFiltros,
+                    fecha_fin:e.target.value,
+                  })
+                }
+                style={styles.input}
+              />
+            </div>
+
+            <div style={styles.filterField}>
+              <label style={styles.filterLabelTop}>Ubicación</label>
+              <select
+                value={cierreCajaFiltros.punto_id}
+                onChange={(e)=>
+                  setCierreCajaFiltros({
+                    ...cierreCajaFiltros,
+                    punto_id:e.target.value,
+                  })
+                }
+                style={styles.input}
+              >
+                <option value="">Todas las ubicaciones</option>
+                {puntosOperacion.map((p)=>(
+                  <option key={p.id} value={p.id}>
+                    {p.nombre || "PRINCIPAL"}
+                  </option>
                 ))}
-              </tbody>
-            </table>
+              </select>
+            </div>
           </div>
+
+          <div style={styles.filterButtons}>
+            <button
+              type="button"
+              style={styles.button}
+              onClick={async () => {
+                if (
+                  cierreCajaFiltros.fecha_inicio &&
+                  cierreCajaFiltros.fecha_fin &&
+                  cierreCajaFiltros.fecha_fin < cierreCajaFiltros.fecha_inicio
+                ) {
+                  alert("La fecha final no puede ser anterior a la fecha inicial.");
+                  return;
+                }
+
+                await cargarCierres();
+                setReporteCierresConsultado(true);
+              }}
+            >
+              Consultar
+            </button>
+
+            <button
+              type="button"
+              style={styles.outlineButton}
+              onClick={() => {
+                limpiarFiltrosCierreCaja();
+                setReporteCierresConsultado(false);
+              }}
+            >
+              Borrar filtros
+            </button>
+          </div>
+
+          {reporteCierresConsultado && (
+            <>
+              <div style={{height:18}} />
+
+              <div style={styles.tableWrap}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Código cierre</th>
+                      <th style={styles.th}>Fecha</th>
+                      <th style={styles.th}>Ubicación</th>
+                      <th style={styles.th}>Jornada</th>
+                      <th style={styles.th}>Operador</th>
+                      <th style={styles.th}>Hora apertura</th>
+                      <th style={styles.th}>Hora cierre</th>
+                      <th style={styles.th}>Subtotal recargas</th>
+                      <th style={styles.th}>Subtotal ventas</th>
+                      <th style={styles.th}>Subtotal egresos</th>
+                      <th style={styles.th}>Efectivo esperado</th>
+                      <th style={styles.th}>Efectivo contado</th>
+                      <th style={styles.th}>Diferencia</th>
+                      <th style={styles.th}>GRAN TOTAL</th>
+                      <th style={styles.th}>Acción</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {cargandoCierres ? (
+                      <tr>
+                        <td colSpan={15} style={styles.td}>
+                          Generando reporte...
+                        </td>
+                      </tr>
+                    ) : cierresCaja.length===0 ? (
+                      <tr>
+                        <td colSpan={15} style={styles.td}>
+                          No existen cierres para los filtros seleccionados.
+                        </td>
+                      </tr>
+                    ) : cierresCaja.map((c)=>(
+                      <tr key={`reporte-${c.id}`}>
+                        <td style={{...styles.td,fontWeight:900,whiteSpace:"nowrap"}}>
+                          {obtenerCodigoCierre(c)}
+                        </td>
+                        <td style={styles.td}>{formatearSoloFecha(c.fecha)}</td>
+                        <td style={{...styles.td,fontWeight:800}}>
+                          {c.punto_nombre || "HISTÓRICO"}
+                        </td>
+                        <td style={styles.td}>
+                          {c.jornada_id ? `#${c.jornada_id}` : "-"}
+                        </td>
+                        <td style={styles.td}>
+                          {c.usuario_nombre || c.usuario_correo || "Sistema"}
+                        </td>
+                        <td style={styles.td}>{c.periodo_desde_ecuador || "-"}</td>
+                        <td style={styles.td}>{c.periodo_hasta_ecuador || "-"}</td>
+                        <td style={styles.td}>
+                          {formatearMoneda(subtotalRecargasCierre(c))}
+                        </td>
+                        <td style={styles.td}>
+                          {formatearMoneda(subtotalVentasCierre(c))}
+                        </td>
+                        <td style={styles.td}>
+                          {formatearMoneda(subtotalEgresosCierre(c))}
+                        </td>
+                        <td style={styles.td}>
+                          {formatearMoneda(efectivoEsperadoCierre(c))}
+                        </td>
+                        <td style={styles.td}>
+                          {formatearMoneda(c.efectivo_contado)}
+                        </td>
+                        <td
+                          style={{
+                            ...styles.td,
+                            fontWeight:900,
+                            color:
+                              Number(c.diferencia_general||0)<0
+                                ? "#dc2626"
+                                : "#b45309",
+                          }}
+                        >
+                          {formatearMoneda(c.diferencia_general)}
+                        </td>
+                        <td style={{...styles.td,fontWeight:900}}>
+                          {formatearMoneda(granTotalCierre(c))}
+                        </td>
+                        <td style={styles.td}>
+                          <button
+                            style={styles.editIconButton}
+                            onClick={()=>verCierre(c)}
+                          >
+                            Ver
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       </>
     )}
