@@ -11998,51 +11998,106 @@ Disponible: ${formatearMoneda(
         ? jornadaCierreSeleccionada
         : jornadaActiva;
 
-      if (!cierreForm.fecha) return alert("Selecciona la fecha del cierre.");
+      if (!cierreForm.fecha) {
+        alert("Selecciona la fecha del cierre.");
+        return;
+      }
+
       if (!jornadaParaCerrar?.id) {
-        return alert(
+        alert(
           ["SUPER_ADMIN", "ADMIN"].includes(rolActual)
             ? "Selecciona primero la caja del operador que deseas cerrar."
             : "No existe una jornada activa para realizar el cierre."
         );
+        return;
       }
 
-      const respuesta = await fetch(`${API_URL}/api/cierres`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          institucion_id: Number(institucionId),
-          jornada_id: Number(jornadaParaCerrar?.id || 0),
-          fecha: cierreForm.fecha,
-          negocio: "POS NUBE",
-          efectivo_contado: totalEfectivoContado,
-          tarjeta_manual: Number(cierreForm.tarjeta_manual || 0),
-          transferencia_manual: Number(cierreForm.transferencia_manual || 0),
-          observacion: cierreForm.observacion || "",
-          denominaciones: cierreForm.denominaciones,
-        }),
-      });
-      const data = await respuesta.json();
-      if (!respuesta.ok) {
-        const detalleDescuadre =
-          data?.code === "DESCUADRE_TRANSFERENCIA"
-            ? `\nTransferencia contada: ${formatearMoneda(data.transferencia_contada)}\n` +
-              `Transferencia registrada: ${formatearMoneda(data.transferencia_esperada)}\n` +
-              `Diferencia: ${formatearMoneda(data.diferencia)}`
-            : data?.code === "DESCUADRE_TARJETA"
-            ? `\nTarjeta contada: ${formatearMoneda(data.tarjeta_contada)}\n` +
-              `Tarjeta registrada: ${formatearMoneda(data.tarjeta_esperada)}\n` +
-              `Diferencia: ${formatearMoneda(data.diferencia)}`
-            : "";
+      const enviarCierre = async (confirmarDescuadre = false) => {
+        const respuesta = await fetch(`${API_URL}/api/cierres`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            institucion_id: Number(institucionId),
+            jornada_id: Number(jornadaParaCerrar?.id || 0),
+            fecha: cierreForm.fecha,
+            negocio: "POS NUBE",
+            efectivo_contado: totalEfectivoContado,
+            tarjeta_manual: Number(cierreForm.tarjeta_manual || 0),
+            transferencia_manual: Number(cierreForm.transferencia_manual || 0),
+            observacion: cierreForm.observacion || "",
+            denominaciones: cierreForm.denominaciones,
+            confirmar_descuadre: confirmarDescuadre,
+          }),
+        });
 
+        let data = {};
+        try {
+          data = await respuesta.json();
+        } catch (_error) {
+          data = {};
+        }
+
+        return { respuesta, data };
+      };
+
+      let { respuesta, data } = await enviarCierre(false);
+
+      if (
+        !respuesta.ok &&
+        data?.code === "REQUIERE_CONFIRMACION_DESCUADRE"
+      ) {
+        const lineas = [
+          "⚠️ SE DETECTÓ UNA NOVEDAD EN EL CIERRE",
+          "",
+        ];
+
+        if (data?.transferencia?.tiene_diferencia) {
+          lineas.push(
+            "TRANSFERENCIAS",
+            `Registrado por el sistema: ${formatearMoneda(data.transferencia.esperado)}`,
+            `Contado/comprobantes: ${formatearMoneda(data.transferencia.contado)}`,
+            `Diferencia: ${formatearMoneda(data.transferencia.diferencia)}`,
+            ""
+          );
+        }
+
+        if (data?.tarjeta?.tiene_diferencia) {
+          lineas.push(
+            "TARJETA",
+            `Registrado por el sistema: ${formatearMoneda(data.tarjeta.esperado)}`,
+            `Contado: ${formatearMoneda(data.tarjeta.contado)}`,
+            `Diferencia: ${formatearMoneda(data.tarjeta.diferencia)}`,
+            ""
+          );
+        }
+
+        lineas.push(
+          "Si eliges Aceptar, la caja SE CERRARÁ y esta diferencia quedará registrada como novedad para revisión administrativa.",
+          "",
+          "Aceptar = cerrar de todas formas",
+          "Cancelar = volver y revisar los valores"
+        );
+
+        const cerrarConNovedad = window.confirm(lineas.join("\n"));
+
+        if (!cerrarConNovedad) {
+          return;
+        }
+
+        ({ respuesta, data } = await enviarCierre(true));
+      }
+
+      if (!respuesta.ok) {
         throw new Error(
-          (data.error || data.message || "No se pudo guardar el cierre") +
-          detalleDescuadre
+          data.error ||
+          data.message ||
+          "No se pudo guardar el cierre"
         );
       }
+
       setMostrarCrearCierre(false);
       setCierreDetalle(data.cierre || null);
 
