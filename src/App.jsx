@@ -22738,6 +22738,81 @@ onClick={guardarEgreso}
                 background: "#f8fafc",
               }}
             >
+              {ventaItemsCalculados.some(
+                (item) => item?.producto && Number(item?.cantidad || 0) > 0
+              ) && (
+                <div
+                  style={{
+                    marginBottom: 14,
+                    padding: "10px 12px",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: 10,
+                    background: "#ffffff",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 800,
+                      color: "#475569",
+                      marginBottom: 6,
+                    }}
+                  >
+                    Productos seleccionados
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 6,
+                      maxHeight: 96,
+                      overflowY: "auto",
+                      paddingRight: 2,
+                    }}
+                  >
+                    {ventaItemsCalculados
+                      .filter(
+                        (item) =>
+                          item?.producto && Number(item?.cantidad || 0) > 0
+                      )
+                      .map((item, indice) => (
+                        <div
+                          key={`${item.producto_id}-${indice}`}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                            padding: "6px 9px",
+                            borderRadius: 999,
+                            background: "#f1f5f9",
+                            border: "1px solid #e2e8f0",
+                            fontSize: 12,
+                            fontWeight: 800,
+                            color: "#0f172a",
+                            lineHeight: 1.2,
+                          }}
+                          title={String(item.producto?.nombre || "")}
+                        >
+                          <span
+                            style={{
+                              maxWidth: 230,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {item.producto?.nombre || "Producto"}
+                          </span>
+                          <span style={{ color: "#2563eb" }}>
+                            x{Number(item.cantidad || 0)}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
               <label style={styles.label}>Método de pago</label>
               <select
                 value={ventaForm.metodo_pago}
