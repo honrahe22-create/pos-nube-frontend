@@ -1977,62 +1977,55 @@ const totalRecargasVista = useMemo(() => {
 
 const exportarRecargasExcel = () => {
   if (!recargasFiltradas.length) {
-    alert("No hay recargas para exportar");
+    alert("No hay recargas para exportar con los filtros actuales.");
     return;
   }
 
   try {
-    const encabezados = [
-      "Fecha y Hora",
-      "Alumno",
-      "Curso",
-      "Paralelo",
-      "Monto",
-      "Forma de pago",
-      "No. comprobante",
-      "Banco",
-      "Operador",
-      "Estado",
-      "Observación",
+    // Excel real (.xlsx): cada dato queda en su propia columna.
+    const datos = recargasFiltradas.map((r) => ({
+      "Fecha y Hora": formatearFechaHora(r.fecha_base),
+      "Alumno": r.alumno_nombre || "",
+      "Curso": r.curso || "",
+      "Paralelo": r.paralelo || "",
+      "Monto": Number(r.monto || r.dinero_recargado || 0),
+      "Forma de pago": r.tipo_visual || r.metodo_pago || "",
+      "No. comprobante": r.numero_comprobante || r.documento_visual || "",
+      "Banco": r.banco || "",
+      "Operador": r.operador_nombre || r.operador || "",
+      "Estado": r.estado_visual || r.estado || "",
+      "Observación": r.observacion || "",
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(datos);
+
+    worksheet["!cols"] = [
+      { wch: 22 }, // Fecha y Hora
+      { wch: 32 }, // Alumno
+      { wch: 18 }, // Curso
+      { wch: 14 }, // Paralelo
+      { wch: 12 }, // Monto
+      { wch: 20 }, // Forma de pago
+      { wch: 22 }, // No. comprobante
+      { wch: 24 }, // Banco
+      { wch: 30 }, // Operador
+      { wch: 16 }, // Estado
+      { wch: 42 }, // Observación
     ];
 
-    const filas = recargasFiltradas.map((r) => [
-      formatearFechaHora(r.fecha_base),
-      r.alumno_nombre || "",
-      r.curso || "",
-      r.paralelo || "",
-      Number(r.monto || 0).toFixed(2),
-      r.tipo_visual || r.metodo_pago || "",
-      r.numero_comprobante || "",
-      r.banco || "",
-      r.operador_nombre || "",
-      r.estado_visual || "",
-      r.observacion || "",
-    ]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Recargas");
 
-    const contenido = [encabezados, ...filas]
-      .map((fila) =>
-        fila
-          .map((valor) => `"${String(valor ?? "").replace(/"/g, '""')}"`)
-          .join(",")
-      )
-      .join("\n");
+    const desde = recargasFiltros.fecha_inicio || "todos";
+    const hasta = recargasFiltros.fecha_fin || "todos";
 
-    const blob = new Blob(["\ufeff" + contenido], {
-      type: "text/csv;charset=utf-8;",
-    });
-
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `recargas_${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
+    XLSX.writeFile(
+      workbook,
+      `recargas_${desde}_${hasta}.xlsx`
+    );
   } catch (error) {
-    console.error("Error exportando recargas:", error);
-    alert("No se pudo exportar el historial de recargas.");
+    console.error("Error exportando recargas a Excel:", error);
+    alert("No se pudo exportar el historial de recargas a Excel.");
   }
 };
 
@@ -16737,7 +16730,7 @@ onClick={guardarEgreso}
               URL.revokeObjectURL(url);
             }}
           >
-            Exportar
+            Exportar Excel
           </button>
         </div>
       </div>
@@ -21308,12 +21301,12 @@ onClick={guardarEgreso}
           />
         </div>
 
-        {false && (
         <div style={styles.filterField}>
           <label style={styles.filterLabelTop}>Fecha final</label>
           <input
             type="date"
             value={recargasFiltros.fecha_fin}
+            min={recargasFiltros.fecha_inicio || undefined}
             onChange={(e) =>
               setRecargasFiltros({
                 ...recargasFiltros,
@@ -21323,7 +21316,6 @@ onClick={guardarEgreso}
             style={styles.input}
           />
         </div>
-        )}
 
         {false && (
         <div style={styles.filterField}>
@@ -21347,12 +21339,24 @@ onClick={guardarEgreso}
 
       </div>
 
-      {false && (
       <div style={styles.filterButtons}>
         <button
           type="button"
           style={styles.button}
-          onClick={() => setRecargasFiltros({ ...recargasFiltros })}
+          onClick={() => {
+            if (
+              recargasFiltros.fecha_inicio &&
+              recargasFiltros.fecha_fin &&
+              recargasFiltros.fecha_fin < recargasFiltros.fecha_inicio
+            ) {
+              alert("La fecha final no puede ser anterior a la fecha inicial.");
+              return;
+            }
+
+            // Los filtros ya se aplican sobre recargasFiltradas;
+            // este botón confirma explícitamente la consulta solicitada.
+            setRecargasFiltros({ ...recargasFiltros });
+          }}
         >
           Consultar
         </button>
@@ -21365,7 +21369,6 @@ onClick={guardarEgreso}
           Borrar filtros
         </button>
       </div>
-      )}
     </div>
 
     <div style={{ height: 20 }} />
