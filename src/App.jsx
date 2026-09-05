@@ -1114,6 +1114,9 @@ const formNuevaOrdenRef = useRef(null);
 const cabeceraNuevaOrdenRef = useRef(null);
 const [topPanelPagoNuevaOrden, setTopPanelPagoNuevaOrden] = useState(176);
 const ventaRapidaBloqueadaRef = useRef(false);
+// Protección contra doble/triple envío accidental de la misma venta.
+const ventaEnvioEnCursoRef = useRef(false);
+const ventaRapidaCooldownHastaRef = useRef(0);
 
 useEffect(() => {
   const actualizarTopPanelPago = () => {
@@ -10809,6 +10812,13 @@ if (institucionIdLogin) {
   const crearVenta = async (e) => {
   e.preventDefault();
 
+  // Si ya se está procesando una venta, ignoramos cualquier submit repetido.
+  if (ventaEnvioEnCursoRef.current) {
+    return;
+  }
+
+  ventaEnvioEnCursoRef.current = true;
+
   try {
     const token = localStorage.getItem("token");
     const institucionId = obtenerInstitucionActivaId();
@@ -11248,7 +11258,12 @@ Disponible: ${formatearMoneda(
     console.error("Error creando venta:", error);
     alert("No se pudo registrar la venta");
   } finally {
-    ventaRapidaBloqueadaRef.current = false;
+    // Algunos WebView/pantallas táctiles pueden disparar eventos extra
+    // del mismo gesto. Dejamos un pequeño bloqueo adicional.
+    window.setTimeout(() => {
+      ventaEnvioEnCursoRef.current = false;
+      ventaRapidaBloqueadaRef.current = false;
+    }, 1500);
   }
 };
 
@@ -22320,7 +22335,14 @@ onClick={guardarEgreso}
                     role="button"
                     tabIndex={sinStock ? -1 : 0}
                     onClick={(e) => {
-                      if (sinStock || itemExistente || Number(e?.detail || 0) > 1) return;
+                      if (
+                        sinStock ||
+                        itemExistente ||
+                        ventaRapidaBloqueadaRef.current ||
+                        ventaEnvioEnCursoRef.current ||
+                        Date.now() < Number(ventaRapidaCooldownHastaRef.current || 0) ||
+                        Number(e?.detail || 0) > 1
+                      ) return;
 
                       const tag = String(
                         e?.target?.tagName || ""
@@ -22343,7 +22365,20 @@ onClick={guardarEgreso}
                       ]);
                     }}
                     onDoubleClick={(e) => {
-                      if (sinStock || ventaRapidaBloqueadaRef.current) return;
+                      const ahoraClick = Date.now();
+
+                      if (
+                        sinStock ||
+                        ventaRapidaBloqueadaRef.current ||
+                        ventaEnvioEnCursoRef.current ||
+                        ahoraClick < Number(ventaRapidaCooldownHastaRef.current || 0)
+                      ) {
+                        return;
+                      }
+
+                      // Un mismo gesto de doble/triple clic no puede generar
+                      // más de una venta automática.
+                      ventaRapidaCooldownHastaRef.current = ahoraClick + 2000;
 
                       const tag = String(e?.target?.tagName || "").toUpperCase();
                       if (["INPUT", "BUTTON", "SELECT", "TEXTAREA", "LABEL"].includes(tag)) {
@@ -22379,7 +22414,10 @@ onClick={guardarEgreso}
                         if (formNuevaOrdenRef.current) {
                           formNuevaOrdenRef.current.requestSubmit();
                         } else {
-                          ventaRapidaBloqueadaRef.current = false;
+                          window.setTimeout(() => {
+                            ventaEnvioEnCursoRef.current = false;
+                            ventaRapidaBloqueadaRef.current = false;
+                          }, 1500);
                         }
                       }, 250);
                     }}
