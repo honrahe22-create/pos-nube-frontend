@@ -1280,20 +1280,41 @@ const [cierreConsolidado, setCierreConsolidado] = useState(null);
 const [cargandoConsolidado, setCargandoConsolidado] = useState(false);
 
 const cajasPendientesVisuales = (() => {
-  if (Array.isArray(cajasPendientesCierre) && cajasPendientesCierre.length > 0) {
-    return cajasPendientesCierre.map((fila) => ({
-      ...fila,
-      id: Number(fila.id || fila.jornada_id || 0),
-      fecha_operativa_texto:
-        fila.fecha_operativa_texto ||
-        fila.fecha_operativa ||
-        null,
-    })).filter((fila) => fila.id);
-  }
-
-  return jornadaPendienteCierreVisual?.id
-    ? [jornadaPendienteCierreVisual]
+  // POS NUBE SIN JORNADAS:
+  // una caja pendiente existe únicamente si el backend detecta movimientos reales
+  // posteriores al último cierre de ese operador + punto.
+  const origen = Array.isArray(cajasPendientesCierre)
+    ? cajasPendientesCierre
     : [];
+
+  const unicas = new Map();
+
+  origen.forEach((fila) => {
+    const usuarioId = Number(
+      fila?.usuario_id ||
+      fila?.operador_id ||
+      0
+    );
+    const puntoId = Number(fila?.punto_id || 0);
+    const puntoNombre = String(fila?.punto_nombre || "PUNTO")
+      .trim()
+      .toUpperCase();
+
+    const clave = `${usuarioId}-${puntoId}-${puntoNombre}`;
+
+    if (!unicas.has(clave)) {
+      unicas.set(clave, {
+        ...fila,
+        id: Number(fila?.id || fila?.caja_id || 0),
+        fecha_operativa_texto:
+          fila?.fecha_operativa_texto ||
+          fila?.fecha_operativa ||
+          obtenerFechaEcuadorISO(),
+      });
+    }
+  });
+
+  return Array.from(unicas.values()).filter((fila) => fila.id);
 })();
 
 // ADMIN / SUPER_ADMIN no trabajan con una jornada propia.
@@ -1301,9 +1322,7 @@ const cajasPendientesVisuales = (() => {
 // de los operadores y el administrador elige exactamente cuál caja cerrar.
 const cajasAbiertasAdmin = (() => {
   if (!["SUPER_ADMIN", "ADMIN"].includes(rolActual)) return [];
-  return Array.isArray(cajasPendientesCierre)
-    ? cajasPendientesCierre
-    : [];
+  return cajasPendientesVisuales;
 })();
 
 const [cierreForm, setCierreForm] = useState({
@@ -13441,30 +13460,6 @@ if (!usuario) {
           : styles.appShell.gridTemplateColumns,
       }}
     >
-      {["ENCARGADO_LOCAL","CAJERO"].includes(rolActual) &&
-       estadoOperativoCaja?.estado_operativo==="CIERRE_PENDIENTE"&&(
-        <div
-          style={{
-            position:"fixed",
-            top:0,
-            left:0,
-            right:0,
-            zIndex:199999,
-            background:"#991b1b",
-            color:"#fff",
-            padding:"10px 18px",
-            textAlign:"center",
-            fontWeight:900,
-            boxShadow:"0 4px 12px rgba(0,0,0,.25)",
-          }}
-        >
-          CAJA PENDIENTE DE CIERRE · {
-            estadoOperativoCaja?.message||
-            "Debes cerrar la jornada anterior antes de continuar."
-          }
-        </div>
-      )}
-
       {cargandoEstadoOperativoCaja&&(
         <div
           style={{
@@ -14132,7 +14127,7 @@ if (!usuario) {
         {usuario?.correo || correo || "Usuario sin correo"}
       </div>
       <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{usuario?.rol || "Administrador"}</div>
-      {jornadaActiva?.punto_nombre&&<div style={{fontSize:11,color:"#0f766e",fontWeight:800,marginTop:3}}>Punto: {jornadaActiva.punto_nombre} · Caja #{jornadaActiva.id}</div>}
+      {jornadaActiva?.punto_nombre&&<div style={{fontSize:11,color:"#0f766e",fontWeight:800,marginTop:3}}>Punto: {jornadaActiva.punto_nombre} · Caja {jornadaActiva.id}</div>}
     </div>
   </div>
 </div>
@@ -14194,40 +14189,18 @@ if (!usuario) {
           <button
             style={styles.button}
             onClick={async () => {
-              const jornadaPendiente =
-                estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE"
-                  ? estadoOperativoCaja?.jornada
-                  : null;
-
-              const fechaPendiente = normalizarFechaISO(
-                jornadaPendiente?.fecha_operativa_texto ||
-                jornadaPendiente?.fecha_operativa
+              const cajaPropia = cajasPendientesVisuales.find(
+                (fila) =>
+                  Number(fila?.usuario_id || fila?.operador_id || 0) ===
+                  Number(usuario?.id || 0)
               );
 
-              const fechaObjetivo =
-                fechaPendiente ||
-                normalizarFechaISO(jornadaActiva?.fecha_operativa) ||
-                obtenerFechaEcuadorISO();
-
-              if(jornadaPendiente?.id){
-                setJornadaActiva(jornadaPendiente);
-                localStorage.setItem(
-                  "jornadaActiva",
-                  JSON.stringify(jornadaPendiente)
-                );
+              if (!cajaPropia) {
+                alert("No existen movimientos nuevos pendientes de cierre.");
+                return;
               }
 
-              setCierreForm((actual) => ({
-                ...actual,
-                fecha: fechaObjetivo,
-              }));
-
-              setMostrarCrearCierre(true);
-
-              await cargarResumenCierre(
-                fechaObjetivo,
-                jornadaPendiente || jornadaActiva
-              );
+              await abrirCajaPendienteDesdeListado(cajaPropia);
             }}
           >
             Crear cierre de caja
@@ -14266,7 +14239,7 @@ if (!usuario) {
       </div>
     </div>
 
-    {mostrarAbrirJornadaAdmin &&
+    {false && mostrarAbrirJornadaAdmin &&
       ["ENCARGADO_LOCAL","CAJERO"].includes(rolActual) && (
         <div
           style={{
@@ -14531,7 +14504,7 @@ if (!usuario) {
                       <th style={styles.th}>Código cierre</th>
                       <th style={styles.th}>Fecha</th>
                       <th style={styles.th}>Ubicación</th>
-                      <th style={styles.th}>Jornada</th>
+                      <th style={styles.th}>Referencia</th>
                       <th style={styles.th}>Operador</th>
                       <th style={styles.th}>Hora apertura</th>
                       <th style={styles.th}>Hora cierre</th>
@@ -14663,98 +14636,64 @@ if (!usuario) {
           )}
         </div>
       </div>
-      {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
-        <div style={{marginBottom:14}}>
-          <div style={{fontWeight:1000,fontSize:18,marginBottom:8}}>
-            Cajas con movimientos pendientes de cierre
-          </div>
-          <div style={{fontSize:13,color:"#475569",marginBottom:10}}>
-            Selecciona la caja con movimientos reales que deseas cerrar.
-          </div>
-
-          {cajasAbiertasAdmin.length === 0 ? (
-            <div style={{padding:"12px",border:"1px solid #cbd5e1",borderRadius:10,background:"#f8fafc",color:"#475569"}}>
-              No hay movimientos pendientes de cierre en este momento.
-            </div>
-          ) : (
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:10}}>
-              {cajasAbiertasAdmin.map((caja) => (
-                <div
-                  key={`caja-abierta-admin-${caja.id}`}
-                  style={{border:"2px solid #2563eb",borderRadius:12,padding:"12px",background:"#eff6ff"}}
-                >
-                  <div style={{fontWeight:1000,fontSize:17,color:"#1e3a8a"}}>
-                    {caja.punto_nombre || "PUNTO"}
-                  </div>
-                  <div style={{fontSize:13,lineHeight:1.5,marginTop:4,color:"#1e40af"}}>
-                    Caja #{caja.id}
-                    {" · "}Operador: {caja.usuario_nombre || caja.usuario_correo || "Operador"}
-                    {" · "}Fecha: {formatearSoloFecha(caja.fecha_operativa_texto || caja.fecha_operativa)}
-                  </div>
-                  <button
-                    type="button"
-                    style={{...styles.button,width:"100%",marginTop:10}}
-                    onClick={() => abrirCajaPendienteDesdeListado(caja)}
-                  >
-                    Cerrar esta caja
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+      <div style={{marginBottom:14}}>
+        <div style={{fontWeight:1000,fontSize:18,marginBottom:8}}>
+          Cajas pendientes de cierre
         </div>
-      )}
+        <div style={{fontSize:13,color:"#475569",marginBottom:10}}>
+          Una caja aparece aquí únicamente cuando existen movimientos reales pendientes desde su último cierre.
+        </div>
 
-      {cajasPendientesVisuales.length > 0 && (
-        <div style={{display:"grid",gap:10,marginBottom:12}}>
-          {cajasPendientesVisuales.map((pendiente) => (
-            <div
-              key={`aviso-pendiente-${pendiente.id}`}
-              style={{
-                background:"#fee2e2",
-                border:"2px solid #ef4444",
-                color:"#991b1b",
-                borderRadius:12,
-                padding:"12px",
-                fontWeight:900,
-              }}
-            >
-              <div style={{fontSize:18,marginBottom:6}}>
-                ⚠ CAJA PENDIENTE DE CIERRE
-              </div>
-
-              <div style={{fontSize:14,lineHeight:1.5}}>
-                Fecha: {formatearSoloFecha(
-                  pendiente.fecha_operativa_texto ||
-                  pendiente.fecha_operativa
-                )}
-                {" · "}Ubicación: {pendiente.punto_nombre || "PUNTO"}
-                {" · "}Caja #{pendiente.id}
-                {" · "}Operador: {
-                  pendiente.usuario_nombre ||
-                  pendiente.usuario_correo ||
-                  "Operador"
-                }
-              </div>
-
-              <button
-                type="button"
+        {cajasPendientesVisuales.length === 0 ? (
+          <div style={{padding:"12px",border:"1px solid #cbd5e1",borderRadius:10,background:"#f8fafc",color:"#475569"}}>
+            No hay movimientos pendientes de cierre en este momento.
+          </div>
+        ) : (
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:10}}>
+            {cajasPendientesVisuales.map((caja) => (
+              <div
+                key={`caja-pendiente-${caja.id}`}
                 style={{
-                  ...styles.button,
-                  background:"#dc2626",
-                  borderColor:"#dc2626",
-                  color:"#fff",
-                  marginTop:10,
-                  width:"100%",
+                  border:"2px solid #ef4444",
+                  borderRadius:12,
+                  padding:"12px",
+                  background:"#fee2e2",
+                  color:"#991b1b",
                 }}
-                onClick={() => abrirCajaPendienteDesdeListado(pendiente)}
               >
-                Cerrar esta caja pendiente
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+                <div style={{fontWeight:1000,fontSize:17}}>
+                  ⚠ CAJA PENDIENTE DE CIERRE
+                </div>
+                <div style={{fontSize:14,fontWeight:1000,marginTop:6}}>
+                  {caja.punto_nombre || "PUNTO"}
+                </div>
+                <div style={{fontSize:13,lineHeight:1.5,marginTop:4}}>
+                  Operador: {caja.usuario_nombre || caja.usuario_correo || "Operador"}
+                  {" · "}Fecha: {formatearSoloFecha(
+                    caja.fecha_operativa_texto ||
+                    caja.fecha_operativa ||
+                    obtenerFechaEcuadorISO()
+                  )}
+                </div>
+                <button
+                  type="button"
+                  style={{
+                    ...styles.button,
+                    width:"100%",
+                    marginTop:10,
+                    background:"#dc2626",
+                    borderColor:"#dc2626",
+                    color:"#fff",
+                  }}
+                  onClick={() => abrirCajaPendienteDesdeListado(caja)}
+                >
+                  Crear cierre de caja
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div style={styles.tableWrap}>
         <table style={styles.table}>
@@ -14778,90 +14717,10 @@ if (!usuario) {
             <th style={styles.th}>Acciones</th>
           </tr></thead>
           <tbody>
-            {cajasPendientesVisuales.map((pendiente) => (
-              <tr
-                key={`pendiente-${pendiente.id}`}
-                style={{
-                  background:"#fee2e2",
-                  color:"#991b1b",
-                  borderTop:"2px solid #ef4444",
-                  borderBottom:"2px solid #ef4444",
-                }}
-              >
-                {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
-                  <td style={styles.td}>
-                    <input
-                      type="checkbox"
-                      checked={jornadasSeleccionadasBorrar.includes(Number(pendiente.id))}
-                      onChange={(e) =>
-                        alternarSeleccionId(setJornadasSeleccionadasBorrar, pendiente.id, e.target.checked)
-                      }
-                      aria-label={`Seleccionar jornada ${pendiente.id}`}
-                    />
-                  </td>
-                )}
-                <td style={{...styles.td,fontWeight:1000,whiteSpace:"nowrap",color:"#991b1b"}}>
-                  PENDIENTE
-                </td>
-
-                <td style={{...styles.td,fontWeight:900,color:"#991b1b"}}>
-                  {formatearSoloFecha(
-                    pendiente.fecha_operativa_texto ||
-                    pendiente.fecha_operativa
-                  )}
-                </td>
-
-                <td style={{...styles.td,fontWeight:1000,color:"#991b1b"}}>
-                  {pendiente.punto_nombre || "PUNTO"}
-                </td>
-
-                <td style={{...styles.td,fontWeight:1000,color:"#991b1b"}}>
-                  #{pendiente.id}
-                </td>
-
-                <td style={{...styles.td,fontWeight:800,color:"#991b1b"}}>
-                  {pendiente.usuario_nombre ||
-                    pendiente.usuario_correo ||
-                    "Operador"}
-                </td>
-
-                <td
-                  colSpan={8}
-                  style={{
-                    ...styles.td,
-                    fontWeight:1000,
-                    color:"#991b1b",
-                    textAlign:"center",
-                    whiteSpace:"normal",
-                  }}
-                >
-                  ⚠ CAJA PENDIENTE DE CIERRE
-                </td>
-
-                <td style={styles.td}>
-                  <button
-                    type="button"
-                    style={{
-                      ...styles.button,
-                      background:"#dc2626",
-                      borderColor:"#dc2626",
-                      color:"#fff",
-                      whiteSpace:"nowrap",
-                    }}
-                    onClick={() => abrirCajaPendienteDesdeListado(pendiente)}
-                  >
-                    Cerrar pendiente
-                  </button>
-                </td>
-              </tr>
-            ))}
-
             {cargandoCierres ? (
               <tr><td colSpan={14} style={styles.td}>Cargando cierres...</td></tr>
             ) : cierresCaja.length===0 ? (
-              cajasPendientesVisuales.length > 0 ? null : (
-                <tr><td colSpan={14} style={styles.td}>No hay cierres registrados.</td></tr>
-              )
+              <tr><td colSpan={14} style={styles.td}>No hay cierres registrados.</td></tr>
             ) : cierresCaja.map((c)=><tr key={c.id}>
               {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
                 <td style={styles.td}>
@@ -14969,7 +14828,7 @@ if (!usuario) {
                         onChange={(e) =>
                           alternarSeleccionId(setJornadasSeleccionadasBorrar, j.id, e.target.checked)
                         }
-                        aria-label={`Seleccionar jornada ${j.id}`}
+                        aria-label={`Seleccionar referencia ${j.id}`}
                       />
                     </td>
                     <td style={{...styles.td,fontWeight:900}}>#{j.id}</td>
@@ -14994,25 +14853,19 @@ if (!usuario) {
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",padding:"14px",borderBottom:"1px solid #e5e7eb",flex:"0 0 auto",background:"#fff",position:"relative",zIndex:2}}>
             <div>
               <h2 style={{margin:"0",fontSize:"clamp(22px,4vw,32px)"}}>
-                {estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE"
-                  ? "Caja pendiente de cierre"
-                  : "Nuevo cierre de caja"}
+                Nuevo cierre de caja
               </h2>
-              {estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE" && (
-                <div style={{marginTop:6,color:"#b91c1c",fontWeight:900}}>
-                  Debes cerrar esta jornada antes de continuar.
-                </div>
-              )}
+              <div style={{marginTop:6,color:"#475569",fontWeight:800,fontSize:13}}>
+                Calculado con movimientos reales desde el último cierre de esta caja.
+              </div>
             </div>
 
-            {estadoOperativoCaja?.estado_operativo !== "CIERRE_PENDIENTE" && (
-              <button
-                style={{...styles.outlineButton,flexShrink:0}}
-                onClick={()=>setMostrarCrearCierre(false)}
-              >
-                Cerrar
-              </button>
-            )}
+            <button
+              style={{...styles.outlineButton,flexShrink:0}}
+              onClick={()=>setMostrarCrearCierre(false)}
+            >
+              Cerrar
+            </button>
           </div>
           <div style={{flex:"1 1 auto",minHeight:0,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",touchAction:"pan-y",overscrollBehaviorY:"contain",padding:"14px",boxSizing:"border-box"}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,220px),1fr))",gap:16,marginTop:18,width:"100%",minWidth:0}}>
@@ -19623,7 +19476,7 @@ onClick={guardarEgreso}
               usuario?.nombre||
               usuario?.correo||
               "-"}{" "}
-            · Caja #{jornadaActiva?.id||"-"}
+            · Caja {jornadaActiva?.id||"-"}
           </div>
         </div>
 
