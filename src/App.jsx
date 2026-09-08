@@ -23251,7 +23251,6 @@ onClick={guardarEgreso}
                             value={operador.id || operador.nombre}
                           >
                             {operador.nombre}
-                            {operador.correo ? ` · ${operador.correo}` : ""}
                           </option>
                         ))}
                       </select>
