@@ -976,46 +976,6 @@ const [reporteStockFiltros,setReporteStockFiltros]=useState({
 
 
 
-const ubicacionesTransferenciaStock = useMemo(() => {
-  const institucionId = obtenerInstitucionActivaId();
-
-  const desdeInventario = (Array.isArray(puntosInventario) ? puntosInventario : [])
-    .map((valor) => normalizarUbicacionFrontend(valor, institucionId))
-    .filter(Boolean);
-
-  const desdePuntosOperacion = (Array.isArray(puntosOperacion) ? puntosOperacion : [])
-    .map((punto) =>
-      normalizarUbicacionFrontend(
-        typeof punto === "string" ? punto : punto?.nombre,
-        institucionId
-      )
-    )
-    .filter(Boolean);
-
-  const desdeExistencias = (Array.isArray(existenciasInventario) ? existenciasInventario : [])
-    .map((fila) =>
-      normalizarUbicacionFrontend(fila?.ubicacion, institucionId)
-    )
-    .filter(Boolean);
-
-  let lista = [
-    ...desdeInventario,
-    ...desdePuntosOperacion,
-    ...desdeExistencias,
-  ];
-
-  if (Number(institucionId) === 1) {
-    lista = ["BAR"];
-  }
-
-  return [...new Set(lista)].filter(Boolean);
-}, [
-  puntosInventario,
-  puntosOperacion,
-  existenciasInventario,
-  usuario?.institucion_id,
-]);
-
 const familiasOperacionStock = useMemo(() => {
   const valoresProductos = productos
     .filter((p) => p?.activo !== false)
@@ -4239,17 +4199,18 @@ const cambiarTipoIngresoStock=async(valor)=>{
   }
 
   if(valor==="TRANSFERENCIA_UBICACIONES"){
+    const institucionId=obtenerInstitucionActivaId();
     const sugerida=normalizarUbicacionFrontend(
       puntoInventarioSeleccionado||localNuevaOrden||"PRINCIPAL",
-      obtenerInstitucionActivaId()
+      institucionId
     );
+    const puntosDisponibles=(Array.isArray(puntosInventario)?puntosInventario:[])
+      .map((p)=>normalizarUbicacionFrontend(p,institucionId))
+      .filter(Boolean);
 
     setStockOperacionForm((prev)=>({
       ...prev,
-      ubicacion_origen:
-        ubicacionesTransferenciaStock.includes(sugerida)
-          ? sugerida
-          : "",
+      ubicacion_origen:puntosDisponibles.includes(sugerida)?sugerida:"",
       ubicacion_destino:"",
     }));
   }
@@ -4354,28 +4315,6 @@ const itemsValidosOperacionStock=()=>{
     );
 };
 
-const obtenerUbicacionOperativaStockActual=()=>{
-  const institucionId=obtenerInstitucionActivaId();
-
-  let accesoOperativo=null;
-  try{
-    accesoOperativo=JSON.parse(
-      localStorage.getItem("accesoOperativo")||"null"
-    );
-  }catch(_error){
-    accesoOperativo=null;
-  }
-
-  return normalizarUbicacionFrontend(
-    stockOperacionForm.ubicacion_origen||
-    puntoInventarioSeleccionado||
-    accesoOperativo?.punto_nombre||
-    localNuevaOrden||
-    "PRINCIPAL",
-    institucionId
-  );
-};
-
 const abrirConfirmacionStock=(confirmacion)=>{
   if(!confirmacion)return;
 
@@ -4434,10 +4373,7 @@ const prepararConfirmacionOperacionStock=()=>{
     if(stockTipoIngreso==="TRANSFERENCIA_UBICACIONES"){
       const institucionId=obtenerInstitucionActivaId();
       const origen=normalizarUbicacionFrontend(
-        stockOperacionForm.ubicacion_origen||
-        puntoInventarioSeleccionado||
-        localNuevaOrden||
-        "PRINCIPAL",
+        stockOperacionForm.ubicacion_origen||"",
         institucionId
       );
       const destino=normalizarUbicacionFrontend(
@@ -4445,7 +4381,7 @@ const prepararConfirmacionOperacionStock=()=>{
         institucionId
       );
 
-      if(!String(stockOperacionForm.ubicacion_origen||origen).trim()){
+      if(!String(stockOperacionForm.ubicacion_origen||"").trim()){
         alert("Selecciona la ubicación origen.");
         return;
       }
@@ -4490,14 +4426,11 @@ const prepararConfirmacionOperacionStock=()=>{
       ...(esTransferenciaUbicaciones
         ? {
             ubicacion_origen:normalizarUbicacionFrontend(
-              stockOperacionForm.ubicacion_origen||
-              puntoInventarioSeleccionado||
-              localNuevaOrden||
-              "PRINCIPAL",
+              stockOperacionForm.ubicacion_origen,
               obtenerInstitucionActivaId()
             ),
             ubicacion_destino:normalizarUbicacionFrontend(
-              stockOperacionForm.ubicacion_destino||"",
+              stockOperacionForm.ubicacion_destino,
               obtenerInstitucionActivaId()
             ),
           }
@@ -4631,11 +4564,13 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
                 jornada_id:null,
                 ubicacion_origen:String(
                   confirmacionActual.ubicacion_origen||
-                  obtenerUbicacionOperativaStockActual()
+                  stockOperacionForm.ubicacion_origen||
+                  ""
                 ).trim(),
                 ubicacion_operacion:String(
                   confirmacionActual.ubicacion_origen||
-                  obtenerUbicacionOperativaStockActual()
+                  stockOperacionForm.ubicacion_origen||
+                  ""
                 ).trim(),
                 producto_id:Number(item.producto_id),
                 ubicacion_destino:String(
@@ -19771,16 +19706,21 @@ onClick={guardarEgreso}
               }))}
             >
               <option value="">Seleccionar ubicación</option>
-              {ubicacionesTransferenciaStock.map((ubicacion)=>(
-                <option
-                  key={`origen-${ubicacion}`}
-                  value={ubicacion}
-                >
-                  {ubicacion}
-                </option>
-              ))}
+              {(Array.isArray(puntosInventario)?puntosInventario:[])
+                .map((ubicacion)=>normalizarUbicacionFrontend(
+                  ubicacion,
+                  obtenerInstitucionActivaId()
+                ))
+                .filter(Boolean)
+                .filter((ubicacion,index,lista)=>lista.indexOf(ubicacion)===index)
+                .map((ubicacion)=>(
+                  <option key={`origen-${ubicacion}`} value={ubicacion}>
+                    {ubicacion}
+                  </option>
+                ))}
             </select>
           </div>
+
           <div style={styles.filterField}>
             <label style={styles.label}>Ubicación destino *</label>
             <select
@@ -19792,21 +19732,19 @@ onClick={guardarEgreso}
               }))}
             >
               <option value="">Seleccionar ubicación</option>
-              {ubicacionesTransferenciaStock
+              {(Array.isArray(puntosInventario)?puntosInventario:[])
+                .map((ubicacion)=>normalizarUbicacionFrontend(
+                  ubicacion,
+                  obtenerInstitucionActivaId()
+                ))
+                .filter(Boolean)
+                .filter((ubicacion,index,lista)=>lista.indexOf(ubicacion)===index)
                 .filter((ubicacion)=>
                   normalizarTexto(ubicacion)!==
-                  normalizarTexto(
-                    stockOperacionForm.ubicacion_origen||
-                    puntoInventarioSeleccionado||
-                    localNuevaOrden||
-                    ""
-                  )
+                  normalizarTexto(stockOperacionForm.ubicacion_origen)
                 )
                 .map((ubicacion)=>(
-                  <option
-                    key={`destino-${ubicacion}`}
-                    value={ubicacion}
-                  >
+                  <option key={`destino-${ubicacion}`} value={ubicacion}>
                     {ubicacion}
                   </option>
                 ))}
@@ -20342,7 +20280,6 @@ onClick={guardarEgreso}
                 {stockConfirmacion.tipo==="TRANSFERENCIA_UBICACIONES"
                   ? `${stockConfirmacion.ubicacion_origen||"-"} → ${stockConfirmacion.ubicacion_destino||"-"}`
                   : (
-                      stockConfirmacion.ubicacion_origen||
                       puntoInventarioSeleccionado||
                       localNuevaOrden||
                       "-"
