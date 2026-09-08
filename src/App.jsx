@@ -908,7 +908,7 @@ useEffect(()=>{
 useEffect(() => {
   setMostrarSelectorJornada(false);
   setMostrarAbrirJornadaAdmin(false);
-}, [usuario?.id, usuario?.rol, institucionActivaId]);
+}, [usuario?.id, usuario?.rol]);
 
 const [mostrarPuntosStock,setMostrarPuntosStock]=useState(false);
 const [nuevoPuntoForm,setNuevoPuntoForm]=useState({nombre:"",codigo:"",descripcion:""});
@@ -5570,15 +5570,6 @@ const exportarVentasExcel = () => {
         acceso?.punto_id &&
         Number(acceso?.institucion_id||0)===Number(institucionId)
       ){
-        if(acceso?.punto_nombre){
-          const nombreGuardado=normalizarUbicacionFrontend(
-            acceso.punto_nombre,
-            institucionId
-          );
-          setPuntoInventarioSeleccionado(nombreGuardado);
-          setLocalNuevaOrden(nombreGuardado);
-        }
-
         const puntos=await cargarPuntosOperacion({
           tokenForzado:tokenForzado||localStorage.getItem("token"),
           institucionForzada:institucionId,
@@ -5698,26 +5689,7 @@ const exportarVentasExcel = () => {
 
     localStorage.setItem("token", data.token);
     localStorage.setItem("usuario", JSON.stringify(data.usuario));
-
-    const ubicacionAccesoOperativo = normalizarUbicacionFrontend(
-      data?.acceso?.punto_nombre ||
-      data?.jornada?.punto_nombre ||
-      loginPuntosOperacion.find(
-        (punto) => Number(punto?.id) === Number(loginPuntoId)
-      )?.nombre ||
-      "PRINCIPAL",
-      Number(loginInstitucionId)
-    );
-
-    localStorage.setItem(
-      "accesoOperativo",
-      JSON.stringify({
-        punto_id: Number(loginPuntoId),
-        punto_nombre: ubicacionAccesoOperativo,
-        institucion_id: Number(loginInstitucionId),
-      })
-    );
-
+    localStorage.setItem("accesoOperativo", JSON.stringify({ punto_id: Number(loginPuntoId), institucion_id: Number(loginInstitucionId) }));
     localStorage.setItem(
       "institucionSeleccionadaId",
       String(data.usuario.institucion_id)
@@ -5739,10 +5711,6 @@ const exportarVentasExcel = () => {
     setVerPasswordOperadorJornada(false);
     setJornadaActiva(null);
     try{ localStorage.removeItem("jornadaActiva"); }catch(_error){}
-
-    // SIN JORNADAS: la ubicación real de trabajo viene del acceso seleccionado.
-    setLocalNuevaOrden(ubicacionAccesoOperativo);
-    setPuntoInventarioSeleccionado(ubicacionAccesoOperativo);
 
     const estadoIngresoOperativo=
       false && data.estado_operativo==="CIERRE_PENDIENTE"
@@ -5777,7 +5745,7 @@ const exportarVentasExcel = () => {
     });
 
     await cargarExistenciasInventario({
-      ubicacionForzada: ubicacionAccesoOperativo,
+      ubicacionForzada: data.jornada?.punto_nombre,
     });
   };
 
@@ -10511,29 +10479,8 @@ if (institucionIdLogin) {
       return;
     }
 
-    let accesoOperativoVenta = null;
-    try {
-      accesoOperativoVenta = JSON.parse(
-        localStorage.getItem("accesoOperativo") || "null"
-      );
-    } catch (_error) {
-      accesoOperativoVenta = null;
-    }
-
-    const puntoAccesoVenta = (Array.isArray(puntosOperacion) ? puntosOperacion : [])
-      .find(
-        (punto) =>
-          Number(punto?.id) === Number(accesoOperativoVenta?.punto_id || 0)
-      );
-
-    const ubicacionVentaActual = normalizarUbicacionFrontend(
-      accesoOperativoVenta?.punto_nombre ||
-      puntoAccesoVenta?.nombre ||
-      localNuevaOrden ||
-      puntoInventarioSeleccionado ||
-      "PRINCIPAL",
-      institucionId
-    );
+    const ubicacionVentaActual =
+      jornadaActiva?.punto_nombre || localNuevaOrden || "PRINCIPAL";
 
     const itemsLimpios = ventaItems
       .map((item) => {
@@ -10591,7 +10538,7 @@ if (institucionIdLogin) {
       if (stockDisponible < 1) {
         alert(
           `${producto.nombre}: no tiene stock disponible en ${
-            ubicacionVentaActual || "esta ubicación"
+            jornadaActiva?.punto_nombre || localNuevaOrden || "esta ubicación"
           }.`
         );
         return;
@@ -10739,10 +10686,8 @@ Disponible: ${formatearMoneda(
         : ventaForm.metodo_pago,
       items: itemsLimpios,
       observacion:ventaForm.observacion?.trim()||"",
-      ubicacion:ubicacionVentaActual,
-      // POS NUBE SIN JORNADAS:
-      // la venta queda asociada por usuario autenticado + ubicación.
-      // No enviar jornada_id evita que Pensionado dependa de una jornada inexistente.
+      ubicacion:jornadaActiva?.punto_nombre||localNuevaOrden||"PRINCIPAL",
+      jornada_id:Number(jornadaActiva?.id),
     };
 
     const res = await fetch(`${API_URL}/api/ventas`, {
@@ -13292,7 +13237,7 @@ if (!usuario) {
                 fontSize:24,
               }}
             >
-              Acceso operativo
+              Debes abrir una nueva jornada
             </h2>
 
             <p
@@ -13303,7 +13248,8 @@ if (!usuario) {
                 fontSize:15,
               }}
             >
-              La ubicación operativa se define al iniciar sesión.
+              No existe una jornada abierta para este operador. Para continuar
+              con ventas, abre una nueva jornada.
             </p>
 
             <div
