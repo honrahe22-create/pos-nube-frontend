@@ -803,6 +803,7 @@ const [eliminandoPruebas, setEliminandoPruebas] = useState(false);
 const [eliminandoProductosPrueba, setEliminandoProductosPrueba] = useState(false);
 
   const [ventas, setVentas] = useState([]);
+  const [operadoresVentasRegistrados, setOperadoresVentasRegistrados] = useState([]);
   const [ventaForm, setVentaForm] = useState({
     alumno_id: "",
     profesor_id: "",
@@ -1722,6 +1723,76 @@ const totalRecargasVista = useMemo(() => {
     });
   }, [ventas, alumnos, institucionActivaId]);
 
+  const operadoresVentasDisponibles = useMemo(() => {
+    let listaVentas = [...ventasEnriquecidas];
+
+    if (ventasFiltros.fecha_inicio) {
+      listaVentas = listaVentas.filter((venta) => {
+        const fecha = formatearFechaInput(venta.fecha_base);
+        return fecha && fecha >= ventasFiltros.fecha_inicio;
+      });
+    }
+
+    if (ventasFiltros.fecha_fin) {
+      listaVentas = listaVentas.filter((venta) => {
+        const fecha = formatearFechaInput(venta.fecha_base);
+        return fecha && fecha <= ventasFiltros.fecha_fin;
+      });
+    }
+
+    if (ventasFiltros.ubicacion) {
+      const ubicacionFiltro = normalizarUbicacionFrontend(
+        ventasFiltros.ubicacion,
+        institucionActivaId
+      );
+
+      listaVentas = listaVentas.filter(
+        (venta) =>
+          normalizarUbicacionFrontend(
+            venta.ubicacion_visual || venta.ubicacion || "PRINCIPAL",
+            institucionActivaId
+          ) === ubicacionFiltro
+      );
+    }
+
+    const mapa = new Map();
+
+    (operadoresVentasRegistrados || []).forEach((op) => {
+      const nombre = String(op?.nombre || op?.correo || "").trim();
+      if (!nombre) return;
+
+      mapa.set(nombre, {
+        id: Number(op?.id || 0) || null,
+        nombre,
+        correo: String(op?.correo || "").trim(),
+      });
+    });
+
+    listaVentas.forEach((venta) => {
+      const nombre = String(venta?.operador_visual || "").trim();
+      if (!nombre || nombre === "Sistema") return;
+
+      if (!mapa.has(nombre)) {
+        mapa.set(nombre, {
+          id: Number(venta?.operador_id || 0) || null,
+          nombre,
+          correo: String(venta?.operador_correo || "").trim(),
+        });
+      }
+    });
+
+    return Array.from(mapa.values()).sort((a, b) =>
+      String(a.nombre).localeCompare(String(b.nombre))
+    );
+  }, [
+    ventasEnriquecidas,
+    operadoresVentasRegistrados,
+    ventasFiltros.fecha_inicio,
+    ventasFiltros.fecha_fin,
+    ventasFiltros.ubicacion,
+    institucionActivaId,
+  ]);
+
   const ventasFiltradas = useMemo(() => {
     let lista = [...ventasEnriquecidas];
 
@@ -1738,6 +1809,40 @@ const totalRecargasVista = useMemo(() => {
       lista = lista.filter(
         (venta) => String(venta.alumno_id || "") === String(ventasFiltros.alumno_id)
       );
+    }
+
+    if (ventasFiltros.ubicacion) {
+      const ubicacionFiltro = normalizarUbicacionFrontend(
+        ventasFiltros.ubicacion,
+        institucionActivaId
+      );
+
+      lista = lista.filter(
+        (venta) =>
+          normalizarUbicacionFrontend(
+            venta.ubicacion_visual || venta.ubicacion || "PRINCIPAL",
+            institucionActivaId
+          ) === ubicacionFiltro
+      );
+    }
+
+    if (ventasFiltros.operador) {
+      const operadorSeleccionado = operadoresVentasDisponibles.find(
+        (op) => String(op?.id || "") === String(ventasFiltros.operador)
+      );
+
+      lista = lista.filter((venta) => {
+        const ventaOperadorId = Number(venta?.operador_id || 0);
+        const nombreVenta = String(venta?.operador_visual || "").trim();
+
+        if (operadorSeleccionado?.id && ventaOperadorId) {
+          return Number(ventaOperadorId) === Number(operadorSeleccionado.id);
+        }
+
+        return (
+          nombreVenta === String(operadorSeleccionado?.nombre || "").trim()
+        );
+      });
     }
 
     if (ventasFiltros.fecha_inicio) {
@@ -8016,6 +8121,42 @@ if (institucionIdLogin) {
     }
   };
 
+  const cargarOperadoresVentas = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      if (!token || !institucionId) {
+        setOperadoresVentasRegistrados([]);
+        return [];
+      }
+
+      const res = await fetch(
+        `${API_URL}/api/ventas/operadores?institucion_id=${institucionId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error("Error backend operadores ventas:", data);
+        setOperadoresVentasRegistrados([]);
+        return [];
+      }
+
+      const lista = Array.isArray(data) ? data : [];
+      setOperadoresVentasRegistrados(lista);
+      return lista;
+    } catch (error) {
+      console.error("Error cargando operadores ventas:", error);
+      setOperadoresVentasRegistrados([]);
+      return [];
+    }
+  };
+
   const cargarVentas = async () => {
     try {
       const token = localStorage.getItem("token");
@@ -8042,6 +8183,21 @@ if (institucionIdLogin) {
       setVentas([]);
     }
   };
+
+  useEffect(() => {
+    if (
+      vista === "ventas" &&
+      vistaVentasInterna === "consultar" &&
+      ["ADMIN", "SUPER_ADMIN"].includes(rolActual)
+    ) {
+      cargarOperadoresVentas();
+    }
+  }, [
+    vista,
+    vistaVentasInterna,
+    institucionActivaId,
+    rolActual,
+  ]);
 
   const obtenerVentasParaReporteProductos = (filtros) => {
     let lista = [...ventasEnriquecidas];
@@ -21565,7 +21721,13 @@ onClick={guardarEgreso}
           ? styles.ventasTabActive
           : styles.ventasTab
       }
-      onClick={() => setVistaVentasInterna("consultar")}
+      onClick={async () => {
+        setVistaVentasInterna("consultar");
+        await Promise.all([
+          cargarVentas(),
+          cargarOperadoresVentas(),
+        ]);
+      }}
     >
       Consultar ventas
     </button>
@@ -23057,6 +23219,7 @@ onClick={guardarEgreso}
                           setVentasFiltros({
                             ...ventasFiltros,
                             ubicacion: e.target.value,
+                            operador: "",
                           })
                         }
                         style={styles.input}
@@ -23082,6 +23245,15 @@ onClick={guardarEgreso}
                         style={styles.input}
                       >
                         <option value="">Selecciona</option>
+                        {operadoresVentasDisponibles.map((operador) => (
+                          <option
+                            key={operador.id || operador.nombre}
+                            value={operador.id || operador.nombre}
+                          >
+                            {operador.nombre}
+                            {operador.correo ? ` · ${operador.correo}` : ""}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div style={styles.filterField}>
