@@ -2689,17 +2689,10 @@ const importarStockArchivo = (event) => {
     }
 
     // Solo los roles operativos trabajan ligados a una jornada.
-    // ADMIN / SUPER_ADMIN pueden importar y administrar productos sin abrir caja.
+    // POS NUBE SIN JORNADAS:
+    // La importación de Stock depende del rol/permisos, no de una jornada abierta.
     const rolImportacion = normalizarRol(usuario?.rol);
-    const requiereJornadaImportacion =
-      ["ENCARGADO_LOCAL", "CAJERO"].includes(rolImportacion);
-
-    if (requiereJornadaImportacion && !jornadaActiva?.id) {
-      alert(
-        "Debes tener una jornada abierta antes de importar productos nuevos."
-      );
-      return;
-    }
+    const requiereJornadaImportacion = false;
 
     const normalizar = (valor) =>
       String(valor || "")
@@ -3300,7 +3293,7 @@ const guardarStockProducto = async (producto) => {
       },
       body: JSON.stringify({
         institucion_id:Number(institucionId),
-        jornada_id:Number(jornadaActiva?.id),
+        jornada_id:null,
         producto_id:Number(producto.id),
         ubicacion:puntoInventarioSeleccionado,
         stock_nuevo: stockNumero,
@@ -3775,7 +3768,7 @@ const confirmarTransferenciaLocales=async()=>{
         },
         body:JSON.stringify({
           institucion_id:Number(institucionId),
-          jornada_id:Number(jornadaActiva?.id),
+          jornada_id:null,
           producto_id:Number(transferenciaLocales.id),
           institucion_destino_id:institucionDestinoId,
           punto_destino_id:puntoDestinoId,
@@ -4325,14 +4318,10 @@ const abrirConfirmacionStock=(confirmacion)=>{
 };
 
 const prepararConfirmacionOperacionStock=()=>{
-  // ADMIN / SUPER_ADMIN administran Stock sin abrir/cerrar jornada.
-  // ENCARGADO_LOCAL / CAJERO conservan el flujo obligatorio de jornada.
+  // POS NUBE SIN JORNADAS:
+  // Stock se opera por usuario autenticado + ubicación, sin abrir/cerrar jornada.
   const rolStockActual=normalizarRol(usuario?.rol);
-  const requiereJornadaStock=["ENCARGADO_LOCAL","CAJERO"].includes(rolStockActual);
-  if(requiereJornadaStock&&!jornadaActiva?.id){
-    alert("Debes iniciar una jornada antes de operar Stock.");
-    return;
-  }
+  const requiereJornadaStock=false;
 
   const items=itemsValidosOperacionStock();
 
@@ -4473,7 +4462,7 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
             },
             body:JSON.stringify({
               institucion_id:Number(institucionId),
-              jornada_id:Number(jornadaActiva?.id),
+              jornada_id:null,
               ubicacion_operacion:String(puntoInventarioSeleccionado||jornadaActiva?.punto_nombre||"PRINCIPAL"),
               tipo_ingreso:confirmacionActual.tipo,
               proveedor_id:
@@ -4518,7 +4507,7 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
               },
               body:JSON.stringify({
                 institucion_id:Number(institucionId),
-                jornada_id:Number(jornadaActiva?.id),
+                jornada_id:null,
                 ubicacion_operacion:String(puntoInventarioSeleccionado||jornadaActiva?.punto_nombre||"PRINCIPAL"),
                 producto_id:Number(item.producto_id),
                 ubicacion_destino:String(
@@ -4553,7 +4542,7 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
               },
               body:JSON.stringify({
                 institucion_id:Number(institucionId),
-                jornada_id:Number(jornadaActiva?.id),
+                jornada_id:null,
                 ubicacion_operacion:String(puntoInventarioSeleccionado||jornadaActiva?.punto_nombre||"PRINCIPAL"),
                 producto_id:Number(item.producto_id),
                 institucion_destino_id:Number(
@@ -4591,7 +4580,7 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
           },
           body:JSON.stringify({
             institucion_id:Number(institucionId),
-            jornada_id:Number(jornadaActiva?.id),
+            jornada_id:null,
             ubicacion_operacion:String(puntoInventarioSeleccionado||jornadaActiva?.punto_nombre||"PRINCIPAL"),
             tipo_egreso:confirmacionActual.tipo,
             destinatario_cortesia:
@@ -4739,15 +4728,14 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
 const crearProductoDesdeStock=async(e)=>{
   e.preventDefault();
   const rolCrearProductoStock=normalizarRol(usuario?.rol);
-  const requiereJornadaCrearProducto=["ENCARGADO_LOCAL","CAJERO"].includes(rolCrearProductoStock);
-  if(requiereJornadaCrearProducto&&!jornadaActiva?.id)return alert("Debes abrir una jornada.");
+  const requiereJornadaCrearProducto=false;
   const cantidad=Number(nuevoProductoStockForm.cantidad_inicial||0);
   if(!nuevoProductoStockForm.nombre.trim())return alert("Nombre obligatorio.");
   if(!Number.isInteger(cantidad)||cantidad<0)return alert("Cantidad inicial inválida.");
   try{const token=localStorage.getItem("token"),institucionId=obtenerInstitucionActivaId();
     const res=await fetch(`${API_URL}/api/productos`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({
       institucion_id:Number(institucionId),
-      ...(requiereJornadaCrearProducto?{jornada_id:Number(jornadaActiva?.id||0)}:{}),
+      // POS NUBE SIN JORNADAS: no se envía jornada_id.
       nombre:nuevoProductoStockForm.nombre.trim(),codigo:nuevoProductoStockForm.codigo.trim()||null,
       precio:Number(nuevoProductoStockForm.precio||0),stock:cantidad,stock_minimo:Number(nuevoProductoStockForm.stock_minimo||0),
       categoria:nuevoProductoStockForm.categoria.trim()||null,concepto_inicial:nuevoProductoStockForm.concepto_inicial,
@@ -4785,7 +4773,7 @@ const confirmarMovimientoStock=async()=>{
   if(!String(movimientoStock.observacion||"").trim())return alert("Observación obligatoria.");
   try{const token=localStorage.getItem("token"),institucionId=obtenerInstitucionActivaId();
     const res=await fetch(`${API_URL}/api/inventario/movimiento`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({
-      institucion_id:Number(institucionId),jornada_id:Number(jornadaActiva?.id),producto_id:Number(movimientoStock.id),
+      institucion_id:Number(institucionId),jornada_id:null,producto_id:Number(movimientoStock.id),
       concepto:movimientoStock.concepto,cantidad,observacion:movimientoStock.observacion.trim()
     })});
     const data=await res.json();if(!res.ok)throw new Error(data.message||"Error registrando movimiento");
@@ -4839,7 +4827,7 @@ const confirmarBajaStock = async () => {
       },
       body: JSON.stringify({
         institucion_id:Number(institucionId),
-        jornada_id:Number(jornadaActiva?.id),
+        jornada_id:null,
         producto_id:Number(bajaStock.id),
         ubicacion:bajaStock.ubicacion,
         cantidad,
@@ -4914,7 +4902,7 @@ const confirmarTransferenciaStock = async () => {
       },
       body: JSON.stringify({
         institucion_id:Number(institucionId),
-        jornada_id:Number(jornadaActiva?.id),
+        jornada_id:null,
         producto_id:Number(stockTransferencia.id),
         ubicacion_origen:origen,
         ubicacion_destino: destino,
@@ -8572,7 +8560,7 @@ if (institucionIdLogin) {
         },
         body: JSON.stringify({
           institucion_id:Number(institucionId),
-          jornada_id:Number(jornadaActiva?.id),
+          jornada_id:null,
           nombre:productoForm.nombre,
           codigo:productoForm.codigo||null,
           descripcion:productoForm.descripcion,
@@ -10690,7 +10678,7 @@ Disponible: ${formatearMoneda(
       items: itemsLimpios,
       observacion:ventaForm.observacion?.trim()||"",
       ubicacion:jornadaActiva?.punto_nombre||localNuevaOrden||"PRINCIPAL",
-      jornada_id:Number(jornadaActiva?.id),
+      jornada_id:null,
     };
 
     const res = await fetch(`${API_URL}/api/ventas`, {
