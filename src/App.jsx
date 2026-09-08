@@ -4395,6 +4395,34 @@ const prepararConfirmacionOperacionStock=()=>{
         alert("El punto origen y destino deben ser diferentes.");
         return;
       }
+
+      // No permitir transferir productos sin stock real en la ubicación origen.
+      for(const item of items){
+        const producto=productos.find(
+          (p)=>Number(p.id)===Number(item.producto_id)
+        );
+        const disponible=Number(
+          stockProductoEnPunto(item.producto_id,origen)||0
+        );
+        const solicitado=Number(item.cantidad||0);
+
+        if(disponible<=0){
+          alert(
+            `${producto?.nombre||`Producto #${item.producto_id}`}: `+
+            `no tiene stock disponible en ${origen}.`
+          );
+          return;
+        }
+
+        if(solicitado>disponible){
+          alert(
+            `${producto?.nombre||`Producto #${item.producto_id}`}: `+
+            `stock insuficiente en ${origen}. `+
+            `Disponible: ${disponible}. Solicitado: ${solicitado}.`
+          );
+          return;
+        }
+      }
     }
 
     if(stockTipoIngreso==="TRANSFERENCIA_LOCALES"){
