@@ -45,6 +45,7 @@ const MENU_POR_ROL = {
     "nueva_orden",
     "alumnos",
     "profesores",
+    "egresos",
     "cierre_caja",
   ],
   PADRE: [],
@@ -95,6 +96,8 @@ const PERMISOS_FRONTEND = {
     "ventas.crear",
     "productos.ver",
     "personas.ver",
+    "egresos.ver",
+    "egresos.gestionar",
     "cierres.ver",
     "cierres.crear",
   ],
@@ -11304,6 +11307,24 @@ Disponible: ${formatearMoneda(
         return;
       }
 
+      let accesoOperativoEgreso = null;
+      try {
+        accesoOperativoEgreso = JSON.parse(
+          localStorage.getItem("accesoOperativo") || "null"
+        );
+      } catch (_error) {
+        accesoOperativoEgreso = null;
+      }
+
+      const puntoEgresoId = Number(accesoOperativoEgreso?.punto_id || 0) || null;
+      const puntoEgresoNombre =
+        String(
+          accesoOperativoEgreso?.punto_nombre ||
+          puntoInventarioSeleccionado ||
+          localNuevaOrden ||
+          ""
+        ).trim() || null;
+
       const url = editandoEgresoId
         ? `${API_URL}/api/egresos/${editandoEgresoId}`
         : `${API_URL}/api/egresos`;
@@ -11317,6 +11338,8 @@ Disponible: ${formatearMoneda(
           ...egresoForm,
           institucion_id: Number(institucionId),
           total,
+          punto_id: puntoEgresoId,
+          punto_nombre: puntoEgresoNombre,
           // Los egresos de caja siempre afectan efectivo.
           tipo_egreso: "Efectivo",
         }),
