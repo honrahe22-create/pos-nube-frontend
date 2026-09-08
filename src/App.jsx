@@ -870,38 +870,7 @@ const [cargandoEstadoOperativoCaja,setCargandoEstadoOperativoCaja]=useState(fals
 // Prioridad 1: la jornada que entrega /estado-operativo como CIERRE_PENDIENTE.
 // Respaldo: jornadaActiva/localStorage si su fecha operativa es anterior a hoy.
 // Esto evita que la marca roja desaparezca al navegar al módulo Cierre de caja.
-const jornadaPendienteCierreVisual = (() => {
-  const desdeEstado =
-    estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE"
-      ? estadoOperativoCaja?.jornada
-      : null;
-
-  if (desdeEstado?.id) return desdeEstado;
-
-  let candidata = jornadaActiva || null;
-
-  if (!candidata?.id) {
-    try {
-      candidata = JSON.parse(localStorage.getItem("jornadaActiva") || "null");
-    } catch (_error) {
-      candidata = null;
-    }
-  }
-
-  if (!candidata?.id) return null;
-
-  const fechaJornada = normalizarFechaISO(
-    candidata?.fecha_operativa_texto ||
-      candidata?.fecha_operativa ||
-      candidata?.abierta_at
-  );
-
-  const hoyEcuador = obtenerFechaEcuadorISO();
-
-  return fechaJornada && hoyEcuador && fechaJornada < hoyEcuador
-    ? candidata
-    : null;
-})();
+const jornadaPendienteCierreVisual = null;
 const [mostrarSelectorJornada,setMostrarSelectorJornada]=useState(false);
 const [mostrarAbrirJornadaAdmin,setMostrarAbrirJornadaAdmin]=useState(false);
 
@@ -934,58 +903,13 @@ useEffect(()=>{
   }
 },[jornadaActiva?.id]);
 
-// Q2 / operadores:
-// Si el usuario está dentro del POS pero no tiene jornada, preparamos
-// automáticamente el formulario GLOBAL de apertura. No dependemos de
-// ningún modal ubicado dentro de "Cierre de caja".
+// POS NUBE SIN JORNADAS:
+// la ubicación se define al iniciar sesión y queda guardada en accesoOperativo.
 useEffect(() => {
-  const rol = normalizarRol(usuario?.rol);
+  setMostrarSelectorJornada(false);
+  setMostrarAbrirJornadaAdmin(false);
+}, [usuario?.id, usuario?.rol, institucionActivaId]);
 
-  if (
-    !usuario ||
-    !["ENCARGADO_LOCAL","CAJERO"].includes(rol) ||
-    jornadaActiva?.id
-  ) {
-    return;
-  }
-
-  setOperadorJornadaCorreo(String(usuario?.correo || "").trim());
-  setOperadorJornadaPassword("");
-  setVerPasswordOperadorJornada(false);
-
-  cargarPuntosOperacion()
-    .then((puntos) => {
-      const disponibles = obtenerPuntosJornadaDisponibles(puntos);
-
-      let puntoRecordado = 0;
-
-      try {
-        const ultimo = JSON.parse(
-          localStorage.getItem("ultimoAccesoOperativo") || "null"
-        );
-        puntoRecordado = Number(ultimo?.punto_id || 0);
-      } catch (_error) {
-        puntoRecordado = 0;
-      }
-
-      const puntoElegido =
-        disponibles.find(
-          (punto) => Number(punto?.id) === puntoRecordado
-        ) ||
-        disponibles[0] ||
-        null;
-
-      setPuntoJornadaSeleccionado(
-        puntoElegido?.id ? String(puntoElegido.id) : ""
-      );
-    })
-    .catch((error) => {
-      console.error(
-        "No se pudieron preparar las ubicaciones para abrir jornada:",
-        error
-      );
-    });
-}, [usuario?.id, usuario?.rol, jornadaActiva?.id]);
 const [mostrarPuntosStock,setMostrarPuntosStock]=useState(false);
 const [nuevoPuntoForm,setNuevoPuntoForm]=useState({nombre:"",codigo:"",descripcion:""});
 const [mostrarNuevoProductoStock,setMostrarNuevoProductoStock]=useState(false);
@@ -5591,34 +5515,8 @@ const exportarVentasExcel = () => {
     usuarioForzado=null,
   }={})=>{
     const u=usuarioForzado||usuario;
-    const rol=normalizarRol(u?.rol);
+    if(!u)return null;
 
-    if(
-      !u ||
-      !["ENCARGADO_LOCAL","CAJERO"].includes(rol)
-    ){
-      const libre={
-        permitido:true,
-        estado_operativo:"NO_APLICA",
-        requiere_abrir_jornada:false,
-        requiere_cerrar_pendiente:false,
-        jornada:null,
-        message:"",
-      };
-      setEstadoOperativoCaja(libre);
-      return libre;
-    }
-
-    const token=tokenForzado||localStorage.getItem("token");
-    const institucionId=
-      Number(institucionForzada)||
-      normalizarInstitucionId(u?.institucion_id)||
-      obtenerInstitucionActivaId();
-
-    if(!token||!institucionId)return null;
-
-    // POS NUBE SIN JORNADAS:
-    // ningún rol necesita abrir/cerrar jornada para operar.
     const libreSinJornadas={
       permitido:true,
       estado_operativo:"OPERATIVA",
@@ -5628,175 +5526,11 @@ const exportarVentasExcel = () => {
       message:"",
       sin_jornadas:true,
     };
+
     setEstadoOperativoCaja(libreSinJornadas);
     setMostrarSelectorJornada(false);
+    setMostrarAbrirJornadaAdmin(false);
     return libreSinJornadas;
-
-    try{
-      setCargandoEstadoOperativoCaja(true);
-
-      const res=await fetch(
-        `${API_URL}/api/jornadas/estado-operativo?institucion_id=${institucionId}&t=${Date.now()}`,
-        {
-          headers:{Authorization:`Bearer ${token}`},
-          cache:"no-store",
-        }
-      );
-
-      const data=await res.json();
-
-      if(!res.ok){
-        throw new Error(
-          data.message||
-          data.error||
-          "No se pudo validar el estado de la caja"
-        );
-      }
-
-      setEstadoOperativoCaja(data);
-
-      if(data?.jornada?.id){
-        setJornadaActiva(data.jornada);
-        localStorage.setItem(
-          "jornadaActiva",
-          JSON.stringify(data.jornada)
-        );
-
-        const punto=normalizarUbicacionFrontend(
-          data.jornada.punto_nombre||"PRINCIPAL",
-          institucionId
-        );
-
-        setPuntoInventarioSeleccionado(punto);
-        setLocalNuevaOrden(punto);
-      }else{
-        localStorage.removeItem("jornadaActiva");
-        setJornadaActiva(null);
-      }
-
-      if(data?.estado_operativo==="SIN_JORNADA"){
-        /*
-         * Antes de pedir abrir otra jornada verificamos directamente
-         * si PostgreSQL todavía tiene una jornada ABIERTA para este operador.
-         *
-         * Esto cubre reinicio del iMin, cierre del navegador, pérdida de red,
-         * refresh o cualquier estado local desactualizado.
-         */
-        try {
-          const activaRes = await fetch(
-            `${API_URL}/api/jornadas/activa?institucion_id=${institucionId}&t=${Date.now()}`,
-            {
-              headers:{Authorization:`Bearer ${token}`},
-              cache:"no-store",
-            }
-          );
-
-          const activa = await activaRes.json();
-
-          if(activaRes.ok && activa?.id){
-            const recuperada={
-              permitido:true,
-              estado_operativo:"OPERATIVA",
-              requiere_abrir_jornada:false,
-              requiere_cerrar_pendiente:false,
-              jornada:activa,
-              message:"Jornada existente recuperada.",
-            };
-
-            setEstadoOperativoCaja(recuperada);
-            setJornadaActiva(activa);
-            localStorage.setItem(
-              "jornadaActiva",
-              JSON.stringify(activa)
-            );
-
-            const puntoRecuperado=normalizarUbicacionFrontend(
-              activa.punto_nombre||"PRINCIPAL",
-              institucionId
-            );
-
-            setPuntoInventarioSeleccionado(puntoRecuperado);
-            setLocalNuevaOrden(puntoRecuperado);
-
-            return recuperada;
-          }
-        } catch(errorRecuperacion) {
-          console.warn(
-            "No se pudo verificar jornada activa antes de pedir una nueva:",
-            errorRecuperacion
-          );
-        }
-
-        volverAlLoginOperativoSinJornada(
-          data?.message ||
-          "No existe una jornada abierta. Selecciona tu ubicación e inicia sesión para comenzar."
-        );
-        return data;
-      }
-
-      if(data?.estado_operativo==="CIERRE_PENDIENTE"){
-        const jornadaPendiente = data?.jornada || null;
-
-        const fechaPendiente = normalizarFechaISO(
-          jornadaPendiente?.fecha_operativa_texto ||
-          jornadaPendiente?.fecha_operativa
-        );
-
-        if(jornadaPendiente?.id){
-          setJornadaActiva(jornadaPendiente);
-          localStorage.setItem(
-            "jornadaActiva",
-            JSON.stringify(jornadaPendiente)
-          );
-        }
-
-        if(fechaPendiente){
-          setCierreForm({
-      fecha: fechaPendiente,
-      negocio: "POS NUBE",
-      tarjeta_manual: "0",
-      transferencia_manual: "0",
-      observacion: "",
-      denominaciones: {
-        billete_1: "", billete_2: "", billete_5: "", billete_10: "",
-        billete_20: "", billete_50: "", billete_100: "",
-        moneda_001: "", moneda_005: "", moneda_010: "",
-        moneda_025: "", moneda_050: "", moneda_1: "",
-      },
-    });
-        }
-
-        setMostrarSelectorJornada(false);
-        setVista("reporte_cierre");
-        setMostrarCrearCierre(true);
-
-        if(fechaPendiente && jornadaPendiente?.id){
-          await cargarResumenCierre(
-            fechaPendiente,
-            jornadaPendiente
-          );
-        }
-      }
-
-      return data;
-    }catch(error){
-      console.error("Error validando estado operativo:",error);
-
-      const bloqueado={
-        permitido:false,
-        estado_operativo:"ERROR_VALIDACION",
-        requiere_abrir_jornada:false,
-        requiere_cerrar_pendiente:false,
-        jornada:null,
-        message:
-          "No se pudo validar el estado de la caja. Por seguridad las operaciones permanecen bloqueadas.",
-      };
-
-      setEstadoOperativoCaja(bloqueado);
-      return bloqueado;
-    }finally{
-      setCargandoEstadoOperativoCaja(false);
-    }
   };
 
   const cargarContextoJornada=async({
@@ -5809,6 +5543,8 @@ const exportarVentasExcel = () => {
 
     setMostrarSelectorJornada(false);
     setMostrarAbrirJornadaAdmin(false);
+    setJornadaActiva(null);
+    try{ localStorage.removeItem("jornadaActiva"); }catch(_error){}
 
     setEstadoOperativoCaja({
       permitido:true,
@@ -5873,189 +5609,13 @@ const exportarVentasExcel = () => {
   };
 
   const abrirJornada=async()=>{
-    if(!puntoJornadaSeleccionado){
-      alert("Selecciona el punto de trabajo.");
-      return;
-    }
-
-    const operadorCorreo=String(operadorJornadaCorreo||"").trim();
-    const operadorPassword=String(operadorJornadaPassword||"");
-
-    if(!operadorCorreo||!operadorPassword){
-      alert("El usuario/correo y la contraseña del operador son obligatorios.");
-      return;
-    }
-
-    try{
-      setCargandoJornada(true);
-
-      const tokenActual=localStorage.getItem("token");
-      const institucionId=obtenerInstitucionActivaId();
-      const rolQueAbre=normalizarRol(usuario?.rol);
-
-      // Solo CAJERO / ENCARGADO_LOCAL trabajan con jornada.
-      // ADMIN / SUPER_ADMIN nunca deben abrir una jornada propia.
-      const esOperadorActual=
-        ["ENCARGADO_LOCAL","CAJERO"].includes(rolQueAbre);
-
-      if(!esOperadorActual){
-        throw new Error(
-          "Administración no utiliza jornada operativa."
-        );
-      }
-
-      const urlAbrir=`${API_URL}/api/jornadas/abrir-publica`;
-
-      const headersAbrir={
-        "Content-Type":"application/json",
-      };
-
-      const res=await fetch(urlAbrir,{
-        method:"POST",
-        headers:headersAbrir,
-        body:JSON.stringify({
-          institucion_id:Number(institucionId),
-          punto_id:Number(puntoJornadaSeleccionado),
-          operador_correo:operadorCorreo,
-          operador_password:operadorPassword,
-        }),
-      });
-
-      const data=await res.json();
-
-      if(!res.ok){
-        throw new Error(data.message||"Error abriendo jornada");
-      }
-
-      if(!data.token||!data.usuario||!data.jornada){
-        throw new Error("El servidor no devolvió la sesión completa del operador.");
-      }
-
-      // A partir de aquí el sistema queda autenticado como el operador real.
-      localStorage.setItem("token",data.token);
-      localStorage.setItem("usuario",JSON.stringify(data.usuario));
-      localStorage.setItem(
-        "institucionSeleccionadaId",
-        String(data.usuario.institucion_id)
-      );
-
-      setUsuario(data.usuario);
-      setInstitucionSeleccionadaId(
-        normalizarInstitucionId(data.usuario.institucion_id)
-      );
-
-      aplicarVistaInicialRol(
-        data.usuario.rol,
-        setVista,
-        setVistaVentasInterna
-      );
-
-      setOperadorJornadaCorreo(data.usuario.correo||"");
-      setOperadorJornadaPassword("");
-      setVerPasswordOperadorJornada(false);
-
-      aplicarJornada(data.jornada);
-
-      // Dejamos el estado operativo confirmado inmediatamente con la
-      // misma jornada que acaba de devolver el backend.
-      setEstadoOperativoCaja({
-        permitido:true,
-        estado_operativo:"OPERATIVA",
-        requiere_abrir_jornada:false,
-        requiere_cerrar_pendiente:false,
-        jornada:data.jornada,
-        message:"Acceso operativo habilitado.",
-      });
-
-      try {
-        localStorage.setItem(
-          "ultimoAccesoOperativo",
-          JSON.stringify({
-            institucion_id: Number(data.usuario.institucion_id),
-            punto_id: Number(data.jornada?.punto_id || puntoJornadaSeleccionado || 0),
-            punto_nombre: String(data.jornada?.punto_nombre || ""),
-            correo: String(data.usuario?.correo || operadorCorreo || "").trim(),
-          })
-        );
-      } catch (_error) {}
-
-      setMostrarAbrirJornadaAdmin(false);
-
-      const estadoDespuesAbrir=
-        false && data.estado_operativo==="CIERRE_PENDIENTE"
-          ? {
-              permitido:false,
-              estado_operativo:"CIERRE_PENDIENTE",
-              requiere_abrir_jornada:false,
-              requiere_cerrar_pendiente:true,
-              jornada:data.jornada,
-              message:
-                data.message||
-                "Existe una caja pendiente de cierre.",
-            }
-          : {
-              permitido:true,
-              estado_operativo:"OPERATIVA",
-              requiere_abrir_jornada:false,
-              requiere_cerrar_pendiente:false,
-              jornada:data.jornada,
-              message:"Acceso operativo habilitado.",
-            };
-
-      setEstadoOperativoCaja(estadoDespuesAbrir);
-
-      if(estadoDespuesAbrir.estado_operativo==="CIERRE_PENDIENTE"){
-        setVista("reporte_cierre");
-      }
-
-      await cargarPuntosOperacion({
-        tokenForzado:data.token,
-        institucionForzada:data.usuario.institucion_id,
-      });
-
-      await cargarExistenciasInventario({
-        ubicacionForzada: data.jornada?.punto_nombre,
-      });
-
-      // IMPORTANTE:
-      // No volvemos a consultar estado-operativo inmediatamente después
-      // de abrir. La respuesta de /abrir-publica o /abrir ya viene de una
-      // transacción confirmada y contiene la jornada real. Una validación
-      // inmediata en este Android antiguo podía sobrescribir el estado recién
-      // abierto con SIN_JORNADA y volver a mostrar el cuadro.
-      // La validación normal seguirá ejecutándose en el ciclo habitual
-      // del sistema y en el siguiente refresh.
-    }catch(e){
-      alert(e.message||"No se pudo abrir la jornada");
-    }finally{
-      setCargandoJornada(false);
-    }
+    setMostrarSelectorJornada(false);
+    setMostrarAbrirJornadaAdmin(false);
+    return;
   };
 
   const cerrarJornadaOperativa=async()=>{
-    if(!jornadaActiva?.id)return;
-    if(!window.confirm(`¿Cerrar tu jornada en ${jornadaActiva.punto_nombre}?`))return;
-    try{
-      const token=localStorage.getItem("token"),institucionId=obtenerInstitucionActivaId();
-      const res=await fetch(`${API_URL}/api/jornadas/${jornadaActiva.id}/cerrar`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({institucion_id:Number(institucionId)})});
-      const data=await res.json();if(!res.ok)throw new Error(data.message||"Error cerrando jornada");
-      localStorage.removeItem("jornadaActiva");
-      setJornadaActiva(null);
-      setEstadoOperativoCaja({
-        permitido:false,
-        estado_operativo:"SIN_JORNADA",
-        requiere_abrir_jornada:true,
-        requiere_cerrar_pendiente:false,
-        jornada:null,
-        message:
-          "La caja fue cerrada. Debes abrir una nueva jornada para continuar operando.",
-      });
-      setOperadorJornadaPassword("");
-      setPuntoJornadaSeleccionado("");
-      volverAlLoginOperativoSinJornada(
-        "La jornada fue cerrada. Selecciona tu ubicación e inicia sesión para abrir una nueva jornada."
-      );
-    }catch(e){alert(e.message||"No se pudo cerrar la jornada")}
+    return;
   };
 
   const cargarPuntosLoginPublicos = async (institucionId) => {
@@ -6149,7 +5709,8 @@ const exportarVentasExcel = () => {
     setOperadorJornadaCorreo(data.usuario.correo || "");
     setOperadorJornadaPassword("");
     setVerPasswordOperadorJornada(false);
-    aplicarJornada(data.jornada);
+    setJornadaActiva(null);
+    try{ localStorage.removeItem("jornadaActiva"); }catch(_error){}
 
     const estadoIngresoOperativo=
       false && data.estado_operativo==="CIERRE_PENDIENTE"
@@ -6374,8 +5935,8 @@ const exportarVentasExcel = () => {
     }
 
     try {
-      // BAR PRINCIPAL / KIOSKO entran directamente con sus propias
-      // credenciales y abren/recuperan su jornada sin necesitar al ADMIN.
+      // BAR / BAR PRINCIPAL / KIOSKO entran directamente con sus propias
+      // credenciales y habilitan su ubicación sin usar jornadas.
       if (loginPuntoId && loginPuntoId !== "ADMIN") {
         await iniciarSesionOperativaPublica();
         setMensaje("");
@@ -6498,17 +6059,6 @@ if (institucionIdLogin) {
     institucionActivaId,
   ]);
 
-  useEffect(()=>{
-    if(
-      estadoOperativoCaja?.estado_operativo==="CIERRE_PENDIENTE" &&
-      vista!=="reporte_cierre"
-    ){
-      setVista("reporte_cierre");
-    }
-  },[
-    estadoOperativoCaja?.estado_operativo,
-    vista,
-  ]);
 
   const cargarResumen = async () => {
     try {
@@ -13199,8 +12749,8 @@ if (!usuario) {
                   }}
                 >
                   {loginPuntoId === "ADMIN"
-                    ? "Acceso administrativo: configuración, usuarios, reportes y supervisión. No abre jornada."
-                    : "Acceso operativo: valida las credenciales del operador y abre o continúa la jornada de esta ubicación."}
+                    ? "Acceso administrativo: configuración, usuarios, reportes y supervisión. No utiliza jornadas."
+                    : "Acceso operativo: valida las credenciales del operador y habilita esta ubicación de trabajo."}
                 </div>
               )}
 
@@ -13635,7 +13185,7 @@ if (!usuario) {
         </div>
       )}
 
-      {["ENCARGADO_LOCAL","CAJERO"].includes(rolActual) &&
+      {false && ["ENCARGADO_LOCAL","CAJERO"].includes(rolActual) &&
        !jornadaActiva?.id &&
        estadoOperativoCaja?.estado_operativo!=="OPERATIVA" &&
        !cargandoEstadoOperativoCaja && (
@@ -15046,7 +14596,7 @@ if (!usuario) {
               />
               {estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE" && (
                 <small style={{display:"block",marginTop:6,color:"#b45309",fontWeight:800}}>
-                  Fecha fijada automáticamente por la jornada pendiente.
+                  Fecha del cierre pendiente.
                 </small>
               )}
             </div>
