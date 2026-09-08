@@ -976,6 +976,46 @@ const [reporteStockFiltros,setReporteStockFiltros]=useState({
 
 
 
+const ubicacionesTransferenciaStock = useMemo(() => {
+  const institucionId = obtenerInstitucionActivaId();
+
+  const desdeInventario = (Array.isArray(puntosInventario) ? puntosInventario : [])
+    .map((valor) => normalizarUbicacionFrontend(valor, institucionId))
+    .filter(Boolean);
+
+  const desdePuntosOperacion = (Array.isArray(puntosOperacion) ? puntosOperacion : [])
+    .map((punto) =>
+      normalizarUbicacionFrontend(
+        typeof punto === "string" ? punto : punto?.nombre,
+        institucionId
+      )
+    )
+    .filter(Boolean);
+
+  const desdeExistencias = (Array.isArray(existenciasInventario) ? existenciasInventario : [])
+    .map((fila) =>
+      normalizarUbicacionFrontend(fila?.ubicacion, institucionId)
+    )
+    .filter(Boolean);
+
+  let lista = [
+    ...desdeInventario,
+    ...desdePuntosOperacion,
+    ...desdeExistencias,
+  ];
+
+  if (Number(institucionId) === 1) {
+    lista = ["BAR"];
+  }
+
+  return [...new Set(lista)].filter(Boolean);
+}, [
+  puntosInventario,
+  puntosOperacion,
+  existenciasInventario,
+  usuario?.institucion_id,
+]);
+
 const familiasOperacionStock = useMemo(() => {
   const valoresProductos = productos
     .filter((p) => p?.activo !== false)
@@ -4199,12 +4239,17 @@ const cambiarTipoIngresoStock=async(valor)=>{
   }
 
   if(valor==="TRANSFERENCIA_UBICACIONES"){
+    const sugerida=normalizarUbicacionFrontend(
+      puntoInventarioSeleccionado||localNuevaOrden||"PRINCIPAL",
+      obtenerInstitucionActivaId()
+    );
+
     setStockOperacionForm((prev)=>({
       ...prev,
-      ubicacion_origen:normalizarUbicacionFrontend(
-        puntoInventarioSeleccionado||localNuevaOrden||"PRINCIPAL",
-        obtenerInstitucionActivaId()
-      ),
+      ubicacion_origen:
+        ubicacionesTransferenciaStock.includes(sugerida)
+          ? sugerida
+          : "",
       ubicacion_destino:"",
     }));
   }
@@ -19726,13 +19771,14 @@ onClick={guardarEgreso}
               }))}
             >
               <option value="">Seleccionar ubicación</option>
-              {puntosOperacion
-                .filter((p)=>p.activo!==false)
-                .map((p)=>(
-                  <option key={`origen-${p.id}`} value={p.nombre}>
-                    {p.nombre}
-                  </option>
-                ))}
+              {ubicacionesTransferenciaStock.map((ubicacion)=>(
+                <option
+                  key={`origen-${ubicacion}`}
+                  value={ubicacion}
+                >
+                  {ubicacion}
+                </option>
+              ))}
             </select>
           </div>
           <div style={styles.filterField}>
@@ -19746,28 +19792,22 @@ onClick={guardarEgreso}
               }))}
             >
               <option value="">Seleccionar ubicación</option>
-              {puntosOperacion
-                .filter((p)=>p.activo!==false)
-                .filter((p)=>
+              {ubicacionesTransferenciaStock
+                .filter((ubicacion)=>
+                  normalizarTexto(ubicacion)!==
                   normalizarTexto(
-                    normalizarUbicacionFrontend(
-                      p.nombre,
-                      obtenerInstitucionActivaId()
-                    )
-                  )!==
-                  normalizarTexto(
-                    normalizarUbicacionFrontend(
-                      stockOperacionForm.ubicacion_origen||
-                      puntoInventarioSeleccionado||
-                      localNuevaOrden||
-                      "PRINCIPAL",
-                      obtenerInstitucionActivaId()
-                    )
+                    stockOperacionForm.ubicacion_origen||
+                    puntoInventarioSeleccionado||
+                    localNuevaOrden||
+                    ""
                   )
                 )
-                .map((p)=>(
-                  <option key={`destino-${p.id}`} value={p.nombre}>
-                    {p.nombre}
+                .map((ubicacion)=>(
+                  <option
+                    key={`destino-${ubicacion}`}
+                    value={ubicacion}
+                  >
+                    {ubicacion}
                   </option>
                 ))}
             </select>
