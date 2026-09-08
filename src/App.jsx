@@ -948,6 +948,7 @@ const [stockCompraForm,setStockCompraForm]=useState({
 });
 const [stockOperacionForm,setStockOperacionForm]=useState({
   observacion:"",
+  ubicacion_origen:"",
   ubicacion_destino:"",
   institucion_destino_id:"",
   punto_destino_id:"",
@@ -4169,6 +4170,7 @@ const limpiarOperacionStock=()=>{
   });
   setStockOperacionForm({
     observacion:"",
+    ubicacion_origen:"",
     ubicacion_destino:"",
     institucion_destino_id:"",
     punto_destino_id:"",
@@ -4194,6 +4196,17 @@ const cambiarTipoIngresoStock=async(valor)=>{
       cargarProveedoresStock(),
       cargarFamiliasStock(),
     ]);
+  }
+
+  if(valor==="TRANSFERENCIA_UBICACIONES"){
+    setStockOperacionForm((prev)=>({
+      ...prev,
+      ubicacion_origen:normalizarUbicacionFrontend(
+        puntoInventarioSeleccionado||localNuevaOrden||"PRINCIPAL",
+        obtenerInstitucionActivaId()
+      ),
+      ubicacion_destino:"",
+    }));
   }
 
   if(valor==="TRANSFERENCIA_LOCALES"){
@@ -4296,6 +4309,28 @@ const itemsValidosOperacionStock=()=>{
     );
 };
 
+const obtenerUbicacionOperativaStockActual=()=>{
+  const institucionId=obtenerInstitucionActivaId();
+
+  let accesoOperativo=null;
+  try{
+    accesoOperativo=JSON.parse(
+      localStorage.getItem("accesoOperativo")||"null"
+    );
+  }catch(_error){
+    accesoOperativo=null;
+  }
+
+  return normalizarUbicacionFrontend(
+    stockOperacionForm.ubicacion_origen||
+    puntoInventarioSeleccionado||
+    accesoOperativo?.punto_nombre||
+    localNuevaOrden||
+    "PRINCIPAL",
+    institucionId
+  );
+};
+
 const abrirConfirmacionStock=(confirmacion)=>{
   if(!confirmacion)return;
 
@@ -4352,8 +4387,31 @@ const prepararConfirmacionOperacionStock=()=>{
     }
 
     if(stockTipoIngreso==="TRANSFERENCIA_UBICACIONES"){
+      const institucionId=obtenerInstitucionActivaId();
+      const origen=normalizarUbicacionFrontend(
+        stockOperacionForm.ubicacion_origen||
+        puntoInventarioSeleccionado||
+        localNuevaOrden||
+        "PRINCIPAL",
+        institucionId
+      );
+      const destino=normalizarUbicacionFrontend(
+        stockOperacionForm.ubicacion_destino||"",
+        institucionId
+      );
+
+      if(!String(stockOperacionForm.ubicacion_origen||origen).trim()){
+        alert("Selecciona la ubicación origen.");
+        return;
+      }
+
       if(!String(stockOperacionForm.ubicacion_destino||"").trim()){
         alert("Selecciona la ubicación destino.");
+        return;
+      }
+
+      if(normalizarTexto(origen)===normalizarTexto(destino)){
+        alert("El punto origen y destino deben ser diferentes.");
         return;
       }
     }
@@ -4377,10 +4435,28 @@ const prepararConfirmacionOperacionStock=()=>{
       return;
     }
 
+    const esTransferenciaUbicaciones=
+      stockTipoIngreso==="TRANSFERENCIA_UBICACIONES";
+
     abrirConfirmacionStock({
       grupo:"INGRESOS",
       tipo:stockTipoIngreso,
       items,
+      ...(esTransferenciaUbicaciones
+        ? {
+            ubicacion_origen:normalizarUbicacionFrontend(
+              stockOperacionForm.ubicacion_origen||
+              puntoInventarioSeleccionado||
+              localNuevaOrden||
+              "PRINCIPAL",
+              obtenerInstitucionActivaId()
+            ),
+            ubicacion_destino:normalizarUbicacionFrontend(
+              stockOperacionForm.ubicacion_destino||"",
+              obtenerInstitucionActivaId()
+            ),
+          }
+        : {}),
     });
     return;
   }
@@ -4508,10 +4584,19 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
               body:JSON.stringify({
                 institucion_id:Number(institucionId),
                 jornada_id:null,
-                ubicacion_operacion:String(puntoInventarioSeleccionado||jornadaActiva?.punto_nombre||"PRINCIPAL"),
+                ubicacion_origen:String(
+                  confirmacionActual.ubicacion_origen||
+                  obtenerUbicacionOperativaStockActual()
+                ).trim(),
+                ubicacion_operacion:String(
+                  confirmacionActual.ubicacion_origen||
+                  obtenerUbicacionOperativaStockActual()
+                ).trim(),
                 producto_id:Number(item.producto_id),
                 ubicacion_destino:String(
-                  stockOperacionForm.ubicacion_destino||""
+                  confirmacionActual.ubicacion_destino||
+                  stockOperacionForm.ubicacion_destino||
+                  ""
                 ).trim(),
                 cantidad:Number(item.cantidad),
                 observacion:String(
@@ -4684,6 +4769,7 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
     });
     setStockOperacionForm({
       observacion:"",
+      ubicacion_origen:"",
       ubicacion_destino:"",
       institucion_destino_id:"",
       punto_destino_id:"",
@@ -19625,12 +19711,29 @@ onClick={guardarEgreso}
         <h2 style={{marginTop:0}}>Transferencia entre ubicaciones</h2>
         <div style={styles.filtersGrid}>
           <div style={styles.filterField}>
-            <label style={styles.label}>Origen</label>
-            <input
+            <label style={styles.label}>Ubicación origen *</label>
+            <select
               style={styles.input}
-              value={jornadaActiva?.punto_nombre||"PRINCIPAL"}
-              readOnly
-            />
+              value={stockOperacionForm.ubicacion_origen}
+              onChange={(e)=>setStockOperacionForm((p)=>({
+                ...p,
+                ubicacion_origen:e.target.value,
+                ubicacion_destino:
+                  normalizarTexto(e.target.value)===
+                  normalizarTexto(p.ubicacion_destino)
+                    ? ""
+                    : p.ubicacion_destino
+              }))}
+            >
+              <option value="">Seleccionar ubicación</option>
+              {puntosOperacion
+                .filter((p)=>p.activo!==false)
+                .map((p)=>(
+                  <option key={`origen-${p.id}`} value={p.nombre}>
+                    {p.nombre}
+                  </option>
+                ))}
+            </select>
           </div>
           <div style={styles.filterField}>
             <label style={styles.label}>Ubicación destino *</label>
@@ -19645,9 +19748,27 @@ onClick={guardarEgreso}
               <option value="">Seleccionar ubicación</option>
               {puntosOperacion
                 .filter((p)=>p.activo!==false)
-                .filter((p)=>String(p.nombre).toUpperCase()!==String(jornadaActiva?.punto_nombre||"").toUpperCase())
+                .filter((p)=>
+                  normalizarTexto(
+                    normalizarUbicacionFrontend(
+                      p.nombre,
+                      obtenerInstitucionActivaId()
+                    )
+                  )!==
+                  normalizarTexto(
+                    normalizarUbicacionFrontend(
+                      stockOperacionForm.ubicacion_origen||
+                      puntoInventarioSeleccionado||
+                      localNuevaOrden||
+                      "PRINCIPAL",
+                      obtenerInstitucionActivaId()
+                    )
+                  )
+                )
                 .map((p)=>(
-                  <option key={p.id} value={p.nombre}>{p.nombre}</option>
+                  <option key={`destino-${p.id}`} value={p.nombre}>
+                    {p.nombre}
+                  </option>
                 ))}
             </select>
           </div>
@@ -20177,7 +20298,16 @@ onClick={guardarEgreso}
 
             <div style={styles.statCard}>
               <span>Ubicación</span>
-              <strong>{jornadaActiva?.punto_nombre||"-"}</strong>
+              <strong>
+                {stockConfirmacion.tipo==="TRANSFERENCIA_UBICACIONES"
+                  ? `${stockConfirmacion.ubicacion_origen||"-"} → ${stockConfirmacion.ubicacion_destino||"-"}`
+                  : (
+                      stockConfirmacion.ubicacion_origen||
+                      puntoInventarioSeleccionado||
+                      localNuevaOrden||
+                      "-"
+                    )}
+              </strong>
             </div>
 
             <div style={styles.statCard}>
@@ -20192,8 +20322,8 @@ onClick={guardarEgreso}
             </div>
 
             <div style={styles.statCard}>
-              <span>Jornada</span>
-              <strong>#{jornadaActiva?.id||"-"}</strong>
+              <span>Contexto</span>
+              <strong>Sin jornada</strong>
             </div>
 
             <div style={styles.statCard}>
