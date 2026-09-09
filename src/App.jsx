@@ -16873,7 +16873,7 @@ onClick={guardarEgreso}
           >
             <div>
               <h3 style={{ margin: 0, fontSize: 25, color: "#172033" }}>
-                Registrar pago de saldo
+                Recarga / pago de saldo
               </h3>
               <div style={{ marginTop: 8, color: "#334155" }}>
                 {`${profesorDetalle.nombres || ""} ${
@@ -16909,7 +16909,7 @@ onClick={guardarEgreso}
                 marginBottom: 8,
               }}
             >
-              Valor a pagar *
+              Valor de recarga / pago *
             </label>
             <input
               type="number"
@@ -16950,7 +16950,7 @@ onClick={guardarEgreso}
                 cursor: "pointer",
               }}
             >
-              <span>¿Pago por transferencia?</span>
+              <span>¿Es transferencia?</span>
               <input
                 type="checkbox"
                 checked={
@@ -17106,7 +17106,7 @@ onClick={guardarEgreso}
                 color: "#64748b",
               }}
             >
-              El pago se descontará inmediatamente de las cuentas por pagar del profesor.
+              Si existe una cuenta por pagar, se descontará automáticamente primero; cualquier excedente quedará como saldo a favor..
             </p>
           </form>
         </div>
@@ -17806,7 +17806,7 @@ onClick={guardarEgreso}
                 onClick={abrirModalRecargaProfesor}
                 disabled={guardandoRecargaProfesor}
               >
-                Registrar pago
+                Recargar / Registrar pago
               </button>
             </div>
           </div>
@@ -18124,8 +18124,8 @@ onClick={guardarEgreso}
                         {guardandoRecargaProfesor
                           ? "Registrando..."
                           : recargaProfesorForm.metodo_pago === "EFECTIVO"
-                          ? "Registrar pago efectivo"
-                          : "Registrar pago transferencia"}
+                          ? "Recargar / pagar en efectivo"
+                          : "Recargar / pagar por transferencia"}
                       </button>
                     </div>
                   </form>
@@ -20795,7 +20795,7 @@ onClick={guardarEgreso}
           </div>
 
           <div style={styles.filterField}>
-            <label style={styles.filterLabelTop}>Valor a pagar *</label>
+            <label style={styles.filterLabelTop}>Valor de recarga / pago *</label>
             <input
               type="number"
               min="0.01"
