@@ -16873,7 +16873,7 @@ onClick={guardarEgreso}
           >
             <div>
               <h3 style={{ margin: 0, fontSize: 25, color: "#172033" }}>
-                Recarga de saldo
+                Registrar pago de saldo
               </h3>
               <div style={{ marginTop: 8, color: "#334155" }}>
                 {`${profesorDetalle.nombres || ""} ${
@@ -16909,7 +16909,7 @@ onClick={guardarEgreso}
                 marginBottom: 8,
               }}
             >
-              Valor a recargar *
+              Valor a pagar *
             </label>
             <input
               type="number"
@@ -16950,7 +16950,7 @@ onClick={guardarEgreso}
                 cursor: "pointer",
               }}
             >
-              <span>¿Es transferencia?</span>
+              <span>¿Pago por transferencia?</span>
               <input
                 type="checkbox"
                 checked={
@@ -17106,7 +17106,7 @@ onClick={guardarEgreso}
                 color: "#64748b",
               }}
             >
-              La recarga se acreditará inmediatamente al saldo del profesor.
+              El pago se descontará inmediatamente de las cuentas por pagar del profesor.
             </p>
           </form>
         </div>
@@ -17987,7 +17987,7 @@ onClick={guardarEgreso}
                     }}
                   >
                     <div>
-                      <h3 style={{ margin: 0 }}>Recargas del profesor</h3>
+                      <h3 style={{ margin: 0 }}>Pagos del profesor</h3>
                       <p style={{ margin: "6px 0 0", color: "#64748b" }}>
                         Saldo disponible: {" "}
                         <strong>
@@ -20795,7 +20795,7 @@ onClick={guardarEgreso}
           </div>
 
           <div style={styles.filterField}>
-            <label style={styles.filterLabelTop}>Valor a recargar *</label>
+            <label style={styles.filterLabelTop}>Valor a pagar *</label>
             <input
               type="number"
               min="0.01"
