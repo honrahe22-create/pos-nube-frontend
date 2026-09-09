@@ -1490,14 +1490,19 @@ const [egresoForm, setEgresoForm] = useState({
 
   const recargasEnriquecidas = useMemo(() => {
   return recargas.map((recarga) => {
-    const alumno = alumnos.find((a) => String(a.id) === String(recarga.alumno_id));
-    const nombreAlumno = alumno
+    const esProfesor = String(recarga.origen_registro || "").toUpperCase() === "PROFESOR";
+    const alumno = !esProfesor
+      ? alumnos.find((a) => String(a.id) === String(recarga.alumno_id))
+      : null;
+    const nombrePersona = alumno
       ? obtenerNombreAlumno(alumno)
-      : `${recarga.nombres || ""} ${recarga.apellidos || ""}`.trim() || "Alumno";
+      : `${recarga.nombres || ""} ${recarga.apellidos || ""}`.trim() ||
+        (esProfesor ? "Profesor" : "Alumno");
 
     return {
       ...recarga,
-      alumno_nombre: nombreAlumno,
+      alumno_nombre: nombrePersona,
+      persona_tipo: esProfesor ? "Profesor" : "Alumno",
       fecha_base: recarga.created_at || recarga.fecha || null,
       operador_nombre:
         recarga.usuario_nombre ||
@@ -2118,7 +2123,8 @@ const exportarRecargasExcel = () => {
     // Excel real (.xlsx): cada dato queda en su propia columna.
     const datos = recargasFiltradas.map((r) => ({
       "Fecha y Hora": formatearFechaHora(r.fecha_base),
-      "Alumno": r.alumno_nombre || "",
+      "Tipo persona": r.persona_tipo || "Alumno",
+      "Persona": r.alumno_nombre || "",
       "Curso": r.curso || "",
       "Paralelo": r.paralelo || "",
       "Monto": Number(r.monto || r.dinero_recargado || 0),
@@ -12299,7 +12305,7 @@ Disponible: ${formatearMoneda(
 
   const eliminarRecargasSeleccionadas = async () => {
     if (!recargasSeleccionadasBorrar.length) return alert("Selecciona al menos una recarga.");
-    if (!window.confirm(`¿Eliminar ${recargasSeleccionadasBorrar.length} recarga(s) seleccionada(s)? El sistema revertirá saldo y crédito automáticamente.`)) return;
+    if (!window.confirm(`¿Anular ${recargasSeleccionadasBorrar.length} recarga(s) seleccionada(s)? El sistema revertirá el saldo / cuenta por pagar automáticamente y conservará trazabilidad.`)) return;
 
     try {
       setEliminandoPruebas(true);
@@ -12313,10 +12319,10 @@ Disponible: ${formatearMoneda(
       const data = await respuesta.json();
       if (!respuesta.ok) throw new Error(data.message || "No se pudieron eliminar las recargas seleccionadas");
       setRecargasSeleccionadasBorrar([]);
-      await Promise.all([cargarRecargas(), cargarAlumnos()]);
-      alert(data.message || "Recargas eliminadas correctamente.");
+      await Promise.all([cargarRecargas(), cargarAlumnos(), cargarProfesores()]);
+      alert(data.message || "Recargas anuladas correctamente.");
     } catch (error) {
-      alert(error.message || "No se pudieron eliminar las recargas seleccionadas.");
+      alert(error.message || "No se pudieron anular las recargas seleccionadas.");
     } finally {
       setEliminandoPruebas(false);
     }
@@ -15154,7 +15160,8 @@ if (!usuario) {
           <h3 style={{marginTop:24}}>Conteo de billetes y monedas</h3>
           <div style={styles.tableWrap}><table style={styles.table}><thead><tr><th style={styles.th}>Denominación</th><th style={styles.th}>Tipo</th><th style={styles.th}>Cantidad</th><th style={styles.th}>Total</th></tr></thead><tbody>{(cierreDetalle.denominaciones||[]).map((d,i)=><tr key={i}><td style={styles.td}>{Number(d.denominacion).toFixed(2)}</td><td style={styles.td}>{d.tipo}</td><td style={styles.td}>{d.cantidad}</td><td style={styles.td}>{formatearMoneda(d.total)}</td></tr>)}</tbody></table></div>
           <h3 style={{marginTop:24}}>Egresos incluidos en este cierre</h3>
-          <div style={styles.tableWrap}><table style={styles.table}><thead><tr><th style={styles.th}>Fecha</th><th style={styles.th}>Nombre</th><th style={styles.th}>Tipo</th><th style={styles.th}>Factura</th><th style={styles.th}>Valor</th><th style={styles.th}>Usuario</th></tr></thead><tbody>{(cierreDetalle.egresos||[]).length===0?<tr><td colSpan={6} style={styles.td}>No hubo egresos activos en este cierre.</td></tr>:(cierreDetalle.egresos||[]).map((e)=><tr key={e.id}><td style={styles.td}>{formatearSoloFecha(e.fecha)}</td><td style={styles.td}>{e.nombre_egreso}</td><td style={styles.td}>{e.tipo_egreso}</td><td style={styles.td}>{e.numero_factura||'-'}</td><td style={styles.td}>{formatearMoneda(e.total)}</td><td style={styles.td}>{e.usuario||e.usuario_nombre||'-'}</td></tr>)}</tbody></table></div>
+          <div style={styles.tableWrap}><table style={styles.table}><thead><tr><th style={styles.th}>Fecha</th><th style={styles.th}>Tipo persona</th>
+                <th style={styles.th}>Nombre</th><th style={styles.th}>Tipo</th><th style={styles.th}>Factura</th><th style={styles.th}>Valor</th><th style={styles.th}>Usuario</th></tr></thead><tbody>{(cierreDetalle.egresos||[]).length===0?<tr><td colSpan={6} style={styles.td}>No hubo egresos activos en este cierre.</td></tr>:(cierreDetalle.egresos||[]).map((e)=><tr key={e.id}><td style={styles.td}>{formatearSoloFecha(e.fecha)}</td><td style={styles.td}>{e.nombre_egreso}</td><td style={styles.td}>{e.tipo_egreso}</td><td style={styles.td}>{e.numero_factura||'-'}</td><td style={styles.td}>{formatearMoneda(e.total)}</td><td style={styles.td}>{e.usuario||e.usuario_nombre||'-'}</td></tr>)}</tbody></table></div>
           <button
             style={{ ...styles.button, marginTop: 20 }}
             onClick={() => imprimirCierreCaja(cierreDetalle)}
@@ -21070,7 +21077,7 @@ onClick={guardarEgreso}
                   setRecargasSeleccionadasBorrar(
                     recargasSeleccionadasBorrar.length === recargasFiltradas.length
                       ? []
-                      : recargasFiltradas.map((r) => Number(r.id))
+                      : recargasFiltradas.map((r) => String(r.id))
                   )
                 }
               >
@@ -21083,8 +21090,8 @@ onClick={guardarEgreso}
                 style={{...styles.deleteIconButton,padding:"7px 9px",minWidth:40,fontSize:16,lineHeight:1}}
                 disabled={eliminandoPruebas || recargasSeleccionadasBorrar.length === 0}
                 onClick={eliminarRecargasSeleccionadas}
-                title={`Eliminar ${recargasSeleccionadasBorrar.length} recarga(s) seleccionada(s)`}
-                aria-label="Eliminar recargas seleccionadas"
+                title={`Anular ${recargasSeleccionadasBorrar.length} recarga(s) seleccionada(s)`}
+                aria-label="Anular recargas seleccionadas"
               >
                 🗑️ {recargasSeleccionadasBorrar.length}
               </button>
@@ -21140,9 +21147,15 @@ onClick={guardarEgreso}
                     <td style={styles.td}>
                       <input
                         type="checkbox"
-                        checked={recargasSeleccionadasBorrar.includes(Number(r.id))}
+                        checked={recargasSeleccionadasBorrar.includes(String(r.id))}
                         onChange={(e) =>
-                          alternarSeleccionId(setRecargasSeleccionadasBorrar, r.id, e.target.checked)
+                          setRecargasSeleccionadasBorrar((actual) => {
+                            const clave = String(r.id);
+                            const set = new Set((actual || []).map(String));
+                            if (e.target.checked) set.add(clave);
+                            else set.delete(clave);
+                            return Array.from(set);
+                          })
                         }
                         aria-label={`Seleccionar recarga ${r.id}`}
                       />
@@ -21155,6 +21168,10 @@ onClick={guardarEgreso}
 
                   <td style={styles.td}>
                     {formatearFechaHora(r.fecha_base)}
+                  </td>
+
+                  <td style={styles.td}>
+                    {r.persona_tipo || "Alumno"}
                   </td>
 
                   <td style={styles.td}>
