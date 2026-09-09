@@ -1490,7 +1490,8 @@ const [egresoForm, setEgresoForm] = useState({
 
   const recargasEnriquecidas = useMemo(() => {
   return recargas.map((recarga) => {
-    const esProfesor = String(recarga.origen_registro || "").toUpperCase() === "PROFESOR";
+    const esProfesor =
+      String(recarga.origen_registro || "").toUpperCase() === "PROFESOR";
     const alumno = !esProfesor
       ? alumnos.find((a) => String(a.id) === String(recarga.alumno_id))
       : null;
@@ -2123,8 +2124,7 @@ const exportarRecargasExcel = () => {
     // Excel real (.xlsx): cada dato queda en su propia columna.
     const datos = recargasFiltradas.map((r) => ({
       "Fecha y Hora": formatearFechaHora(r.fecha_base),
-      "Tipo persona": r.persona_tipo || "Alumno",
-      "Persona": r.alumno_nombre || "",
+      "Alumno": r.alumno_nombre || "",
       "Curso": r.curso || "",
       "Paralelo": r.paralelo || "",
       "Monto": Number(r.monto || r.dinero_recargado || 0),
@@ -7738,22 +7738,86 @@ if (institucionIdLogin) {
 
       if (!token || !institucionId) return;
 
-      const res = await fetch(
-        `${API_URL}/api/recargas?institucion_id=${institucionId}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      const headers = { Authorization: `Bearer ${token}` };
 
-      const data = await res.json();
+      // Se consultan AMBAS fuentes:
+      // 1. recargas de alumnos
+      // 2. recargas/pagos de profesores
+      // Así ADMIN, ENCARGADO_LOCAL y demás roles autorizados ven
+      // el mismo historial completo aunque sean tablas diferentes.
+      const [respuestaAlumnos, respuestaProfesores] = await Promise.all([
+        fetch(
+          `${API_URL}/api/recargas?institucion_id=${institucionId}`,
+          { headers }
+        ),
+        fetch(
+          `${API_URL}/api/profesores/creditos?institucion_id=${institucionId}`,
+          { headers }
+        ),
+      ]);
 
-      if (res.ok) {
-        setRecargas(Array.isArray(data) ? data : []);
-      } else {
-        setRecargas([]);
+      const dataAlumnos = await respuestaAlumnos.json().catch(() => []);
+      const dataProfesores = await respuestaProfesores.json().catch(() => []);
+
+      const listaAlumnos = respuestaAlumnos.ok && Array.isArray(dataAlumnos)
+        ? dataAlumnos.map((r) => ({
+            ...r,
+            id: String(r.id || "").startsWith("A-")
+              ? String(r.id)
+              : `A-${r.registro_id || r.id}`,
+            registro_id: Number(r.registro_id || r.id || 0),
+            origen_registro: r.origen_registro || "ALUMNO",
+          }))
+        : [];
+
+      const listaProfesores = respuestaProfesores.ok && Array.isArray(dataProfesores)
+        ? dataProfesores
+            .filter(
+              (r) =>
+                String(r.tipo || "").toUpperCase() === "RECARGA" &&
+                String(r.estado || "ACTIVO").toUpperCase() !== "ANULADO"
+            )
+            .map((r) => ({
+              ...r,
+              id: `P-${r.id}`,
+              registro_id: Number(r.id || 0),
+              origen_registro: "PROFESOR",
+              alumno_id: null,
+              profesor_id: Number(r.profesor_id || 0) || null,
+              monto: Number(r.monto || 0),
+              metodo_pago: r.metodo_pago || "EFECTIVO",
+              numero_comprobante: r.numero_comprobante || null,
+              fecha_transferencia: r.fecha_transferencia || null,
+              aplicado_credito: Number(r.aplicado_credito || 0),
+              excedente_saldo: Number(r.excedente_saldo || 0),
+              nombres: r.nombres || "",
+              apellidos: r.apellidos || "",
+              created_at: r.created_at || null,
+              usuario_nombre: r.usuario_nombre || null,
+              usuario_correo: r.usuario_correo || null,
+              observacion: r.observacion || null,
+              estado: r.estado || "ACTIVO",
+            }))
+        : [];
+
+      const combinadas = [...listaAlumnos, ...listaProfesores].sort((a, b) => {
+        const fa = new Date(a.created_at || 0).getTime();
+        const fb = new Date(b.created_at || 0).getTime();
+        if (fb !== fa) return fb - fa;
+        return Number(b.registro_id || 0) - Number(a.registro_id || 0);
+      });
+
+      setRecargas(combinadas);
+
+      if (!respuestaAlumnos.ok) {
+        console.error("No se pudieron cargar recargas de alumnos:", dataAlumnos);
+      }
+
+      if (!respuestaProfesores.ok) {
+        console.error("No se pudieron cargar recargas de profesores:", dataProfesores);
       }
     } catch (error) {
-      console.error("Error cargando recargas:", error);
+      console.error("Error cargando historial unificado de recargas:", error);
       setRecargas([]);
     }
   };
@@ -12305,7 +12369,7 @@ Disponible: ${formatearMoneda(
 
   const eliminarRecargasSeleccionadas = async () => {
     if (!recargasSeleccionadasBorrar.length) return alert("Selecciona al menos una recarga.");
-    if (!window.confirm(`¿Anular ${recargasSeleccionadasBorrar.length} recarga(s) seleccionada(s)? El sistema revertirá el saldo / cuenta por pagar automáticamente y conservará trazabilidad.`)) return;
+    if (!window.confirm(`¿Eliminar ${recargasSeleccionadasBorrar.length} recarga(s) seleccionada(s)? El sistema revertirá saldo y crédito automáticamente.`)) return;
 
     try {
       setEliminandoPruebas(true);
@@ -12320,9 +12384,9 @@ Disponible: ${formatearMoneda(
       if (!respuesta.ok) throw new Error(data.message || "No se pudieron eliminar las recargas seleccionadas");
       setRecargasSeleccionadasBorrar([]);
       await Promise.all([cargarRecargas(), cargarAlumnos(), cargarProfesores()]);
-      alert(data.message || "Recargas anuladas correctamente.");
+      alert(data.message || "Recargas eliminadas correctamente.");
     } catch (error) {
-      alert(error.message || "No se pudieron anular las recargas seleccionadas.");
+      alert(error.message || "No se pudieron eliminar las recargas seleccionadas.");
     } finally {
       setEliminandoPruebas(false);
     }
@@ -21090,8 +21154,8 @@ onClick={guardarEgreso}
                 style={{...styles.deleteIconButton,padding:"7px 9px",minWidth:40,fontSize:16,lineHeight:1}}
                 disabled={eliminandoPruebas || recargasSeleccionadasBorrar.length === 0}
                 onClick={eliminarRecargasSeleccionadas}
-                title={`Anular ${recargasSeleccionadasBorrar.length} recarga(s) seleccionada(s)`}
-                aria-label="Anular recargas seleccionadas"
+                title={`Eliminar ${recargasSeleccionadasBorrar.length} recarga(s) seleccionada(s)`}
+                aria-label="Eliminar recargas seleccionadas"
               >
                 🗑️ {recargasSeleccionadasBorrar.length}
               </button>
