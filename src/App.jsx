@@ -7738,84 +7738,53 @@ if (institucionIdLogin) {
 
       if (!token || !institucionId) return;
 
-      const headers = { Authorization: `Bearer ${token}` };
+      const respuesta = await fetch(
+        `${API_URL}/api/recargas?institucion_id=${institucionId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
 
-      // Se consultan AMBAS fuentes:
-      // 1. recargas de alumnos
-      // 2. recargas/pagos de profesores
-      // Así ADMIN, ENCARGADO_LOCAL y demás roles autorizados ven
-      // el mismo historial completo aunque sean tablas diferentes.
-      const [respuestaAlumnos, respuestaProfesores] = await Promise.all([
-        fetch(
-          `${API_URL}/api/recargas?institucion_id=${institucionId}`,
-          { headers }
-        ),
-        fetch(
-          `${API_URL}/api/profesores/creditos?institucion_id=${institucionId}`,
-          { headers }
-        ),
-      ]);
+      const data = await respuesta.json().catch(() => []);
 
-      const dataAlumnos = await respuestaAlumnos.json().catch(() => []);
-      const dataProfesores = await respuestaProfesores.json().catch(() => []);
+      if (!respuesta.ok) {
+        console.error("No se pudo cargar el historial de recargas:", data);
+        setRecargas([]);
+        return;
+      }
 
-      const listaAlumnos = respuestaAlumnos.ok && Array.isArray(dataAlumnos)
-        ? dataAlumnos.map((r) => ({
-            ...r,
-            id: String(r.id || "").startsWith("A-")
-              ? String(r.id)
-              : `A-${r.registro_id || r.id}`,
-            registro_id: Number(r.registro_id || r.id || 0),
-            origen_registro: r.origen_registro || "ALUMNO",
-          }))
-        : [];
+      const lista = Array.isArray(data)
+        ? data.map((r) => {
+            const idOriginal = String(r.id || "");
+            const origen = String(r.origen_registro || "ALUMNO").toUpperCase();
 
-      const listaProfesores = respuestaProfesores.ok && Array.isArray(dataProfesores)
-        ? dataProfesores
-            .filter(
-              (r) =>
-                String(r.tipo || "").toUpperCase() === "RECARGA" &&
-                String(r.estado || "ACTIVO").toUpperCase() !== "ANULADO"
-            )
-            .map((r) => ({
+            let idVisual = idOriginal;
+
+            // El backend unificado ya devuelve A-### para alumnos
+            // y P-### para profesores. Si llega un id numérico antiguo,
+            // se le agrega el prefijo según su origen.
+            if (!/^[AP]-\d+$/i.test(idOriginal)) {
+              const prefijo = origen === "PROFESOR" ? "P" : "A";
+              idVisual = `${prefijo}-${r.registro_id || r.id}`;
+            }
+
+            return {
               ...r,
-              id: `P-${r.id}`,
-              registro_id: Number(r.id || 0),
-              origen_registro: "PROFESOR",
-              alumno_id: null,
-              profesor_id: Number(r.profesor_id || 0) || null,
-              monto: Number(r.monto || 0),
-              metodo_pago: r.metodo_pago || "EFECTIVO",
-              numero_comprobante: r.numero_comprobante || null,
-              fecha_transferencia: r.fecha_transferencia || null,
-              aplicado_credito: Number(r.aplicado_credito || 0),
-              excedente_saldo: Number(r.excedente_saldo || 0),
-              nombres: r.nombres || "",
-              apellidos: r.apellidos || "",
-              created_at: r.created_at || null,
-              usuario_nombre: r.usuario_nombre || null,
-              usuario_correo: r.usuario_correo || null,
-              observacion: r.observacion || null,
-              estado: r.estado || "ACTIVO",
-            }))
+              id: idVisual,
+              registro_id: Number(r.registro_id || String(idVisual).split("-")[1] || 0),
+              origen_registro: origen,
+            };
+          })
         : [];
 
-      const combinadas = [...listaAlumnos, ...listaProfesores].sort((a, b) => {
-        const fa = new Date(a.created_at || 0).getTime();
-        const fb = new Date(b.created_at || 0).getTime();
-        if (fb !== fa) return fb - fa;
-        return Number(b.registro_id || 0) - Number(a.registro_id || 0);
-      });
-
-      setRecargas(combinadas);
-
-      if (!respuestaAlumnos.ok) {
-        console.error("No se pudieron cargar recargas de alumnos:", dataAlumnos);
-      }
-
-      if (!respuestaProfesores.ok) {
-        console.error("No se pudieron cargar recargas de profesores:", dataProfesores);
-      }
+      setRecargas(
+        lista.sort((a, b) => {
+          const fa = new Date(a.created_at || 0).getTime();
+          const fb = new Date(b.created_at || 0).getTime();
+          if (fb !== fa) return fb - fa;
+          return Number(b.registro_id || 0) - Number(a.registro_id || 0);
+        })
+      );
     } catch (error) {
       console.error("Error cargando historial unificado de recargas:", error);
       setRecargas([]);
