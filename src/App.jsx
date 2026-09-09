@@ -3195,11 +3195,14 @@ const stockProductoEnPunto = (productoId, ubicacion) => {
       normalizarUbicacionFrontend(item?.ubicacion, institucionId) === punto
   );
 
-  // 1) Si la ubicación solicitada tiene stock real, siempre manda ese valor.
-  const stockPunto = filasPunto.reduce(
-    (total, fila) => total + Number(fila?.stock || 0),
-    0
-  );
+  // 1) El backend entrega UNA existencia canónica por producto + ubicación.
+  // Si por caché llegaran filas repetidas, no las sumamos: eso mezclaría
+  // saldos históricos y mostraría un stock mayor al físico.
+  const filaPunto = [...filasPunto].sort((a,b)=>
+    String(b?.updated_at||"").localeCompare(String(a?.updated_at||""))
+  )[0];
+
+  const stockPunto = Number(filaPunto?.stock || 0);
 
   if (stockPunto > 0) {
     return stockPunto;
@@ -10576,8 +10579,10 @@ if (institucionIdLogin) {
       return;
     }
 
-    const ubicacionVentaActual =
-      jornadaActiva?.punto_nombre || localNuevaOrden || "PRINCIPAL";
+    const ubicacionVentaActual = normalizarUbicacionFrontend(
+      localNuevaOrden || "PRINCIPAL",
+      institucionId
+    );
 
     const itemsLimpios = ventaItems
       .map((item) => {
@@ -10635,7 +10640,7 @@ if (institucionIdLogin) {
       if (stockDisponible < 1) {
         alert(
           `${producto.nombre}: no tiene stock disponible en ${
-            jornadaActiva?.punto_nombre || localNuevaOrden || "esta ubicación"
+            ubicacionVentaActual || "esta ubicación"
           }.`
         );
         return;
@@ -10783,7 +10788,7 @@ Disponible: ${formatearMoneda(
         : ventaForm.metodo_pago,
       items: itemsLimpios,
       observacion:ventaForm.observacion?.trim()||"",
-      ubicacion:jornadaActiva?.punto_nombre||localNuevaOrden||"PRINCIPAL",
+      ubicacion:ubicacionVentaActual,
       jornada_id:null,
     };
 
@@ -21792,7 +21797,7 @@ onClick={guardarEgreso}
           >
             <div>
               <label style={styles.label}>Local</label>
-              <input value={jornadaActiva?.punto_nombre||localNuevaOrden} style={styles.input} readOnly />
+              <input value={normalizarUbicacionFrontend(localNuevaOrden||"PRINCIPAL",obtenerInstitucionActivaId())} style={styles.input} readOnly />
             </div>
 
             <div>
@@ -21852,7 +21857,7 @@ onClick={guardarEgreso}
 
                 const stockDisponible = stockDisponibleVentaProducto(
                   p,
-                  jornadaActiva?.punto_nombre || localNuevaOrden
+                  localNuevaOrden
                 );
 
                 const tieneStock = stockDisponible >= 1;
@@ -21877,7 +21882,7 @@ onClick={guardarEgreso}
                 const sinStock =
                   stockDisponibleVentaProducto(
                     producto,
-                    jornadaActiva?.punto_nombre || localNuevaOrden
+                    localNuevaOrden
                   ) <= 0;
 
                 return (
@@ -22084,7 +22089,7 @@ onClick={guardarEgreso}
                             overflowWrap: "anywhere",
                           }}
                         >
-                          Stock {jornadaActiva?.punto_nombre || localNuevaOrden}: {stockDisponibleVentaProducto(producto, jornadaActiva?.punto_nombre || localNuevaOrden)}
+                          Stock {localNuevaOrden}: {stockDisponibleVentaProducto(producto, localNuevaOrden)}
                         </div>
                       </div>
                     </div>
@@ -22179,7 +22184,7 @@ onClick={guardarEgreso}
                             Number(
                               stockDisponibleVentaProducto(
                                 producto,
-                                jornadaActiva?.punto_nombre || localNuevaOrden
+                                localNuevaOrden
                               ) || 0
                             )
                           )}
@@ -22197,7 +22202,7 @@ onClick={guardarEgreso}
                             const disponible = Number(
                               stockDisponibleVentaProducto(
                                 producto,
-                                jornadaActiva?.punto_nombre || localNuevaOrden
+                                localNuevaOrden
                               ) || 0
                             );
 
