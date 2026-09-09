@@ -45,6 +45,7 @@ const MENU_POR_ROL = {
     "nueva_orden",
     "alumnos",
     "profesores",
+    "stock",
     "egresos",
     "cierre_caja",
   ],
@@ -95,6 +96,8 @@ const PERMISOS_FRONTEND = {
     "ventas.ver",
     "ventas.crear",
     "productos.ver",
+    "inventario.ver",
+    "inventario.gestionar",
     "personas.ver",
     "egresos.ver",
     "egresos.gestionar",
@@ -307,6 +310,15 @@ const normalizarUbicacionFrontend = (valor, institucionId = null) => {
     ["PRINCIPAL", "BAR", "BAR PRINCIPAL"].includes(texto)
   ) {
     return "BAR";
+  }
+
+  // PENSIONADO (institución 2): SOLO BAR PRINCIPAL + KIOSKO.
+  // PRINCIPAL y BAR son aliases históricos que deben caer en BAR PRINCIPAL.
+  if (
+    Number(institucionId || 0) === 2 &&
+    ["PRINCIPAL", "BAR", "BAR PRINCIPAL"].includes(texto)
+  ) {
+    return "BAR PRINCIPAL";
   }
 
   // En otras instituciones conservamos los nombres reales.
