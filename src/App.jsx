@@ -1637,7 +1637,7 @@ const totalRecargasVista = useMemo(() => {
           : venta.metodo_pago === "CREDITO"
           ? "CRÉDITO ALUMNO"
           : venta.metodo_pago === "CREDITO_PROFESOR"
-          ? "CRÉDITO PROFESOR"
+          ? "CUENTAS POR PAGAR"
           : venta.metodo_pago || "EFECTIVO";
 
       return {
@@ -7002,9 +7002,9 @@ if (institucionIdLogin) {
     }
 
     const valorIngresado = window.prompt(
-      `Recarga en efectivo para ${profesorDetalle.nombres || ""} ${
+      `Pago en efectivo para ${profesorDetalle.nombres || ""} ${
         profesorDetalle.apellidos || ""
-      }\n\nIngresa el monto a recargar:`,
+      }\n\nIngresa el monto a pagar:`,
       ""
     );
 
@@ -7064,7 +7064,7 @@ if (institucionIdLogin) {
         throw new Error(
           data.message ||
             data.error ||
-            `No se pudo realizar la recarga. Código ${res.status}`
+            `No se pudo registrar el pago. Código ${res.status}`
         );
       }
 
@@ -7102,13 +7102,13 @@ if (institucionIdLogin) {
       }
 
       alert(
-        `Recarga en efectivo realizada correctamente.\nMonto: ${formatearMoneda(
+        `Pago en efectivo registrado correctamente.\nMonto: ${formatearMoneda(
           monto
         )}`
       );
     } catch (error) {
       console.error("Error realizando recarga rápida del profesor:", error);
-      alert(error.message || "No se pudo realizar la recarga.");
+      alert(error.message || "No se pudo registrar el pago.");
     } finally {
       setGuardandoRecargaProfesor(false);
     }
@@ -7194,7 +7194,7 @@ if (institucionIdLogin) {
 
       if (!res.ok) {
         throw new Error(
-          data.message || data.error || "No se pudo realizar la recarga"
+          data.message || data.error || "No se pudo registrar el pago"
         );
       }
 
@@ -7225,19 +7225,19 @@ if (institucionIdLogin) {
 
       if (aplicadoCredito > 0) {
         alert(
-          `Recarga realizada correctamente.\n` +
+          `Pago registrado correctamente.\n` +
             `Aplicado a deuda de crédito: ${formatearMoneda(aplicadoCredito)}\n` +
             `Excedente a saldo: ${formatearMoneda(excedenteSaldo)}`
         );
       } else {
         alert(
-          `Recarga realizada correctamente.\n` +
+          `Pago registrado correctamente.\n` +
             `Saldo acreditado: ${formatearMoneda(excedenteSaldo)}`
         );
       }
     } catch (error) {
-      console.error("Error realizando recarga del profesor:", error);
-      alert(error.message || "No se pudo realizar la recarga.");
+      console.error("Error registrando pago del profesor:", error);
+      alert(error.message || "No se pudo registrar el pago.");
     } finally {
       setGuardandoRecargaProfesor(false);
     }
@@ -7480,7 +7480,7 @@ if (institucionIdLogin) {
       "Tipo",
       "Monto",
       "Saldo anterior",
-      "Saldo nuevo",
+      "Cuenta pendiente",
       "Fecha",
       "Estado",
       "Observación",
@@ -17117,7 +17117,7 @@ onClick={guardarEgreso}
       <div>
         <h1 style={styles.dashboardTitle}>Profesores</h1>
         <p style={styles.dashboardSubtitle}>
-          Gestión de profesores y créditos
+          Gestión de profesores y cuentas por pagar
         </p>
       </div>
 
@@ -17162,7 +17162,7 @@ onClick={guardarEgreso}
                 await cargarCreditosProfesores();
               }}
             >
-              Créditos Profesores
+              Cuentas por pagar
             </button>
           </>
         )}
@@ -17258,17 +17258,6 @@ onClick={guardarEgreso}
               value={profesorForm.telefono}
               onChange={(e) =>
                 setProfesorForm({ ...profesorForm, telefono: e.target.value })
-              }
-              style={styles.input}
-            />
-
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Crédito"
-              value={profesorForm.saldo}
-              onChange={(e) =>
-                setProfesorForm({ ...profesorForm, saldo: e.target.value })
               }
               style={styles.input}
             />
@@ -17397,7 +17386,7 @@ onClick={guardarEgreso}
                     <th style={styles.th}>Cédula/Ruc</th>
                     <th style={styles.th}>Email</th>
                     <th style={styles.th}>Código</th>
-                    <th style={styles.th}>Crédito</th>
+                    <th style={styles.th}>Cuentas por pagar</th>
                     <th style={styles.th}>Acciones</th>
                   </tr>
                 </thead>
@@ -17415,7 +17404,7 @@ onClick={guardarEgreso}
                           <td style={styles.td}>{p.email || "-"}</td>
                           <td style={styles.td}>{p.codigo || "-"}</td>
                           <td style={styles.td}>
-                            {formatearMoneda(p.credito || p.saldo || 0)}
+                            {formatearMoneda(p.cuentas_por_pagar ?? p.credito_utilizado ?? 0)}
                           </td>
                           <td style={styles.td}>
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -17618,6 +17607,65 @@ onClick={guardarEgreso}
                 >
                   {profesorDetalle.activo !== false ? "Activo" : "Inactivo"}
                 </span>
+                {["ADMIN","SUPER_ADMIN"].includes(rolActual) && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const token = localStorage.getItem("token");
+                        const institucionId = obtenerInstitucionActivaId();
+                        const actual =
+                          profesorDetalle.registrar_compras_por_pagar === true ||
+                          profesorDetalle.compras_por_pagar_habilitadas === true;
+                        const res = await fetch(
+                          `${API_URL}/api/profesores/${profesorDetalle.id}/compras-por-pagar`,
+                          {
+                            method: "PATCH",
+                            headers: {
+                              "Content-Type": "application/json",
+                              Authorization: `Bearer ${token}`,
+                            },
+                            body: JSON.stringify({
+                              institucion_id: Number(institucionId),
+                              habilitado: !actual,
+                            }),
+                          }
+                        );
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.message || "No se pudo actualizar");
+                        setProfesorDetalle(data.profesor);
+                        setProfesores((prev) =>
+                          prev.map((p) =>
+                            Number(p.id) === Number(data.profesor.id) ? data.profesor : p
+                          )
+                        );
+                        alert(data.message);
+                      } catch (error) {
+                        alert(error.message || "No se pudo actualizar compras por pagar");
+                      }
+                    }}
+                    style={{
+                      border: "1px solid #ffffff",
+                      background:
+                        profesorDetalle.registrar_compras_por_pagar === true ||
+                        profesorDetalle.compras_por_pagar_habilitadas === true
+                          ? "#16a34a"
+                          : "#64748b",
+                      color: "#ffffff",
+                      padding: "8px 14px",
+                      borderRadius: 14,
+                      fontWeight: 800,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Registrar compras por pagar: {
+                      profesorDetalle.registrar_compras_por_pagar === true ||
+                      profesorDetalle.compras_por_pagar_habilitadas === true
+                        ? "SÍ"
+                        : "NO"
+                    }
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -17631,7 +17679,7 @@ onClick={guardarEgreso}
                 await cargarCreditosProfesores(profesorDetalle.id);
               }}
             >
-              Historial de créditos
+              Historial cuentas por pagar
             </button>
             <button
               type="button"
@@ -17675,8 +17723,8 @@ onClick={guardarEgreso}
                   alumno_id: "",
                   profesor_id: String(profesorDetalle.id),
                   metodo_pago:
-                    profesorDetalle.credito_habilitado === true &&
-                    Number(profesorDetalle.saldo || 0) <= 0.0001
+                    (profesorDetalle.registrar_compras_por_pagar === true ||
+                     profesorDetalle.compras_por_pagar_habilitadas === true)
                       ? "CREDITO_PROFESOR"
                       : "EFECTIVO",
                   observacion: "",
@@ -17723,9 +17771,9 @@ onClick={guardarEgreso}
               <div><strong>Código:</strong> {profesorDetalle.codigo || "-"}</div>
               <div><strong>Es profesor:</strong> {profesorDetalle.es_profesor !== false ? "Sí" : "No"}</div>
               <div>
-                <strong>Crédito:</strong>{" "}
-                <span style={{ fontWeight: 900, color: profesorDetalle.credito_habilitado === true ? "#166534" : "#991b1b" }}>
-                  {profesorDetalle.credito_habilitado === true ? "HABILITADO" : "INHABILITADO"}
+                <strong>Registrar compras por pagar:</strong>{" "}
+                <span style={{ fontWeight: 900, color: profesorDetalle.registrar_compras_por_pagar === true || profesorDetalle.compras_por_pagar_habilitadas === true ? "#166534" : "#991b1b" }}>
+                  {profesorDetalle.registrar_compras_por_pagar === true || profesorDetalle.compras_por_pagar_habilitadas === true ? "SÍ" : "NO"}
                 </span>
               </div>
             </div>
@@ -17747,9 +17795,9 @@ onClick={guardarEgreso}
                   fontWeight: 800,
                 }}
               >
-                <div style={{ fontSize: 17 }}>Crédito actual:</div>
+                <div style={{ fontSize: 17 }}>Cuentas por pagar:</div>
                 <div style={{ fontSize: 34, marginTop: 4 }}>
-                  {formatearMoneda(profesorDetalle.credito || profesorDetalle.saldo || 0)}
+                  {formatearMoneda(profesorDetalle.cuentas_por_pagar ?? profesorDetalle.credito_utilizado ?? 0)}
                 </div>
               </div>
               <button
@@ -17758,7 +17806,7 @@ onClick={guardarEgreso}
                 onClick={abrirModalRecargaProfesor}
                 disabled={guardandoRecargaProfesor}
               >
-                Recargar saldo
+                Registrar pago
               </button>
             </div>
           </div>
@@ -17769,7 +17817,7 @@ onClick={guardarEgreso}
                 ["ordenes", "Órdenes"],
                 ["recargas", "Recargas"],
                 ["dispositivos", "Dispositivos"],
-                ["creditos", "Créditos"],
+                ["creditos", "Cuentas por pagar"],
               ].map(([clave, texto]) => (
                 <button
                   key={clave}
@@ -18076,8 +18124,8 @@ onClick={guardarEgreso}
                         {guardandoRecargaProfesor
                           ? "Registrando..."
                           : recargaProfesorForm.metodo_pago === "EFECTIVO"
-                          ? "Recargar efectivo"
-                          : "Registrar transferencia"}
+                          ? "Registrar pago efectivo"
+                          : "Registrar pago transferencia"}
                       </button>
                     </div>
                   </form>
@@ -18092,7 +18140,7 @@ onClick={guardarEgreso}
                           <th style={styles.th}>Banco</th>
                           <th style={styles.th}>Comprobante</th>
                           <th style={styles.th}>Usuario</th>
-                          <th style={styles.th}>Saldo nuevo</th>
+                          <th style={styles.th}>Cuenta pendiente</th>
                           <th style={styles.th}>Estado</th>
                         </tr>
                       </thead>
@@ -18105,7 +18153,7 @@ onClick={guardarEgreso}
                         ).length === 0 ? (
                           <tr>
                             <td style={styles.td} colSpan={8}>
-                              No hay recargas registradas.
+                              No hay pagos registrados.
                             </td>
                           </tr>
                         ) : (
@@ -18176,7 +18224,7 @@ onClick={guardarEgreso}
                   >
                     <div>
                       <h3 style={{ margin: 0 }}>
-                        Historial de créditos,{" "}
+                        Historial cuentas por pagar,{" "}
                         {`${profesorDetalle.nombres || ""} ${
                           profesorDetalle.apellidos || ""
                         }`.trim()}
@@ -18272,7 +18320,7 @@ onClick={guardarEgreso}
                             marginBottom: 10,
                           }}
                         >
-                          Límite de crédito
+                          Cuenta por pagar
                         </div>
                         <strong
                           style={{
@@ -18281,9 +18329,7 @@ onClick={guardarEgreso}
                             color: "#003b66",
                           }}
                         >
-                          {formatearMoneda(
-                            profesorDetalle.limite_credito || 0
-                          )}
+                          {formatearMoneda(profesorDetalle.cuentas_por_pagar ?? profesorDetalle.credito_utilizado ?? 0)}
                         </strong>
                       </div>
                     </div>
@@ -18308,7 +18354,7 @@ onClick={guardarEgreso}
                             marginBottom: 10,
                           }}
                         >
-                          Crédito utilizado
+                          Pendiente por pagar
                         </div>
                         <strong
                           style={{
@@ -18317,9 +18363,7 @@ onClick={guardarEgreso}
                             color: "#28c58b",
                           }}
                         >
-                          {formatearMoneda(
-                            profesorDetalle.credito_utilizado || 0
-                          )}
+                          {formatearMoneda(profesorDetalle.cuentas_por_pagar ?? profesorDetalle.credito_utilizado ?? 0)}
                         </strong>
                       </div>
                     </div>
@@ -18344,7 +18388,7 @@ onClick={guardarEgreso}
                             marginBottom: 10,
                           }}
                         >
-                          Crédito disponible
+                          Compras por pagar
                         </div>
                         <strong
                           style={{
@@ -18353,267 +18397,26 @@ onClick={guardarEgreso}
                             color: "#003b66",
                           }}
                         >
-                          {formatearMoneda(
-                            Math.max(
-                              0,
-                              Number(profesorDetalle.limite_credito || 0) -
-                                Number(profesorDetalle.credito_utilizado || 0)
-                            )
-                          )}
+                          {formatearMoneda(profesorDetalle.cuentas_por_pagar ?? profesorDetalle.credito_utilizado ?? 0)}
                         </strong>
                       </div>
                     </div>
                   </div>
 
-                  {["ADMIN", "SUPER_ADMIN"].includes(rolActual) && (
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns:
-                          "minmax(180px,.7fr) minmax(180px,.8fr) minmax(280px,1fr) minmax(260px,1fr)",
-                        gap: 12,
-                        padding: 16,
-                        marginBottom: 18,
-                        border: "1px solid #e5e7eb",
-                        borderRadius: 12,
-                        background: "#f8fafc",
-                        alignItems: "center",
-                      }}
-                    >
-                      <div>
-                        <strong>Habilitar crédito</strong>
-                        <div
-                          style={{
-                            marginTop: 5,
-                            fontWeight: 800,
-                            color:
-                              profesorDetalle.credito_habilitado === true
-                                ? "#166534"
-                                : "#991b1b",
-                          }}
-                        >
-                          {profesorDetalle.credito_habilitado === true
-                            ? "HABILITADO"
-                            : "INHABILITADO"}
-                        </div>
-                        <div
-                          style={{
-                            marginTop: 4,
-                            fontSize: 12,
-                            color: "#64748b",
-                            lineHeight: 1.35,
-                          }}
-                        >
-                          {profesorDetalle.credito_habilitado === true
-                            ? "Ahora puedes definir o modificar el límite. Para guardar o deshabilitar vuelve a ingresar la contraseña del administrador."
-                            : "Primero valida la contraseña del administrador. El límite se configura después de habilitar."}
-                        </div>
-                      </div>
-
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder={
-                          profesorDetalle.credito_habilitado === true
-                            ? "Ingresa el límite de crédito"
-                            : "Se habilita después de validar la contraseña"
-                        }
-                        value={creditoProfesorLimite}
-                        onChange={(e) =>
-                          setCreditoProfesorLimite(e.target.value)
-                        }
-                        style={styles.input}
-                        disabled={
-                          profesorDetalle.credito_habilitado !== true
-                        }
-                      />
-
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <input
-                          type={
-                            verCreditoProfesorAdminPassword
-                              ? "text"
-                              : "password"
-                          }
-                          placeholder="Contraseña del administrador"
-                          value={creditoProfesorAdminPassword}
-                          onChange={(e) =>
-                            setCreditoProfesorAdminPassword(
-                              e.target.value
-                            )
-                          }
-                          style={{
-                            ...styles.input,
-                            flex: 1,
-                          }}
-                          autoComplete="current-password"
-                        />
-                        <button
-                          type="button"
-                          style={styles.outlineButton}
-                          onClick={() =>
-                            setVerCreditoProfesorAdminPassword(
-                              (actual) => !actual
-                            )
-                          }
-                        >
-                          {verCreditoProfesorAdminPassword
-                            ? "Ocultar"
-                            : "Ver"}
-                        </button>
-                      </div>
-
-                      {profesorDetalle.credito_habilitado !== true ? (
-                        <button
-                          type="button"
-                          style={styles.button}
-                          disabled={
-                            guardandoAutorizacionCreditoProfesor
-                          }
-                          onClick={() =>
-                            actualizarCreditoProfesor("HABILITAR")
-                          }
-                        >
-                          {guardandoAutorizacionCreditoProfesor
-                            ? "Validando..."
-                            : "Autorizar y habilitar crédito"}
-                        </button>
-                      ) : (
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: 8,
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <button
-                            type="button"
-                            style={styles.button}
-                            disabled={
-                              guardandoAutorizacionCreditoProfesor
-                            }
-                            onClick={() =>
-                              actualizarCreditoProfesor(
-                                "GUARDAR_LIMITE"
-                              )
-                            }
-                          >
-                            {guardandoAutorizacionCreditoProfesor
-                              ? "Validando..."
-                              : "Guardar límite"}
-                          </button>
-
-                          <button
-                            type="button"
-                            style={{
-                              ...styles.outlineButton,
-                              borderColor: "#dc2626",
-                              color: "#dc2626",
-                            }}
-                            disabled={
-                              guardandoAutorizacionCreditoProfesor
-                            }
-                            onClick={() =>
-                              actualizarCreditoProfesor(
-                                "DESHABILITAR"
-                              )
-                            }
-                          >
-                            Deshabilitar crédito
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <form
-                    onSubmit={registrarCreditoProfesor}
+                  <div
                     style={{
-                      display: "grid",
-                      gridTemplateColumns:
-                        "repeat(auto-fit, minmax(180px, 1fr))",
-                      gap: 12,
-                      marginBottom: 22,
                       padding: 16,
+                      marginBottom: 18,
                       border: "1px solid #e5e7eb",
                       borderRadius: 12,
                       background: "#f8fafc",
                     }}
                   >
-                    <select
-                      value={creditoProfesorForm.tipo}
-                      onChange={(e) =>
-                        setCreditoProfesorForm({
-                          ...creditoProfesorForm,
-                          tipo: e.target.value,
-                        })
-                      }
-                      style={styles.input}
-                    >
-                      <option value="AJUSTE_POSITIVO">
-                        Ajuste positivo
-                      </option>
-                      <option value="CONSUMO">
-                        Registrar consumo
-                      </option>
-                      <option value="AJUSTE_POSITIVO">
-                        Ajuste positivo
-                      </option>
-                      <option value="AJUSTE_NEGATIVO">
-                        Ajuste negativo
-                      </option>
-                    </select>
-
-                    <input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      placeholder="Monto"
-                      value={creditoProfesorForm.monto}
-                      onChange={(e) =>
-                        setCreditoProfesorForm({
-                          ...creditoProfesorForm,
-                          monto: e.target.value,
-                        })
-                      }
-                      style={styles.input}
-                      required
-                    />
-
-                    <input
-                      type="text"
-                      placeholder="Comercio"
-                      value={creditoProfesorForm.comercio}
-                      onChange={(e) =>
-                        setCreditoProfesorForm({
-                          ...creditoProfesorForm,
-                          comercio: e.target.value,
-                        })
-                      }
-                      style={styles.input}
-                    />
-
-                    <input
-                      type="text"
-                      placeholder="Observación"
-                      value={creditoProfesorForm.observacion}
-                      onChange={(e) =>
-                        setCreditoProfesorForm({
-                          ...creditoProfesorForm,
-                          observacion: e.target.value,
-                        })
-                      }
-                      style={styles.input}
-                    />
-
-                    <button
-                      type="submit"
-                      style={styles.button}
-                    >
-                      Guardar movimiento
-                    </button>
-                  </form>
+                    <strong>Cuentas por pagar</strong>
+                    <div style={{ marginTop: 6, color: "#64748b" }}>
+                      Las compras se acumulan automáticamente y los pagos se descuentan de los consumos pendientes más antiguos.
+                    </div>
+                  </div>
 
                   <div style={styles.tableWrap}>
                     <table style={styles.table}>
@@ -18625,7 +18428,7 @@ onClick={guardarEgreso}
                           </th>
                           <th style={styles.th}>Tipo</th>
                           <th style={styles.th}>Monto</th>
-                          <th style={styles.th}>Saldo nuevo</th>
+                          <th style={styles.th}>Cuenta pendiente</th>
                           <th style={styles.th}>Fecha</th>
                           <th style={styles.th}>Estado</th>
                           <th style={styles.th}>Acciones</th>
@@ -18723,7 +18526,7 @@ onClick={guardarEgreso}
       <div style={styles.box}>
         <div style={styles.pageHeaderSmall}>
           <h3 style={{ margin: 0 }}>
-            Historial de créditos de profesores
+            Historial cuentas por pagar de profesores
           </h3>
 
           <div style={styles.headerActions}>
@@ -18835,7 +18638,7 @@ onClick={guardarEgreso}
                   </th>
                   <th style={styles.th}>Tipo</th>
                   <th style={styles.th}>Monto</th>
-                  <th style={styles.th}>Saldo nuevo</th>
+                  <th style={styles.th}>Cuenta pendiente</th>
                   <th style={styles.th}>Fecha</th>
                   <th style={styles.th}>Estado</th>
                   <th style={styles.th}>Acciones</th>
@@ -22605,7 +22408,7 @@ onClick={guardarEgreso}
                       fontWeight: 800,
                     }}
                   >
-                    Crédito disponible:{" "}
+                    Compras por pagar:{" "}
                     {formatearMoneda(
                       Math.max(
                         0,
@@ -22634,7 +22437,7 @@ onClick={guardarEgreso}
                       fontWeight: 800,
                     }}
                   >
-                    Crédito disponible del profesor:{" "}
+                    Compras por pagar del profesor:{" "}
                     {formatearMoneda(
                       Math.max(
                         0,
@@ -23251,7 +23054,7 @@ onClick={guardarEgreso}
               <div style={styles.box}>
                 <h3>Últimas recargas</h3>
                 {recargas.length === 0 ? (
-                  <p>No hay recargas registradas.</p>
+                  <p>No hay pagos registrados.</p>
                 ) : (
                   <div style={styles.tableWrap}>
                     <table style={styles.table}>
