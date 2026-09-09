@@ -3107,12 +3107,18 @@ const cargarExistenciasInventario = async ({
       );
       return puntosUnicos.includes(actualNormalizado)
         ? actualNormalizado
-        : (institucionId === 1 ? "BAR" : "PRINCIPAL");
+        : (
+            institucionId === 1
+              ? "BAR"
+              : institucionId === 2
+              ? "BAR PRINCIPAL"
+              : (puntosUnicos[0] || "PRINCIPAL")
+          );
     });
 
     setLocalNuevaOrden((actual) => {
-      const puntoJornada = normalizarUbicacionFrontend(
-        ubicacionForzada || jornadaActiva?.punto_nombre || "",
+      const puntoOperativoForzado = normalizarUbicacionFrontend(
+        ubicacionForzada || "",
         institucionId
       );
       const actualNormalizado = normalizarUbicacionFrontend(
@@ -3124,14 +3130,17 @@ const cargarExistenciasInventario = async ({
         institucionId
       );
 
-      // Los operadores siguen ligados SIEMPRE al punto de su jornada.
-      if (jornadaActiva?.id && puntosUnicos.includes(puntoJornada)) {
-        return puntoJornada;
+      // POS NUBE SIN JORNADAS:
+      // si el flujo envió una ubicación explícita, esa ubicación manda.
+      if (
+        ubicacionForzada &&
+        puntosUnicos.includes(puntoOperativoForzado)
+      ) {
+        return puntoOperativoForzado;
       }
 
-      // ADMIN/SUPER_ADMIN no tienen jornada. Si PRINCIPAL es únicamente
-      // un punto lógico/placeholder sin stock y BAR/KIOSKO sí tiene stock,
-      // usamos automáticamente la ubicación real recomendada por el backend.
+      // Si la ubicación actual sigue siendo válida, se conserva.
+      // Si no, usamos la ubicación real recomendada por el backend.
       const stockTotalUbicacion = (ubicacion) =>
         listaExistencias
           .filter(
@@ -4560,7 +4569,7 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
             body:JSON.stringify({
               institucion_id:Number(institucionId),
               jornada_id:null,
-              ubicacion_operacion:String(puntoInventarioSeleccionado||jornadaActiva?.punto_nombre||"PRINCIPAL"),
+              ubicacion_operacion:String(puntoInventarioSeleccionado||localNuevaOrden||"PRINCIPAL"),
               tipo_ingreso:confirmacionActual.tipo,
               proveedor_id:
                 confirmacionActual.tipo==="COMPRA"
@@ -4651,7 +4660,7 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
               body:JSON.stringify({
                 institucion_id:Number(institucionId),
                 jornada_id:null,
-                ubicacion_operacion:String(puntoInventarioSeleccionado||jornadaActiva?.punto_nombre||"PRINCIPAL"),
+                ubicacion_operacion:String(puntoInventarioSeleccionado||localNuevaOrden||"PRINCIPAL"),
                 producto_id:Number(item.producto_id),
                 institucion_destino_id:Number(
                   stockOperacionForm.institucion_destino_id
@@ -4689,7 +4698,7 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
           body:JSON.stringify({
             institucion_id:Number(institucionId),
             jornada_id:null,
-            ubicacion_operacion:String(puntoInventarioSeleccionado||jornadaActiva?.punto_nombre||"PRINCIPAL"),
+            ubicacion_operacion:String(puntoInventarioSeleccionado||localNuevaOrden||"PRINCIPAL"),
             tipo_egreso:confirmacionActual.tipo,
             destinatario_cortesia:
               confirmacionActual.tipo==="CORTESIA"
@@ -4734,7 +4743,9 @@ const confirmarOperacionStockNueva=async(confirmacionForzada=null)=>{
       const stockAnterior=Number(
         stockProductoEnPunto(
           item.producto_id,
-          jornadaActiva?.punto_nombre||"PRINCIPAL"
+          puntoInventarioSeleccionado||
+            localNuevaOrden||
+            "PRINCIPAL"
         )||0
       );
 
@@ -20185,7 +20196,9 @@ onClick={guardarEgreso}
                       }}>
                         {stockProductoEnPunto(
                           producto.id,
-                          jornadaActiva?.punto_nombre||"PRINCIPAL"
+                          puntoInventarioSeleccionado||
+                            localNuevaOrden||
+                            "PRINCIPAL"
                         )}
                       </td>
                       <td style={{
