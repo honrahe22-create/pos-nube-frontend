@@ -17855,11 +17855,7 @@ onClick={guardarEgreso}
                 setVentaForm({
                   alumno_id: "",
                   profesor_id: String(profesorDetalle.id),
-                  metodo_pago:
-                    (profesorDetalle.registrar_compras_por_pagar === true ||
-                     profesorDetalle.compras_por_pagar_habilitadas === true)
-                      ? "CREDITO_PROFESOR"
-                      : "EFECTIVO",
+                  metodo_pago: "CREDITO_PROFESOR",
                   observacion: "",
                 });
                 setBusquedaUsuarioNuevaOrden(
@@ -21685,11 +21681,7 @@ onClick={guardarEgreso}
                       ...prev,
                       alumno_id: "",
                       profesor_id: String(p.id),
-                      metodo_pago:
-                        p.registrar_compras_por_pagar === true ||
-                        p.compras_por_pagar_habilitadas === true
-                          ? "CREDITO_PROFESOR"
-                          : "EFECTIVO",
+                      metodo_pago: "CREDITO_PROFESOR",
                     }));
                     setModoNuevaOrden("consumidor_final");
                     setBusquedaUsuarioNuevaOrden("");
@@ -22454,11 +22446,12 @@ onClick={guardarEgreso}
                 {/*
                   REGLAS DE PAGO:
                   - Consumidor final: Efectivo / Transferencia.
-                  - Profesor seleccionado: Efectivo / Transferencia siempre disponibles.
+                  - Consumidor final: Efectivo / Transferencia.
                   - Alumno seleccionado: conserva Saldo / Crédito del alumno.
-                  - Crédito profesor conserva sus bloqueos actuales.
+                  - Profesor seleccionado: solo Crédito.
+                  - Si Registrar compras por pagar está en NO, Crédito queda bloqueado.
                 */}
-                {!alumnoVentaSeleccionado && (
+                {!alumnoVentaSeleccionado && !profesorVentaSeleccionado && (
                   <>
                     <option value="EFECTIVO">Efectivo</option>
                     <option value="TRANSFERENCIA">Transferencia</option>
@@ -22486,8 +22479,8 @@ onClick={guardarEgreso}
                   >
                     {profesorVentaSeleccionado.registrar_compras_por_pagar === true ||
                     profesorVentaSeleccionado.compras_por_pagar_habilitadas === true
-                      ? "Compra por pagar del profesor"
-                      : "Compra por pagar del profesor (NO habilitada)"}
+                      ? "Crédito"
+                      : "Crédito (NO habilitado)"}
                   </option>
                 )}
               </select>
