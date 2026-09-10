@@ -17686,7 +17686,7 @@ onClick={guardarEgreso}
                 >
                   {profesorDetalle.activo !== false ? "Activo" : "Inactivo"}
                 </span>
-                {["ADMIN","SUPER_ADMIN"].includes(rolActual) && (() => {
+                {["ADMIN","SUPER_ADMIN","ENCARGADO_LOCAL"].includes(rolActual) && (() => {
                   const comprasPorPagarActivas =
                     profesorDetalle.registrar_compras_por_pagar === true ||
                     profesorDetalle.compras_por_pagar_habilitadas === true;
