@@ -1005,8 +1005,18 @@ const familiasOperacionStock = useMemo(() => {
 }, [productos, familiasCatalogoStock]);
 
 const productosOperacionStock = useMemo(() => {
-  const texto = String(stockBusquedaOperacion || "").trim().toLowerCase();
+  const texto = String(stockBusquedaOperacion || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+
   const familia = String(stockFamiliaOperacion || "TODAS").trim();
+
+  const palabrasBusqueda = texto
+    .split(/\s+/)
+    .map((palabra) => palabra.trim())
+    .filter(Boolean);
 
   return productos
     .filter((p) => p?.activo !== false)
@@ -1015,15 +1025,28 @@ const productosOperacionStock = useMemo(() => {
       return String(p?.categoria || "").trim() === familia;
     })
     .filter((p) => {
-      if (!texto) return true;
-      return [
+      if (!palabrasBusqueda.length) return true;
+
+      const contenidoProducto = [
         p?.nombre,
         p?.codigo,
         p?.categoria,
         p?.descripcion,
       ]
-        .map((v) => String(v || "").toLowerCase())
-        .some((v) => v.includes(texto));
+        .map((v) =>
+          String(v || "")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+        )
+        .join(" ");
+
+      // Búsqueda flexible:
+      // basta con que cualquiera de las palabras escritas coincida.
+      // Ej.: "avena polaca" encuentra "POLACA 180G".
+      return palabrasBusqueda.some((palabra) =>
+        contenidoProducto.includes(palabra)
+      );
     })
     .sort((a,b)=>String(a.nombre||"").localeCompare(String(b.nombre||"")));
 }, [
