@@ -12349,12 +12349,14 @@ Disponible: ${formatearMoneda(
       return;
     }
 
-    const confirmado = window.confirm(
-      `¿Anular ${ids.length} recarga(s) seleccionada(s)?\n\n` +
-      "El sistema revertirá automáticamente el saldo a favor y/o la cuenta por pagar correspondiente."
-    );
-
-    if (!confirmado) return;
+    if (
+      !window.confirm(
+        `¿Eliminar ${ids.length} recarga(s) seleccionada(s)?\n\n` +
+        "El saldo y/o la cuenta por pagar se corregirán automáticamente."
+      )
+    ) {
+      return;
+    }
 
     try {
       setAnulandoRecargas(true);
@@ -12366,36 +12368,43 @@ Disponible: ${formatearMoneda(
         throw new Error("Sesión o institución no válida.");
       }
 
-      const respuesta = await fetch(
-        `${API_URL}/api/recargas/eliminar-seleccionadas`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            institucion_id: Number(institucionId),
-            ids,
-          }),
+      for (const clave of ids) {
+        const partes = clave.split("-");
+        const prefijo = String(partes[0] || "").toUpperCase();
+        const id = Number(partes[1]);
+
+        if (!id || !["A", "P"].includes(prefijo)) {
+          throw new Error(`Identificador de recarga inválido: ${clave}`);
         }
-      );
 
-      const texto = await respuesta.text();
-      let data = {};
+        const tipo = prefijo === "P" ? "profesor" : "alumno";
 
-      try {
-        data = texto ? JSON.parse(texto) : {};
-      } catch (_) {
-        data = { message: texto };
-      }
-
-      if (!respuesta.ok) {
-        throw new Error(
-          data.message ||
-          data.error ||
-          `No se pudo anular la recarga (HTTP ${respuesta.status}).`
+        const respuesta = await fetch(
+          `${API_URL}/api/recargas/eliminar/${tipo}/${id}?institucion_id=${Number(institucionId)}`,
+          {
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
         );
+
+        const texto = await respuesta.text();
+        let data = {};
+
+        try {
+          data = texto ? JSON.parse(texto) : {};
+        } catch (_) {
+          data = { message: texto };
+        }
+
+        if (!respuesta.ok) {
+          throw new Error(
+            data.message ||
+            data.error ||
+            `No se pudo eliminar ${clave} (HTTP ${respuesta.status}).`
+          );
+        }
       }
 
       setRecargasSeleccionadasBorrar([]);
@@ -12406,13 +12415,10 @@ Disponible: ${formatearMoneda(
         cargarProfesores(),
       ]);
 
-      alert(data.message || "Recarga anulada correctamente.");
+      alert("Recarga eliminada correctamente.");
     } catch (error) {
-      console.error("Error anulando recarga seleccionada:", error);
-      alert(
-        error.message ||
-        "No se pudo anular la recarga seleccionada."
-      );
+      console.error("Error eliminando recarga seleccionada:", error);
+      alert(error.message || "No se pudo eliminar la recarga.");
     } finally {
       setAnulandoRecargas(false);
     }
@@ -21183,20 +21189,20 @@ onClick={guardarEgreso}
                 type="button"
                 style={{
                   ...styles.deleteIconButton,
-                  padding: "10px 14px",
-                  minWidth: 130,
-                  fontSize: 15,
-                  lineHeight: 1.2,
+                  padding: "7px 9px",
+                  minWidth: 46,
+                  fontSize: 16,
+                  lineHeight: 1,
                   fontWeight: 800,
                 }}
                 disabled={anulandoRecargas || recargasSeleccionadasBorrar.length === 0}
                 onClick={() => eliminarRecargasSeleccionadas()}
-                title={`Anular ${recargasSeleccionadasBorrar.length} recarga(s) seleccionada(s)`}
-                aria-label="Anular recargas seleccionadas"
+                title={`Eliminar ${recargasSeleccionadasBorrar.length} recarga(s) seleccionada(s)`}
+                aria-label="Eliminar recargas seleccionadas"
               >
                 {anulandoRecargas
-                  ? "Anulando..."
-                  : `Anular (${recargasSeleccionadasBorrar.length})`}
+                  ? "..."
+                  : `🗑️ ${recargasSeleccionadasBorrar.length}`}
               </button>
             </>
           )}
