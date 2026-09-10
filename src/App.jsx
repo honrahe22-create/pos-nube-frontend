@@ -1019,7 +1019,10 @@ const productosOperacionStock = useMemo(() => {
     .filter(Boolean);
 
   return productos
-    .filter((p) => p?.activo !== false)
+    // En Stock también se muestran productos históricos/inactivos.
+    // El backend /api/inventario/estado ya los devuelve y el reporte histórico
+    // los conserva; no debemos ocultarlos aquí solo por activo=false.
+    // Esto NO reactiva el producto ni lo habilita para Ventas.
     .filter((p) => {
       if (familia === "TODAS") return true;
       return String(p?.categoria || "").trim() === familia;
