@@ -10755,41 +10755,13 @@ if (institucionIdLogin) {
         return;
       }
 
-      if (profesorVentaSeleccionado.credito_habilitado !== true) {
-        alert("El crédito no está habilitado para este profesor. Debe autorizarlo un administrador.");
-        return;
-      }
+      const puedeComprarPorPagar =
+        profesorVentaSeleccionado.registrar_compras_por_pagar === true ||
+        profesorVentaSeleccionado.compras_por_pagar_habilitadas === true;
 
-      const saldoFavorProfesor = Number(
-        profesorVentaSeleccionado.saldo || 0
-      );
-
-      if (false && saldoFavorProfesor > 0.0001) {
+      if (!puedeComprarPorPagar) {
         alert(
-          `El crédito del profesor está bloqueado mientras exista saldo a favor.\nSaldo disponible: ${formatearMoneda(
-            saldoFavorProfesor
-          )}`
-        );
-        return;
-      }
-
-      const limiteProfesor = Number(
-        profesorVentaSeleccionado.limite_credito || 0
-      );
-      const utilizadoProfesor = Number(
-        profesorVentaSeleccionado.credito_utilizado || 0
-      );
-      const disponible = Math.max(
-        0,
-        limiteProfesor - utilizadoProfesor
-      );
-
-      if (totalVentaCalculado > disponible) {
-        alert(
-          `Crédito insuficiente.
-Disponible: ${formatearMoneda(
-            disponible
-          )}`
+          "Este profesor tiene Registrar compras por pagar en NO. Cambia a SÍ desde Profesores para permitir el consumo a cuenta."
         );
         return;
       }
@@ -17714,65 +17686,119 @@ onClick={guardarEgreso}
                 >
                   {profesorDetalle.activo !== false ? "Activo" : "Inactivo"}
                 </span>
-                {["ADMIN","SUPER_ADMIN"].includes(rolActual) && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        const token = localStorage.getItem("token");
-                        const institucionId = obtenerInstitucionActivaId();
-                        const actual =
-                          profesorDetalle.registrar_compras_por_pagar === true ||
-                          profesorDetalle.compras_por_pagar_habilitadas === true;
-                        const res = await fetch(
-                          `${API_URL}/api/profesores/${profesorDetalle.id}/compras-por-pagar`,
-                          {
-                            method: "PATCH",
-                            headers: {
-                              "Content-Type": "application/json",
-                              Authorization: `Bearer ${token}`,
-                            },
-                            body: JSON.stringify({
-                              institucion_id: Number(institucionId),
-                              habilitado: !actual,
-                            }),
-                          }
+                {["ADMIN","SUPER_ADMIN"].includes(rolActual) && (() => {
+                  const comprasPorPagarActivas =
+                    profesorDetalle.registrar_compras_por_pagar === true ||
+                    profesorDetalle.compras_por_pagar_habilitadas === true;
+
+                  const actualizarComprasPorPagar = async (habilitado) => {
+                    try {
+                      const token = localStorage.getItem("token");
+                      const institucionId = obtenerInstitucionActivaId();
+
+                      const res = await fetch(
+                        `${API_URL}/api/profesores/${profesorDetalle.id}/compras-por-pagar`,
+                        {
+                          method: "PATCH",
+                          headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${token}`,
+                          },
+                          body: JSON.stringify({
+                            institucion_id: Number(institucionId),
+                            habilitado: habilitado === true,
+                          }),
+                        }
+                      );
+
+                      const data = await res.json();
+
+                      if (!res.ok) {
+                        throw new Error(
+                          data.message ||
+                          "No se pudo actualizar Registrar compras por pagar"
                         );
-                        const data = await res.json();
-                        if (!res.ok) throw new Error(data.message || "No se pudo actualizar");
-                        setProfesorDetalle(data.profesor);
-                        setProfesores((prev) =>
-                          prev.map((p) =>
-                            Number(p.id) === Number(data.profesor.id) ? data.profesor : p
-                          )
-                        );
-                        alert(data.message);
-                      } catch (error) {
-                        alert(error.message || "No se pudo actualizar compras por pagar");
                       }
-                    }}
-                    style={{
-                      border: "1px solid #ffffff",
-                      background:
-                        profesorDetalle.registrar_compras_por_pagar === true ||
-                        profesorDetalle.compras_por_pagar_habilitadas === true
-                          ? "#16a34a"
-                          : "#64748b",
-                      color: "#ffffff",
-                      padding: "8px 14px",
-                      borderRadius: 14,
-                      fontWeight: 800,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Registrar compras por pagar: {
-                      profesorDetalle.registrar_compras_por_pagar === true ||
-                      profesorDetalle.compras_por_pagar_habilitadas === true
-                        ? "SÍ"
-                        : "NO"
+
+                      setProfesorDetalle(data.profesor);
+                      setProfesores((prev) =>
+                        prev.map((p) =>
+                          Number(p.id) === Number(data.profesor.id)
+                            ? data.profesor
+                            : p
+                        )
+                      );
+                    } catch (error) {
+                      alert(
+                        error.message ||
+                        "No se pudo actualizar Registrar compras por pagar"
+                      );
                     }
-                  </button>
-                )}
+                  };
+
+                  return (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontWeight: 800,
+                          color: "#ffffff",
+                          marginLeft: 2,
+                        }}
+                      >
+                        Registrar compras por pagar:
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => actualizarComprasPorPagar(true)}
+                        style={{
+                          border: "2px solid #ffffff",
+                          background: comprasPorPagarActivas
+                            ? "#16a34a"
+                            : "#ffffff",
+                          color: comprasPorPagarActivas
+                            ? "#ffffff"
+                            : "#166534",
+                          padding: "7px 13px",
+                          borderRadius: 12,
+                          fontWeight: 900,
+                          cursor: "pointer",
+                        }}
+                        title="Permitir compras por pagar"
+                      >
+                        SÍ
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => actualizarComprasPorPagar(false)}
+                        style={{
+                          border: "2px solid #ffffff",
+                          background: !comprasPorPagarActivas
+                            ? "#dc2626"
+                            : "#ffffff",
+                          color: !comprasPorPagarActivas
+                            ? "#ffffff"
+                            : "#991b1b",
+                          padding: "7px 13px",
+                          borderRadius: 12,
+                          fontWeight: 900,
+                          cursor: "pointer",
+                        }}
+                        title="Bloquear compras por pagar"
+                      >
+                        NO
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -21660,8 +21686,8 @@ onClick={guardarEgreso}
                       alumno_id: "",
                       profesor_id: String(p.id),
                       metodo_pago:
-                        p.credito_habilitado === true &&
-                        Number(p.saldo || 0) <= 0.0001
+                        p.registrar_compras_por_pagar === true ||
+                        p.compras_por_pagar_habilitadas === true
                           ? "CREDITO_PROFESOR"
                           : "EFECTIVO",
                     }));
@@ -21688,7 +21714,7 @@ onClick={guardarEgreso}
                     }}
                   >
                     Profesor · {p.cedula || p.codigo || "Sin código"} ·
-                    Crédito {formatearMoneda(p.saldo || 0)}
+                    Saldo a favor {formatearMoneda(p.saldo || 0)} · CxP {formatearMoneda(p.cuentas_por_pagar ?? p.credito_utilizado ?? 0)}
                   </div>
                 </button>
               ))}
@@ -22452,17 +22478,16 @@ onClick={guardarEgreso}
                   <option
                     value="CREDITO_PROFESOR"
                     disabled={
-                      profesorVentaSeleccionado.credito_habilitado !== true ||
-                      false
+                      !(
+                        profesorVentaSeleccionado.registrar_compras_por_pagar === true ||
+                        profesorVentaSeleccionado.compras_por_pagar_habilitadas === true
+                      )
                     }
                   >
-                    {false && Number(profesorVentaSeleccionado.saldo || 0) > 0.0001
-                      ? `Crédito del profesor (saldo ${formatearMoneda(
-                          profesorVentaSeleccionado.saldo || 0
-                        )})`
-                      : profesorVentaSeleccionado.credito_habilitado === true
-                      ? "Crédito del profesor"
-                      : "Crédito del profesor (inhabilitado)"}
+                    {profesorVentaSeleccionado.registrar_compras_por_pagar === true ||
+                    profesorVentaSeleccionado.compras_por_pagar_habilitadas === true
+                      ? "Compra por pagar del profesor"
+                      : "Compra por pagar del profesor (NO habilitada)"}
                   </option>
                 )}
               </select>
@@ -22563,17 +22588,11 @@ onClick={guardarEgreso}
                       fontWeight: 800,
                     }}
                   >
-                    Compras por pagar del profesor:{" "}
+                    Cuentas por pagar actuales:{" "}
                     {formatearMoneda(
-                      Math.max(
-                        0,
-                        Number(
-                          profesorVentaSeleccionado.limite_credito || 0
-                        ) -
-                          Number(
-                            profesorVentaSeleccionado.credito_utilizado || 0
-                          )
-                      )
+                      profesorVentaSeleccionado.cuentas_por_pagar ??
+                      profesorVentaSeleccionado.credito_utilizado ??
+                      0
                     )}
                   </div>
                 )}
