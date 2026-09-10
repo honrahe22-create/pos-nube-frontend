@@ -39,6 +39,9 @@ export default function PortalUsuarioModulo({
 
   const [mostrarRecarga, setMostrarRecarga] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [limiteConsumoDiario, setLimiteConsumoDiario] = useState("");
+  const [guardandoLimite, setGuardandoLimite] = useState(false);
+  const [mensajeLimite, setMensajeLimite] = useState("");
   const [recarga, setRecarga] = useState({
     monto: "",
     fecha_transferencia: "",
@@ -66,7 +69,39 @@ export default function PortalUsuarioModulo({
       setDatos(data);
 
       if (data.tipo_portal === "PADRE" && data.alumno?.id) {
-        setAlumnoSeleccionadoId(String(data.alumno.id));
+        const alumnoIdActual = String(data.alumno.id);
+        setAlumnoSeleccionadoId(alumnoIdActual);
+
+        try {
+          const limiteRes = await fetch(
+            `${API_URL}/api/padres/limite-consumo/${encodeURIComponent(
+              alumnoIdActual
+            )}`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            }
+          );
+
+          const limiteData = await limiteRes.json();
+
+          if (limiteRes.ok) {
+            setLimiteConsumoDiario(
+              limiteData.limite_consumo_diario === null ||
+                limiteData.limite_consumo_diario === undefined
+                ? ""
+                : String(limiteData.limite_consumo_diario)
+            );
+            setMensajeLimite("");
+          } else {
+            setLimiteConsumoDiario("");
+            setMensajeLimite(
+              limiteData.message || "No se pudo consultar el límite diario."
+            );
+          }
+        } catch (_error) {
+          setLimiteConsumoDiario("");
+          setMensajeLimite("No se pudo consultar el límite diario.");
+        }
       }
     } catch (error) {
       setMensaje(error.message || "No se pudo cargar la información.");
@@ -290,6 +325,61 @@ export default function PortalUsuarioModulo({
   const cambiarHijo = async (id) => {
     setAlumnoSeleccionadoId(id);
     await cargar(id);
+  };
+
+  const guardarLimiteConsumo = async (e) => {
+    e.preventDefault();
+
+    if (datos?.tipo_portal !== "PADRE" || !alumnoSeleccionadoId) return;
+
+    const texto = String(limiteConsumoDiario ?? "").trim();
+    const valor = texto === "" ? null : Number(texto);
+
+    if (valor !== null && (!Number.isFinite(valor) || valor < 0)) {
+      setMensajeLimite("Ingresa un límite válido igual o mayor a $0.00.");
+      return;
+    }
+
+    try {
+      setGuardandoLimite(true);
+      setMensajeLimite("");
+
+      const res = await fetch(
+        `${API_URL}/api/padres/limite-consumo/${encodeURIComponent(
+          alumnoSeleccionadoId
+        )}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            limite_consumo_diario: valor,
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "No se pudo guardar el límite diario.");
+      }
+
+      setLimiteConsumoDiario(
+        data.limite_consumo_diario === null ||
+          data.limite_consumo_diario === undefined
+          ? ""
+          : String(data.limite_consumo_diario)
+      );
+      setMensajeLimite(data.message || "Límite diario actualizado.");
+    } catch (error) {
+      setMensajeLimite(
+        error.message || "No se pudo guardar el límite diario."
+      );
+    } finally {
+      setGuardandoLimite(false);
+    }
   };
 
   const enviarSolicitud = async (e) => {
@@ -681,6 +771,46 @@ export default function PortalUsuarioModulo({
               />
             </section>
 
+            {esPadre && (
+              <section style={s.limitCard}>
+                <div>
+                  <h3 style={{ margin: 0 }}>Límite diario de consumo</h3>
+                  <p style={{ ...s.muted, margin: "6px 0 0" }}>
+                    Define cuánto puede consumir este estudiante por día.
+                    Déjalo vacío para no aplicar límite. Si colocas $0.00,
+                    no podrá realizar consumos.
+                  </p>
+                </div>
+
+                <form onSubmit={guardarLimiteConsumo} style={s.limitForm}>
+                  <label style={s.field}>
+                    Máximo por día
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Sin límite"
+                      style={s.input}
+                      value={limiteConsumoDiario}
+                      onChange={(e) => setLimiteConsumoDiario(e.target.value)}
+                    />
+                  </label>
+
+                  <button
+                    type="submit"
+                    style={s.primary}
+                    disabled={guardandoLimite}
+                  >
+                    {guardandoLimite ? "Guardando..." : "Guardar límite"}
+                  </button>
+                </form>
+
+                {mensajeLimite && (
+                  <div style={s.limitMessage}>{mensajeLimite}</div>
+                )}
+              </section>
+            )}
+
             <section style={s.card}>
               <div style={s.toolbar}>
                 <div>
@@ -1007,6 +1137,28 @@ const s = {
   },
   balanceValue: { fontSize: 28 },
   summaryValue: { fontSize: 24, color: "#244493" },
+  limitCard: {
+    background: "#ffffff",
+    border: "1px solid #bfdbfe",
+    borderRadius: 16,
+    padding: 18,
+    margin: "16px 0",
+    display: "grid",
+    gap: 14,
+  },
+  limitForm: {
+    display: "grid",
+    gridTemplateColumns: "minmax(180px, 260px) auto",
+    gap: 12,
+    alignItems: "end",
+  },
+  limitMessage: {
+    padding: 10,
+    borderRadius: 9,
+    background: "#eff6ff",
+    color: "#1e40af",
+    fontWeight: 700,
+  },
   card: {
     background: "#fff",
     borderRadius: 18,
