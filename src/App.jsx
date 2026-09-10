@@ -809,6 +809,7 @@ const [cuentasBancarias, setCuentasBancarias] = useState([]);
 // a ADMIN / SUPER_ADMIN; el backend vuelve a validar el rol.
 const [ventasSeleccionadasBorrar, setVentasSeleccionadasBorrar] = useState([]);
 const [recargasSeleccionadasBorrar, setRecargasSeleccionadasBorrar] = useState([]);
+const [anulandoRecargas, setAnulandoRecargas] = useState(false);
 const [cierresSeleccionadosBorrar, setCierresSeleccionadosBorrar] = useState([]);
 const [jornadasSeleccionadasBorrar, setJornadasSeleccionadasBorrar] = useState([]);
 const [productosMenuSeleccionadosBorrar, setProductosMenuSeleccionadosBorrar] = useState([]);
@@ -12337,27 +12338,83 @@ Disponible: ${formatearMoneda(
   };
 
   const eliminarRecargasSeleccionadas = async () => {
-    if (!recargasSeleccionadasBorrar.length) return alert("Selecciona al menos una recarga.");
-    if (!window.confirm(`¿Eliminar ${recargasSeleccionadasBorrar.length} recarga(s) seleccionada(s)? El sistema revertirá saldo y crédito automáticamente.`)) return;
+    const ids = [...new Set(
+      (recargasSeleccionadasBorrar || [])
+        .map((id) => String(id || "").trim())
+        .filter(Boolean)
+    )];
+
+    if (!ids.length) {
+      alert("Selecciona al menos una recarga.");
+      return;
+    }
+
+    const confirmado = window.confirm(
+      `¿Anular ${ids.length} recarga(s) seleccionada(s)?\n\n` +
+      "El sistema revertirá automáticamente el saldo a favor y/o la cuenta por pagar correspondiente."
+    );
+
+    if (!confirmado) return;
 
     try {
-      setEliminandoPruebas(true);
+      setAnulandoRecargas(true);
+
       const token = localStorage.getItem("token");
       const institucionId = obtenerInstitucionActivaId();
-      const respuesta = await fetch(`${API_URL}/api/recargas/eliminar-seleccionadas`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ institucion_id: Number(institucionId), ids: recargasSeleccionadasBorrar }),
-      });
-      const data = await respuesta.json();
-      if (!respuesta.ok) throw new Error(data.message || "No se pudieron eliminar las recargas seleccionadas");
+
+      if (!token || !institucionId) {
+        throw new Error("Sesión o institución no válida.");
+      }
+
+      const respuesta = await fetch(
+        `${API_URL}/api/recargas/eliminar-seleccionadas`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            institucion_id: Number(institucionId),
+            ids,
+          }),
+        }
+      );
+
+      const texto = await respuesta.text();
+      let data = {};
+
+      try {
+        data = texto ? JSON.parse(texto) : {};
+      } catch (_) {
+        data = { message: texto };
+      }
+
+      if (!respuesta.ok) {
+        throw new Error(
+          data.message ||
+          data.error ||
+          `No se pudo anular la recarga (HTTP ${respuesta.status}).`
+        );
+      }
+
       setRecargasSeleccionadasBorrar([]);
-      await Promise.all([cargarRecargas(), cargarAlumnos(), cargarProfesores()]);
-      alert(data.message || "Recargas eliminadas correctamente.");
+
+      await Promise.all([
+        cargarRecargas(),
+        cargarAlumnos(),
+        cargarProfesores(),
+      ]);
+
+      alert(data.message || "Recarga anulada correctamente.");
     } catch (error) {
-      alert(error.message || "No se pudieron eliminar las recargas seleccionadas.");
+      console.error("Error anulando recarga seleccionada:", error);
+      alert(
+        error.message ||
+        "No se pudo anular la recarga seleccionada."
+      );
     } finally {
-      setEliminandoPruebas(false);
+      setAnulandoRecargas(false);
     }
   };
 
@@ -17426,6 +17483,7 @@ onClick={guardarEgreso}
                     <th style={styles.th}>Cédula/Ruc</th>
                     <th style={styles.th}>Email</th>
                     <th style={styles.th}>Código</th>
+                    <th style={styles.th}>Saldo a favor</th>
                     <th style={styles.th}>Cuentas por pagar</th>
                     <th style={styles.th}>Acciones</th>
                   </tr>
@@ -17443,6 +17501,9 @@ onClick={guardarEgreso}
                           <td style={styles.td}>{p.cedula || "-"}</td>
                           <td style={styles.td}>{p.email || "-"}</td>
                           <td style={styles.td}>{p.codigo || "-"}</td>
+                          <td style={styles.td}>
+                            {formatearMoneda(p.saldo_a_favor ?? p.saldo ?? 0)}
+                          </td>
                           <td style={styles.td}>
                             {formatearMoneda(p.cuentas_por_pagar ?? p.credito_utilizado ?? 0)}
                           </td>
@@ -21120,13 +21181,22 @@ onClick={guardarEgreso}
               </button>
               <button
                 type="button"
-                style={{...styles.deleteIconButton,padding:"7px 9px",minWidth:40,fontSize:16,lineHeight:1}}
-                disabled={eliminandoPruebas || recargasSeleccionadasBorrar.length === 0}
-                onClick={eliminarRecargasSeleccionadas}
-                title={`Eliminar ${recargasSeleccionadasBorrar.length} recarga(s) seleccionada(s)`}
-                aria-label="Eliminar recargas seleccionadas"
+                style={{
+                  ...styles.deleteIconButton,
+                  padding: "10px 14px",
+                  minWidth: 130,
+                  fontSize: 15,
+                  lineHeight: 1.2,
+                  fontWeight: 800,
+                }}
+                disabled={anulandoRecargas || recargasSeleccionadasBorrar.length === 0}
+                onClick={() => eliminarRecargasSeleccionadas()}
+                title={`Anular ${recargasSeleccionadasBorrar.length} recarga(s) seleccionada(s)`}
+                aria-label="Anular recargas seleccionadas"
               >
-                🗑️ {recargasSeleccionadasBorrar.length}
+                {anulandoRecargas
+                  ? "Anulando..."
+                  : `Anular (${recargasSeleccionadasBorrar.length})`}
               </button>
             </>
           )}
