@@ -18061,8 +18061,20 @@ onClick={guardarEgreso}
                                 {profesorDetalle.apellidos || "-"}
                               </td>
                               <td style={styles.td}>
-                                {Array.isArray(venta.items)
-                                  ? `${venta.items.length} producto(s)`
+                                {Array.isArray(venta.items) && venta.items.length > 0
+                                  ? venta.items
+                                      .map((item) => {
+                                        const nombre =
+                                          item.producto_nombre ||
+                                          item.nombre ||
+                                          item.descripcion ||
+                                          (item.producto_id
+                                            ? `Producto #${item.producto_id}`
+                                            : "Producto");
+                                        const cantidad = Number(item.cantidad || 1);
+                                        return `${cantidad} x ${nombre}`;
+                                      })
+                                      .join(", ")
                                   : "Ver orden"}
                               </td>
                               <td style={styles.td}>
