@@ -983,7 +983,7 @@ const [reporteStockFiltros,setReporteStockFiltros]=useState({
   fecha_fin:"",
   producto_id:"",
   familia:"",
-  tipo:"CARGA",
+  tipo:"TODOS",
   ubicacion:"",
 });
 
@@ -2233,12 +2233,47 @@ const limpiarReporteStock=async()=>{
     fecha_fin:"",
     producto_id:"",
     familia:"",
-    tipo:"CARGA",
+    tipo:"TODOS",
     ubicacion:"",
   };
 
   setReporteStockFiltros(filtros);
   await cargarReporteStock(filtros);
+};
+
+const obtenerMovimientoReporteStock=(mov)=>{
+  const tipo=String(mov?.tipo||"").trim().toUpperCase();
+  const concepto=String(mov?.concepto||"").trim().toUpperCase();
+  const referencia=String(mov?.referencia||"").trim().toUpperCase();
+  const motivo=String(mov?.motivo||"").trim().toUpperCase();
+
+  if(
+    concepto==="VENTA"||
+    referencia.startsWith("VENTA-")||
+    motivo.startsWith("VENTA #")
+  )return "VENTA";
+
+  if(["ENTRADA","INGRESO"].includes(tipo))return "INGRESO";
+  if(tipo==="CORTESIA"||concepto==="CORTESIA"||concepto==="EGRESO_CORTESIA")return "CORTESÍA";
+  if(tipo==="BAJA"||concepto==="BAJA"||concepto==="EGRESO_BAJA")return "BAJA";
+  if(tipo==="TRANSFERENCIA_ENTRADA")return "TRANSFERENCIA ENTRADA";
+  if(tipo==="TRANSFERENCIA_SALIDA")return "TRANSFERENCIA SALIDA";
+  if(tipo==="AJUSTE")return "AJUSTE";
+  if(tipo==="SALIDA")return "SALIDA";
+
+  return String(mov?.tipo_visual||mov?.tipo||"MOVIMIENTO").toUpperCase();
+};
+
+const formatearFechaReporteStock=(valor)=>{
+  if(!valor)return "-";
+  const fecha=new Date(valor);
+  if(Number.isNaN(fecha.getTime()))return "-";
+  return new Intl.DateTimeFormat("es-EC",{
+    timeZone:"America/Guayaquil",
+    day:"2-digit",
+    month:"2-digit",
+    year:"2-digit",
+  }).format(fecha);
 };
 
 const exportarReporteStockExcel=()=>{
@@ -2248,39 +2283,24 @@ const exportarReporteStockExcel=()=>{
   }
 
   const datos=reporteStock.map((mov)=>({
-    "Fecha y hora":formatearFechaHora(mov.fecha),
-    "Producto":mov.producto_nombre||"",
-    "Código":mov.producto_codigo||"",
-    "Familia":mov.familia||"Sin familia",
-    "Tipo":mov.tipo_visual||mov.tipo||"",
+    "Fecha":formatearFechaReporteStock(mov.fecha),
+    "Usuario":mov.usuario_nombre||"Sistema",
+    "Producto":mov.producto_nombre||"Producto",
+    "Saldo de inicio":mov.stock_anterior==null?"":Number(mov.stock_anterior),
+    "Movimiento":obtenerMovimientoReporteStock(mov),
     "Cantidad":Number(mov.cantidad||0),
-    "Stock anterior":mov.stock_anterior==null?"":Number(mov.stock_anterior),
-    "Stock nuevo":mov.stock_nuevo==null?"":Number(mov.stock_nuevo),
-    "Ubicación":mov.ubicacion||"PRINCIPAL",
-    "Proveedor":mov.proveedor_nombre||"",
-    "No. factura":mov.numero_factura||"",
-    "Referencia":mov.referencia||"",
-    "Usuario":mov.usuario_nombre||"",
-    "Observación":mov.motivo||"",
+    "Saldo final":mov.stock_nuevo==null?"":Number(mov.stock_nuevo),
   }));
 
   const worksheet=XLSX.utils.json_to_sheet(datos);
-
   worksheet["!cols"]=[
-    {wch:22},
+    {wch:12},
     {wch:30},
-    {wch:14},
-    {wch:22},
+    {wch:32},
+    {wch:16},
     {wch:24},
     {wch:12},
-    {wch:15},
-    {wch:15},
-    {wch:20},
-    {wch:28},
-    {wch:18},
-    {wch:24},
-    {wch:28},
-    {wch:40},
+    {wch:16},
   ];
 
   const workbook=XLSX.utils.book_new();
@@ -2322,38 +2342,26 @@ const exportarReporteStockPdf=()=>{
     `Generado: ${fechaReporte}`,
     `Filtros: ${filtrosTexto}`,
     `Total movimientos: ${reporteStock.length}`,
-    "--------------------------------------------------------------------------",
-    "Fecha/hora           Producto              Familia        Tipo        Cant",
-    "--------------------------------------------------------------------------",
+    "------------------------------------------------------------------------------------------------------------",
+    "Fecha      Usuario                  Producto                 Inicio  Movimiento                 Cant  Final",
+    "------------------------------------------------------------------------------------------------------------",
   ];
 
   reporteStock.forEach((mov)=>{
     lineas.push(
       [
-        cortar(formatearFechaHora(mov.fecha),19).padEnd(19," "),
-        cortar(mov.producto_nombre||"Producto",21).padEnd(21," "),
-        cortar(mov.familia||"Sin familia",14).padEnd(14," "),
-        cortar(mov.tipo_visual||mov.tipo||"-",11).padEnd(11," "),
+        cortar(formatearFechaReporteStock(mov.fecha),10).padEnd(10," "),
+        cortar(mov.usuario_nombre||"Sistema",24).padEnd(24," "),
+        cortar(mov.producto_nombre||"Producto",24).padEnd(24," "),
+        String(mov.stock_anterior==null?"-":Number(mov.stock_anterior)).padStart(6," "),
+        cortar(obtenerMovimientoReporteStock(mov),24).padEnd(24," "),
         String(Number(mov.cantidad||0)).padStart(5," "),
+        String(mov.stock_nuevo==null?"-":Number(mov.stock_nuevo)).padStart(6," "),
       ].join(" ")
     );
-
-    lineas.push(
-      `  Stock: ${mov.stock_anterior==null?"-":mov.stock_anterior} -> ${mov.stock_nuevo==null?"-":mov.stock_nuevo} | `+
-      `Ubicacion: ${cortar(mov.ubicacion||"PRINCIPAL",22)} | `+
-      `Usuario: ${cortar(mov.usuario_nombre||"Sistema",22)}`
-    );
-
-    if(mov.proveedor_nombre||mov.numero_factura||mov.motivo){
-      lineas.push(
-        `  Prov: ${cortar(mov.proveedor_nombre||"-",22)} | `+
-        `Factura: ${cortar(mov.numero_factura||"-",16)} | `+
-        `Obs: ${cortar(mov.motivo||"-",35)}`
-      );
-    }
-
-    lineas.push("--------------------------------------------------------------------------");
   });
+
+  lineas.push("------------------------------------------------------------------------------------------------------------");
 
   const pageWidth=612;
   const pageHeight=792;
@@ -19052,7 +19060,8 @@ onClick={guardarEgreso}
               }))}
             >
               <option value="TODOS">Todos</option>
-              <option value="CARGA">Carga / ingreso</option>
+              <option value="CARGA">Ingreso</option>
+              <option value="VENTA">Venta</option>
               <option value="TRANSFERENCIA_ENTRADA">Transferencia entrada</option>
               <option value="TRANSFERENCIA_SALIDA">Transferencia salida</option>
               <option value="BAJA">Baja</option>
@@ -19144,18 +19153,13 @@ onClick={guardarEgreso}
             <table style={styles.table}>
               <thead>
                 <tr>
-                  <th style={styles.th}>Fecha y hora</th>
-                  <th style={styles.th}>Producto</th>
-                  <th style={styles.th}>Familia</th>
-                  <th style={styles.th}>Tipo</th>
-                  <th style={styles.th}>Cantidad</th>
-                  <th style={styles.th}>Stock anterior</th>
-                  <th style={styles.th}>Stock nuevo</th>
-                  <th style={styles.th}>Ubicación</th>
-                  <th style={styles.th}>Proveedor</th>
-                  <th style={styles.th}>Factura</th>
+                  <th style={styles.th}>Fecha</th>
                   <th style={styles.th}>Usuario</th>
-                  <th style={styles.th}>Observación</th>
+                  <th style={styles.th}>Producto</th>
+                  <th style={styles.th}>Saldo de inicio</th>
+                  <th style={styles.th}>Movimiento</th>
+                  <th style={styles.th}>Cantidad</th>
+                  <th style={styles.th}>Saldo final</th>
                 </tr>
               </thead>
 
@@ -19163,34 +19167,15 @@ onClick={guardarEgreso}
                 {reporteStock.map((mov)=>(
                   <tr key={mov.id}>
                     <td style={styles.td}>
-                      {formatearFechaHora(mov.fecha)}
+                      {formatearFechaReporteStock(mov.fecha)}
                     </td>
 
                     <td style={styles.td}>
-                      <strong>
-                        {mov.producto_nombre||"Producto"}
-                      </strong>
-
-                      {mov.producto_codigo?(
-                        <div style={{
-                          fontSize:12,
-                          color:"#64748b",
-                        }}>
-                          {mov.producto_codigo}
-                        </div>
-                      ):null}
+                      {mov.usuario_nombre||"Sistema"}
                     </td>
 
                     <td style={styles.td}>
-                      {mov.familia||"Sin familia"}
-                    </td>
-
-                    <td style={styles.td}>
-                      {mov.tipo_visual||mov.tipo||"-"}
-                    </td>
-
-                    <td style={styles.td}>
-                      {Number(mov.cantidad||0)}
+                      <strong>{mov.producto_nombre||"Producto"}</strong>
                     </td>
 
                     <td style={styles.td}>
@@ -19200,29 +19185,17 @@ onClick={guardarEgreso}
                     </td>
 
                     <td style={styles.td}>
+                      {obtenerMovimientoReporteStock(mov)}
+                    </td>
+
+                    <td style={styles.td}>
+                      {Number(mov.cantidad||0)}
+                    </td>
+
+                    <td style={styles.td}>
                       {mov.stock_nuevo==null
                         ? "-"
                         : Number(mov.stock_nuevo)}
-                    </td>
-
-                    <td style={styles.td}>
-                      {mov.ubicacion||"PRINCIPAL"}
-                    </td>
-
-                    <td style={styles.td}>
-                      {mov.proveedor_nombre||"-"}
-                    </td>
-
-                    <td style={styles.td}>
-                      {mov.numero_factura||"-"}
-                    </td>
-
-                    <td style={styles.td}>
-                      {mov.usuario_nombre||"Sistema"}
-                    </td>
-
-                    <td style={styles.td}>
-                      {mov.motivo||"-"}
                     </td>
                   </tr>
                 ))}
