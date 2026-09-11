@@ -42,6 +42,9 @@ export default function PortalUsuarioModulo({
   const [limiteConsumoDiario, setLimiteConsumoDiario] = useState("");
   const [guardandoLimite, setGuardandoLimite] = useState(false);
   const [mensajeLimite, setMensajeLimite] = useState("");
+  const [observacionPadre, setObservacionPadre] = useState("");
+  const [guardandoObservacion, setGuardandoObservacion] = useState(false);
+  const [mensajeObservacion, setMensajeObservacion] = useState("");
   const [recarga, setRecarga] = useState({
     monto: "",
     fecha_transferencia: "",
@@ -91,15 +94,19 @@ export default function PortalUsuarioModulo({
                 ? ""
                 : String(limiteData.limite_consumo_diario)
             );
+            setObservacionPadre(String(limiteData.observacion_padre || ""));
             setMensajeLimite("");
+            setMensajeObservacion("");
           } else {
             setLimiteConsumoDiario("");
+            setObservacionPadre("");
             setMensajeLimite(
               limiteData.message || "No se pudo consultar el límite diario."
             );
           }
         } catch (_error) {
           setLimiteConsumoDiario("");
+          setObservacionPadre("");
           setMensajeLimite("No se pudo consultar el límite diario.");
         }
       }
@@ -325,6 +332,63 @@ export default function PortalUsuarioModulo({
   const cambiarHijo = async (id) => {
     setAlumnoSeleccionadoId(id);
     await cargar(id);
+  };
+
+  const guardarObservacionPadre = async (e) => {
+    e.preventDefault();
+
+    if (datos?.tipo_portal !== "PADRE" || !alumnoSeleccionadoId) return;
+
+    try {
+      setGuardandoObservacion(true);
+      setMensajeObservacion("");
+
+      const res = await fetch(
+        `${API_URL}/api/padres/limite-consumo/${encodeURIComponent(
+          alumnoSeleccionadoId
+        )}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            observacion_padre: String(observacionPadre || "").trim(),
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "No se pudo guardar la observación.");
+      }
+
+      setObservacionPadre(String(data.observacion_padre || ""));
+      setMensajeObservacion(
+        data.message || "Observación guardada correctamente."
+      );
+
+      // Refresca también los datos del alumno mostrados en el portal.
+      setDatos((prev) =>
+        prev?.alumno
+          ? {
+              ...prev,
+              alumno: {
+                ...prev.alumno,
+                observacion_padre: String(data.observacion_padre || ""),
+              },
+            }
+          : prev
+      );
+    } catch (error) {
+      setMensajeObservacion(
+        error.message || "No se pudo guardar la observación."
+      );
+    } finally {
+      setGuardandoObservacion(false);
+    }
   };
 
   const guardarLimiteConsumo = async (e) => {
@@ -734,14 +798,48 @@ export default function PortalUsuarioModulo({
         ) : (
           <>
             <section style={s.hero}>
-              <div>
-                <div style={s.muted}>Cuenta del estudiante</div>
-                <h2 style={s.studentName}>
-                  {alumno.nombres} {alumno.apellidos}
-                </h2>
-                <div style={s.meta}>
-                  {alumno.curso || "Sin curso"} {alumno.paralelo || ""}
+              <div style={s.studentInfo}>
+                <div>
+                  <div style={s.muted}>Cuenta del estudiante</div>
+                  <h2 style={s.studentName}>
+                    {alumno.nombres} {alumno.apellidos}
+                  </h2>
+                  <div style={s.meta}>
+                    {alumno.curso || "Sin curso"} {alumno.paralelo || ""}
+                  </div>
                 </div>
+
+                {esPadre && (
+                  <form
+                    onSubmit={guardarObservacionPadre}
+                    style={s.observationBox}
+                  >
+                    <label style={s.field}>
+                      Observaciones importantes
+                      <textarea
+                        value={observacionPadre}
+                        onChange={(e) => setObservacionPadre(e.target.value)}
+                        placeholder="Ej.: Alérgico a los lácteos, no consumir maní..."
+                        maxLength={1000}
+                        style={s.observationInput}
+                      />
+                    </label>
+
+                    <button
+                      type="submit"
+                      style={s.primary}
+                      disabled={guardandoObservacion}
+                    >
+                      {guardandoObservacion
+                        ? "Guardando..."
+                        : "Guardar observación"}
+                    </button>
+
+                    {mensajeObservacion && (
+                      <div style={s.limitMessage}>{mensajeObservacion}</div>
+                    )}
+                  </form>
+                )}
               </div>
 
               <div style={s.codeBox}>
@@ -1096,8 +1194,32 @@ const s = {
     flexWrap: "wrap",
     boxShadow: "0 7px 22px rgba(15,23,42,.06)",
   },
+  studentInfo: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 22,
+    flexWrap: "wrap",
+    flex: "1 1 620px",
+  },
   studentName: { margin: "5px 0", fontSize: 27 },
   meta: { color: "#64748b" },
+  observationBox: {
+    flex: "1 1 340px",
+    display: "grid",
+    gap: 8,
+    minWidth: 280,
+  },
+  observationInput: {
+    width: "100%",
+    minHeight: 76,
+    resize: "vertical",
+    border: "1px solid #cbd5e1",
+    borderRadius: 10,
+    padding: 11,
+    fontFamily: "inherit",
+    fontSize: 14,
+    boxSizing: "border-box",
+  },
   codeBox: {
     minWidth: 260,
     border: "1px solid #dbe4f0",

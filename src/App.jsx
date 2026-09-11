@@ -22532,6 +22532,40 @@ onClick={guardarEgreso}
                 style={styles.input}
               />
 
+              {alumnoVentaSeleccionado &&
+                String(alumnoVentaSeleccionado.observacion_padre || "").trim() && (
+                  <div
+                    role="alert"
+                    style={{
+                      marginTop: 12,
+                      border: "2px solid #dc2626",
+                      borderRadius: 10,
+                      background: "#fef2f2",
+                      color: "#991b1b",
+                      padding: 12,
+                      fontWeight: 800,
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    <div style={{ fontSize: 13, marginBottom: 4 }}>
+                      ADVERTENCIA DEL REPRESENTANTE
+                    </div>
+                    <div style={{ fontSize: 16 }}>
+                      {String(alumnoVentaSeleccionado.observacion_padre).trim()}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 6,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: "#7f1d1d",
+                      }}
+                    >
+                      Información preventiva. Esta advertencia NO bloquea la venta automáticamente.
+                    </div>
+                  </div>
+                )}
+
               {ventaForm.metodo_pago === "RECARGA" &&
                 alumnoVentaSeleccionado && (
                   <div
