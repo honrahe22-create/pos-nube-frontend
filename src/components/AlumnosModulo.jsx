@@ -1575,6 +1575,53 @@ export default function AlumnosModulo({
             </div>
           </div>
 
+          {String(alumnoDetalle?.observacion_padre || "").trim() && (
+            <div
+              style={{
+                marginTop: 16,
+                marginBottom: 18,
+                border: "2px solid #dc2626",
+                background: "#fef2f2",
+                color: "#991b1b",
+                borderRadius: 14,
+                padding: "16px 18px",
+                boxShadow: "0 6px 18px rgba(127,29,29,.08)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 900,
+                  letterSpacing: 0.5,
+                  marginBottom: 6,
+                }}
+              >
+                ADVERTENCIA DEL REPRESENTANTE
+              </div>
+              <div
+                style={{
+                  fontSize: 18,
+                  fontWeight: 800,
+                  lineHeight: 1.45,
+                  whiteSpace: "pre-wrap",
+                  overflowWrap: "anywhere",
+                }}
+              >
+                {String(alumnoDetalle.observacion_padre).trim()}
+              </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: "#7f1d1d",
+                }}
+              >
+                Información preventiva. No bloquea operaciones automáticamente.
+              </div>
+            </div>
+          )}
+
           {codigoAccesoGenerado && (
             <div style={paymon.familyAccessPanel}>
               <div style={paymon.familyAccessInfo}>
