@@ -142,6 +142,23 @@ const INSTITUCIONES = [
   { id: 4, nombre: "Club Los Cipreses" },
 ];
 
+const obtenerLocalEgresoPorInstitucion = (institucionId) => {
+  const id = Number(institucionId || 0);
+
+  if (id === 1) return "MARISTA";
+  if (id === 2) return "PENSIONADO";
+  if (id === 3) return "FEUE";
+  if (id === 4) return "CIPRES";
+
+  const institucion = INSTITUCIONES.find(
+    (item) => Number(item.id) === id
+  );
+
+  return String(institucion?.nombre || "INSTITUCION")
+    .trim()
+    .toUpperCase();
+};
+
 const normalizarInstitucionId = (valor) => {
   if (valor === null || valor === undefined || valor === "") return null;
   const numero = Number(valor);
@@ -1308,9 +1325,9 @@ const [cierreForm, setCierreForm] = useState({
 });
 
 const [egresoForm, setEgresoForm] = useState({
-  // "negocio" se conserva internamente por compatibilidad con backend,
-  // pero en pantalla se maneja como LOCAL.
-  negocio: "PENSIONADO",
+  // "negocio" se conserva internamente por compatibilidad con backend/reportes.
+  // El valor se fija automáticamente desde la institución activa.
+  negocio: "",
   fecha: "",
   nombre_egreso: "",
   proveedor_id: "",
@@ -11492,6 +11509,7 @@ Disponible: ${formatearMoneda(
         },
         body: JSON.stringify({
           ...egresoForm,
+          negocio: obtenerLocalEgresoPorInstitucion(institucionId),
           institucion_id: Number(institucionId),
           total,
           punto_id: puntoEgresoId,
@@ -11504,7 +11522,8 @@ Disponible: ${formatearMoneda(
       if (!respuesta.ok) throw new Error(data.message || data.error || "No se pudo guardar el egreso");
 
       setEgresoForm({
-        negocio: "PENSIONADO", fecha: "", nombre_egreso: "",
+        negocio: obtenerLocalEgresoPorInstitucion(institucionId),
+        fecha: "", nombre_egreso: "",
         proveedor_id: "", proveedor_nombre: "", total: "",
         descripcion: "", estado: "ACTIVO", numero_factura: "",
         tipo_documento: "FACTURA", tipo_egreso: "Efectivo",
@@ -15536,6 +15555,9 @@ if (!usuario) {
             if (abrir && !editandoEgresoId) {
               setEgresoForm((actual) => ({
                 ...actual,
+                negocio: obtenerLocalEgresoPorInstitucion(
+                  obtenerInstitucionActivaId()
+                ),
                 fecha: actual.fecha || obtenerFechaEcuadorISO(),
                 tipo_documento: actual.tipo_documento || "FACTURA",
                 tipo_egreso: "Efectivo",
@@ -15555,23 +15577,20 @@ if (!usuario) {
         <div style={styles.filtersGrid}>
           <div style={styles.filterField}>
             <label style={styles.label}>Local</label>
-            <select
-              value={egresoForm.negocio}
-              onChange={(e) =>
-                setEgresoForm({
-                  ...egresoForm,
-                  negocio: e.target.value,
-                })
-              }
-              style={styles.input}
-            >
-              <option value="PENSIONADO">PENSIONADO</option>
-              <option value="FEUE">FEUE</option>
-              <option value="MARISTA">MARISTA</option>
-              <option value="CIPRES">CIPRES</option>
-              <option value="EVENTO">EVENTO</option>
-              <option value="OTROS">OTROS</option>
-            </select>
+            <input
+              type="text"
+              value={obtenerLocalEgresoPorInstitucion(
+                obtenerInstitucionActivaId()
+              )}
+              readOnly
+              style={{
+                ...styles.input,
+                background: "#f8fafc",
+                cursor: "not-allowed",
+                fontWeight: 700,
+              }}
+              title="El local se define automáticamente al ingresar al sistema."
+            />
           </div>
 
           <div style={styles.filterField}>
@@ -15925,7 +15944,9 @@ onClick={guardarEgreso}
                         style={styles.editIconButton}
                         onClick={() => {
                           setEgresoForm({
-                            negocio: egreso.negocio || "",
+                            negocio: obtenerLocalEgresoPorInstitucion(
+                              obtenerInstitucionActivaId()
+                            ),
                             usuario: egreso.usuario || "",
                             fecha: normalizarFechaISO(egreso.fecha) || "",
                             nombre_egreso:
