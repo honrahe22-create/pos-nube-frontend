@@ -17930,7 +17930,7 @@ onClick={guardarEgreso}
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(260px, 1fr) minmax(260px, 1fr) minmax(220px, 0.7fr)",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
               gap: 22,
               alignItems: "stretch",
             }}
@@ -17992,6 +17992,50 @@ onClick={guardarEgreso}
               >
                 Recargar / Registrar pago
               </button>
+            </div>
+
+            <div
+              style={{
+                padding: 22,
+                borderRadius: 14,
+                background: "#ffffff",
+                boxShadow: "0 5px 18px rgba(15, 23, 42, 0.10)",
+                textAlign: "center",
+              }}
+            >
+              <div
+                style={{
+                  background: "#e8f1ff",
+                  borderRadius: 12,
+                  padding: 18,
+                  fontWeight: 800,
+                }}
+              >
+                <div style={{ fontSize: 17 }}>Saldo a favor:</div>
+                <div style={{ fontSize: 34, marginTop: 4, color: "#1d4ed8" }}>
+                  {formatearMoneda(
+                    profesorDetalle.saldo_a_favor ??
+                      profesorDetalle.saldo ??
+                      0
+                  )}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  marginTop: 18,
+                  minHeight: 44,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#64748b",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  lineHeight: 1.35,
+                }}
+              >
+                Disponible después de cubrir cuentas por pagar.
+              </div>
             </div>
           </div>
 
