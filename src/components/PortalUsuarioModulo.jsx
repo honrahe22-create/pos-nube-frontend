@@ -25,6 +25,10 @@ export default function PortalUsuarioModulo({
   const [cuentaPasswordNueva, setCuentaPasswordNueva] = useState("");
   const [cuentaPasswordConfirmar, setCuentaPasswordConfirmar] = useState("");
   const [mensajeCuenta, setMensajeCuenta] = useState("");
+  const [esMovil, setEsMovil] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return Number(window.innerWidth || 0) <= 760;
+  });
 
   const [mostrarVincularHijo, setMostrarVincularHijo] = useState(false);
   const [buscandoHijo, setBuscandoHijo] = useState(false);
@@ -120,6 +124,23 @@ export default function PortalUsuarioModulo({
 
   useEffect(() => {
     cargar();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const actualizarMovil = () => {
+      setEsMovil(Number(window.innerWidth || 0) <= 760);
+    };
+
+    actualizarMovil();
+    window.addEventListener("resize", actualizarMovil);
+    window.addEventListener("orientationchange", actualizarMovil);
+
+    return () => {
+      window.removeEventListener("resize", actualizarMovil);
+      window.removeEventListener("orientationchange", actualizarMovil);
+    };
   }, []);
 
   const movimientos = useMemo(() => {
@@ -509,7 +530,18 @@ export default function PortalUsuarioModulo({
 
   return (
     <div style={s.page}>
-      <header style={s.header}>
+      <header
+        style={{
+          ...s.header,
+          ...(esMovil
+            ? {
+                padding:
+                  "calc(12px + env(safe-area-inset-top)) 12px 12px",
+                alignItems: "flex-start",
+              }
+            : {}),
+        }}
+      >
         <div>
           <div style={s.brand}>POS NUBE</div>
           <div style={s.subBrand}>
@@ -517,7 +549,20 @@ export default function PortalUsuarioModulo({
           </div>
         </div>
 
-        <div style={s.headerRight}>
+        <div
+          style={{
+            ...s.headerRight,
+            ...(esMovil
+              ? {
+                  width: "100%",
+                  justifyContent: "space-between",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  textAlign: "left",
+                }
+              : {}),
+          }}
+        >
           <div>
             <strong>{usuario?.nombre || usuario?.correo}</strong>
             <div style={s.role}>{datos?.tipo_portal}</div>
@@ -642,7 +687,19 @@ export default function PortalUsuarioModulo({
         </section>
       )}
 
-<main style={s.main}>
+<main
+  style={{
+    ...s.main,
+    ...(esMovil
+      ? {
+          width: "100%",
+          maxWidth: "100%",
+          padding: "18px 12px calc(36px + env(safe-area-inset-bottom))",
+          boxSizing: "border-box",
+        }
+      : {}),
+  }}
+>
         <div style={s.welcome}>
           <div>
             <div style={s.muted}>Institución</div>
@@ -797,8 +854,30 @@ export default function PortalUsuarioModulo({
           </div>
         ) : (
           <>
-            <section style={s.hero}>
-              <div style={s.studentInfo}>
+            <section
+              style={{
+                ...s.hero,
+                ...(esMovil
+                  ? {
+                      padding: 14,
+                      alignItems: "stretch",
+                    }
+                  : {}),
+              }}
+            >
+              <div
+                style={{
+                  ...s.studentInfo,
+                  ...(esMovil
+                    ? {
+                        flex: "1 1 100%",
+                        minWidth: 0,
+                        width: "100%",
+                        gap: 14,
+                      }
+                    : {}),
+                }}
+              >
                 <div>
                   <div style={s.muted}>Cuenta del estudiante</div>
                   <h2 style={s.studentName}>
@@ -812,7 +891,16 @@ export default function PortalUsuarioModulo({
                 {esPadre && (
                   <form
                     onSubmit={guardarObservacionPadre}
-                    style={s.observationBox}
+                    style={{
+                      ...s.observationBox,
+                      ...(esMovil
+                        ? {
+                            flex: "1 1 100%",
+                            width: "100%",
+                            minWidth: 0,
+                          }
+                        : {}),
+                    }}
                   >
                     <label style={s.field}>
                       Observaciones importantes
@@ -842,7 +930,18 @@ export default function PortalUsuarioModulo({
                 )}
               </div>
 
-              <div style={s.codeBox}>
+              <div
+                style={{
+                  ...s.codeBox,
+                  ...(esMovil
+                    ? {
+                        minWidth: 0,
+                        width: "100%",
+                        boxSizing: "border-box",
+                      }
+                    : {}),
+                }}
+              >
                 <span style={s.muted}>Código / identificación</span>
                 <strong style={s.code}>
                   {alumno.codigo || alumno.cedula || `ALUMNO-${alumno.id}`}
@@ -853,7 +952,17 @@ export default function PortalUsuarioModulo({
               </div>
             </section>
 
-            <section style={s.summary}>
+            <section
+              style={{
+                ...s.summary,
+                ...(esMovil
+                  ? {
+                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      gap: 10,
+                    }
+                  : {}),
+              }}
+            >
               <Card label="Saldo disponible" value={moneda(alumno.saldo)} principal />
               <Card
                 label="Total recargado"
@@ -880,7 +989,17 @@ export default function PortalUsuarioModulo({
                   </p>
                 </div>
 
-                <form onSubmit={guardarLimiteConsumo} style={s.limitForm}>
+                <form
+                  onSubmit={guardarLimiteConsumo}
+                  style={{
+                    ...s.limitForm,
+                    ...(esMovil
+                      ? {
+                          gridTemplateColumns: "1fr",
+                        }
+                      : {}),
+                  }}
+                >
                   <label style={s.field}>
                     Máximo por día
                     <input
@@ -919,7 +1038,18 @@ export default function PortalUsuarioModulo({
                   </p>
                 </div>
 
-                <div style={s.actions}>
+                <div
+                  style={{
+                    ...s.actions,
+                    ...(esMovil
+                      ? {
+                          width: "100%",
+                          display: "grid",
+                          gridTemplateColumns: "1fr 1fr",
+                        }
+                      : {}),
+                  }}
+                >
                   <select
                     value={filtro}
                     onChange={(e) => setFiltro(e.target.value)}
@@ -1007,53 +1137,92 @@ export default function PortalUsuarioModulo({
                 </form>
               )}
 
-              <div style={s.tableWrap}>
-                <table style={s.table}>
-                  <thead>
-                    <tr>
-                      <th style={s.th}>Fecha</th>
-                      <th style={s.th}>Tipo</th>
-                      <th style={s.th}>Detalle</th>
-                      <th style={s.th}>Método</th>
-                      <th style={s.th}>Ubicación</th>
-                      <th style={s.th}>Operador</th>
-                      <th style={s.th}>Valor</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {!movimientos.length ? (
+              {esMovil ? (
+                <div style={s.mobileMovementList}>
+                  {!movimientos.length ? (
+                    <div style={s.empty}>
+                      No existen movimientos para mostrar.
+                    </div>
+                  ) : (
+                    movimientos.map((m) => (
+                      <div key={`${m.tipo}-${m.id}`} style={s.mobileMovementCard}>
+                        <div style={s.mobileMovementTop}>
+                          <strong>{fechaHora(m.fecha)}</strong>
+                          <span
+                            style={
+                              m.tipo === "RECARGA"
+                                ? s.badgeRecarga
+                                : s.badgeConsumo
+                            }
+                          >
+                            {m.tipo}
+                          </span>
+                        </div>
+
+                        <div><strong>Detalle:</strong> {m.detalle || "-"}</div>
+                        <div><strong>Método:</strong> {m.metodo || "-"}</div>
+                        <div><strong>Ubicación:</strong> {m.ubicacion || "-"}</div>
+                        <div><strong>Operador:</strong> {m.operador || "-"}</div>
+                        <div style={{ fontWeight: 900 }}>
+                          <strong>Valor:</strong>{" "}
+                          {m.tipo === "CONSUMO" ? "-" : "+"}
+                          {moneda(m.valor)}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              ) : (
+                <div style={s.tableWrap}>
+                  <table style={s.table}>
+                    <thead>
                       <tr>
-                        <td colSpan="5" style={s.empty}>
-                          No existen movimientos para mostrar.
-                        </td>
+                        <th style={s.th}>Fecha</th>
+                        <th style={s.th}>Tipo</th>
+                        <th style={s.th}>Detalle</th>
+                        <th style={s.th}>Método</th>
+                        <th style={s.th}>Ubicación</th>
+                        <th style={s.th}>Operador</th>
+                        <th style={s.th}>Valor</th>
                       </tr>
-                    ) : (
-                      movimientos.map((m) => (
-                        <tr key={`${m.tipo}-${m.id}`}>
-                          <td style={s.td}>{fechaHora(m.fecha)}</td>
-                          <td style={s.td}>
-                            <span
-                              style={
-                                m.tipo === "RECARGA"
-                                  ? s.badgeRecarga
-                                  : s.badgeConsumo
-                              }
-                            >
-                              {m.tipo}
-                            </span>
-                          </td>
-                          <td style={s.td}>{m.detalle || "-"}</td>
-                          <td style={s.td}>{m.metodo || "-"}</td>
-                          <td style={s.td}>
-                            {m.tipo === "CONSUMO" ? "-" : "+"}
-                            {moneda(m.valor)}
+                    </thead>
+                    <tbody>
+                      {!movimientos.length ? (
+                        <tr>
+                          <td colSpan="7" style={s.empty}>
+                            No existen movimientos para mostrar.
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                      ) : (
+                        movimientos.map((m) => (
+                          <tr key={`${m.tipo}-${m.id}`}>
+                            <td style={s.td}>{fechaHora(m.fecha)}</td>
+                            <td style={s.td}>
+                              <span
+                                style={
+                                  m.tipo === "RECARGA"
+                                    ? s.badgeRecarga
+                                    : s.badgeConsumo
+                                }
+                              >
+                                {m.tipo}
+                              </span>
+                            </td>
+                            <td style={s.td}>{m.detalle || "-"}</td>
+                            <td style={s.td}>{m.metodo || "-"}</td>
+                            <td style={s.td}>{m.ubicacion || "-"}</td>
+                            <td style={s.td}>{m.operador || "-"}</td>
+                            <td style={s.td}>
+                              {m.tipo === "CONSUMO" ? "-" : "+"}
+                              {moneda(m.valor)}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </section>
 
             <section style={s.card}>
@@ -1110,6 +1279,8 @@ const s = {
     background: "#f2f5f9",
     fontFamily: "Arial, sans-serif",
     color: "#111827",
+    overflowX: "hidden",
+    WebkitTextSizeAdjust: "100%",
   },
   loading: {
     minHeight: "100vh",
@@ -1135,6 +1306,7 @@ const s = {
     alignItems: "center",
     gap: 16,
     textAlign: "right",
+    minWidth: 0,
   },
   role: { fontSize: 12, opacity: 0.8, marginTop: 3 },
   logout: {
@@ -1148,8 +1320,10 @@ const s = {
   },
   main: {
     width: "min(1180px,94vw)",
+    maxWidth: "100%",
     margin: "0 auto",
     padding: "28px 0 50px",
+    boxSizing: "border-box",
   },
   welcome: {
     display: "flex",
@@ -1207,7 +1381,7 @@ const s = {
     flex: "1 1 340px",
     display: "grid",
     gap: 8,
-    minWidth: 280,
+    minWidth: 0,
   },
   observationInput: {
     width: "100%",
@@ -1221,7 +1395,7 @@ const s = {
     boxSizing: "border-box",
   },
   codeBox: {
-    minWidth: 260,
+    minWidth: 0,
     border: "1px solid #dbe4f0",
     background: "#f8fafc",
     borderRadius: 13,
@@ -1328,8 +1502,36 @@ const s = {
     background: "#fff",
   },
   help: { color: "#64748b", fontSize: 12, marginBottom: 0 },
-  tableWrap: { overflowX: "auto", marginTop: 18 },
+  tableWrap: {
+    overflowX: "auto",
+    marginTop: 18,
+    width: "100%",
+    maxWidth: "100%",
+    WebkitOverflowScrolling: "touch",
+  },
   table: { width: "100%", borderCollapse: "collapse", minWidth: 720 },
+  mobileMovementList: {
+    display: "grid",
+    gap: 10,
+    marginTop: 16,
+  },
+  mobileMovementCard: {
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    borderRadius: 12,
+    padding: 12,
+    display: "grid",
+    gap: 7,
+    fontSize: 13,
+    overflowWrap: "anywhere",
+  },
+  mobileMovementTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
   th: {
     background: "#f8fafc",
     textAlign: "left",

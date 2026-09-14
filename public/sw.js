@@ -1,5 +1,6 @@
 const CACHE_PREFIX = "pos-nube-pwa-";
-const CACHE_VERSION = "v9";
+
+const CACHE_VERSION = "v10";
 
 self.addEventListener("install", function () {
   self.skipWaiting();
@@ -23,6 +24,7 @@ self.addEventListener("activate", function (event) {
 // PWA online segura: no conserva index.html ni bundles antiguos de Vite.
 self.addEventListener("fetch", function (event) {
   if (event.request.method !== "GET") return;
+
   event.respondWith(
     fetch(event.request, { cache: "no-store" }).catch(function () {
       return Response.error();

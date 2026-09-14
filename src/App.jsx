@@ -598,7 +598,7 @@ useEffect(() => {
               .map((clave) => caches.delete(clave))
           );
         }
-        const registro = await navigator.serviceWorker.register("/sw.js?v=9", { scope: "/" });
+        const registro = await navigator.serviceWorker.register("/sw.js?v=10", { scope: "/" });
         if (registro?.update) registro.update().catch(() => {});
         console.log("POS NUBE PWA activa:", registro.scope);
       } catch (error) {
@@ -16473,14 +16473,27 @@ onClick={guardarEgreso}
 
             <div style={styles.filterField}>
               <label style={styles.label}>Categoría</label>
-              <input
-                type="text"
+              <select
                 value={productoForm.categoria}
                 onChange={(e) =>
-                  setProductoForm({ ...productoForm, categoria: e.target.value })
+                  setProductoForm({
+                    ...productoForm,
+                    categoria: e.target.value,
+                  })
                 }
                 style={styles.input}
-              />
+              >
+                <option value="">Selecciona una categoría</option>
+                {[...new Set(
+                  productos
+                    .map((p) => p.categoria)
+                    .filter(Boolean)
+                )].map((categoria) => (
+                  <option key={categoria} value={categoria}>
+                    {categoria}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div style={styles.filterField}>
