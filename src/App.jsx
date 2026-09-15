@@ -1412,30 +1412,26 @@ const [egresoForm, setEgresoForm] = useState({
   const profesoresFiltrados = useMemo(() => {
     const texto = busquedaProfesores.trim().toLowerCase();
 
-    return profesores.filter((profesor) => {
-      const coincideEstado =
-        filtroProfesores === "todos"
-          ? true
-          : filtroProfesores === "inactivos"
-          ? profesor.activo === false
-          : profesor.activo !== false;
+    // Listado operativo: un profesor eliminado queda activo=false y
+    // desaparece de la vista normal. El registro histórico NO se borra.
+    return profesores
+      .filter((profesor) => profesor.activo !== false)
+      .filter((profesor) => {
+        if (!texto) return true;
 
-      if (!coincideEstado) return false;
-      if (!texto) return true;
+        const nombres = String(profesor.nombres || "").toLowerCase();
+        const apellidos = String(profesor.apellidos || "").toLowerCase();
+        const cedula = String(profesor.cedula || "").toLowerCase();
+        const nombreCompleto = `${nombres} ${apellidos}`.trim();
 
-      const nombres = String(profesor.nombres || "").toLowerCase();
-      const apellidos = String(profesor.apellidos || "").toLowerCase();
-      const cedula = String(profesor.cedula || "").toLowerCase();
-      const nombreCompleto = `${nombres} ${apellidos}`.trim();
-
-      return (
-        nombres.includes(texto) ||
-        apellidos.includes(texto) ||
-        cedula.includes(texto) ||
-        nombreCompleto.includes(texto)
-      );
-    });
-  }, [profesores, filtroProfesores, busquedaProfesores]);
+        return (
+          nombres.includes(texto) ||
+          apellidos.includes(texto) ||
+          cedula.includes(texto) ||
+          nombreCompleto.includes(texto)
+        );
+      });
+  }, [profesores, busquedaProfesores]);
 
   const productosInventario = useMemo(() => {
     const texto = inventarioBusqueda.trim().toLowerCase();
@@ -16548,7 +16544,12 @@ onClick={guardarEgreso}
             style={styles.select}
           >
             <option value="">Todas las categorías</option>
-            {[...new Set(productos.map((p) => p.categoria).filter(Boolean))].map(
+            {[...new Set(
+              productos
+                .filter((p) => p.activo !== false)
+                .map((p) => p.categoria)
+                .filter(Boolean)
+            )].map(
               (categoria) => (
                 <option key={categoria} value={categoria}>
                   {categoria}
@@ -16559,6 +16560,7 @@ onClick={guardarEgreso}
 
           {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (() => {
             const visibles = productos
+              .filter((p) => p.activo !== false)
               .filter((p) => {
                 const coincideTexto = String(p.nombre || "")
                   .toLowerCase()
@@ -16640,6 +16642,7 @@ onClick={guardarEgreso}
                   "Estado",
                 ],
                 ...productos
+                  .filter((p) => p.activo !== false)
                   .filter((p) => {
                     const coincideTexto = String(p.nombre || "")
                       .toLowerCase()
@@ -16727,7 +16730,12 @@ onClick={guardarEgreso}
                   style={styles.select}
                 >
                   <option value="">Seleccionar</option>
-                  {[...new Set(productos.map((p) => p.categoria).filter(Boolean))].map(
+                  {[...new Set(
+                    productos
+                      .filter((p) => p.activo !== false)
+                      .map((p) => p.categoria)
+                      .filter(Boolean)
+                  )].map(
                     (categoria) => (
                       <option key={categoria} value={categoria}>
                         {categoria}
@@ -16742,6 +16750,7 @@ onClick={guardarEgreso}
 
           <tbody>
             {productos
+              .filter((p) => p.activo !== false)
               .filter((p) => {
                 const coincideTexto = String(p.nombre || "")
                   .toLowerCase()
@@ -16760,17 +16769,7 @@ onClick={guardarEgreso}
                 const estaInactivo = producto.activo === false;
 
                 return (
-                  <tr
-                    key={producto.id}
-                    style={
-                      estaInactivo
-                        ? {
-                            opacity: 0.6,
-                            backgroundColor: "#f3f4f6",
-                          }
-                        : {}
-                    }
-                  >
+                  <tr key={producto.id}>
                     {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
                       <td style={styles.td}>
                         <input
@@ -17486,16 +17485,6 @@ onClick={guardarEgreso}
                   autoFocus
                 />
               )}
-
-              <select
-                value={filtroProfesores}
-                onChange={(e) => setFiltroProfesores(e.target.value)}
-                style={styles.select}
-              >
-                <option value="todos">Todos</option>
-                <option value="activos">Activos</option>
-                <option value="inactivos">Inactivos</option>
-              </select>
 
               <button
                 type="button"

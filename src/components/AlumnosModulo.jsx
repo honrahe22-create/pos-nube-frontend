@@ -556,21 +556,25 @@ export default function AlumnosModulo({
   };
 
 
-  const alumnosFiltradosBusqueda = alumnosFiltrados.filter((alumno) => {
-    const texto = busquedaAlumnos.trim().toLowerCase();
+  const alumnosFiltradosBusqueda = alumnosFiltrados
+    // Listado operativo: un alumno eliminado queda activo=false y deja
+    // de mostrarse. Su historial, ventas, recargas y relaciones permanecen.
+    .filter((alumno) => alumno?.activo !== false)
+    .filter((alumno) => {
+      const texto = busquedaAlumnos.trim().toLowerCase();
 
-    if (!texto) return true;
+      if (!texto) return true;
 
-    const nombres = String(alumno?.nombres || "").toLowerCase();
-    const apellidos = String(alumno?.apellidos || "").toLowerCase();
-    const cedula = String(obtenerCedulaAlumno(alumno) || "").toLowerCase();
+      const nombres = String(alumno?.nombres || "").toLowerCase();
+      const apellidos = String(alumno?.apellidos || "").toLowerCase();
+      const cedula = String(obtenerCedulaAlumno(alumno) || "").toLowerCase();
 
-    return (
-      nombres.includes(texto) ||
-      apellidos.includes(texto) ||
-      cedula.includes(texto)
-    );
-  });
+      return (
+        nombres.includes(texto) ||
+        apellidos.includes(texto) ||
+        cedula.includes(texto)
+      );
+    });
 
   const regresarListado = () => {
     setAlumnoDetalle(null);
@@ -1438,16 +1442,6 @@ export default function AlumnosModulo({
           </button>
         ) : (
           <>
-            <select
-              value={filtroAlumnos}
-              onChange={(e) => setFiltroAlumnos(e.target.value)}
-              style={styles.select}
-            >
-              <option value="todos">Todos</option>
-              <option value="activos">Activos</option>
-              <option value="inactivos">Inactivos</option>
-            </select>
-
             <button
               type="button"
               style={styles.secondaryButton}
@@ -2369,11 +2363,7 @@ export default function AlumnosModulo({
           <h3 style={{ margin: 0 }}>
             Lista de alumnos{" "}
             <span style={styles.filterLabel}>
-              {filtroAlumnos === "activos"
-                ? "(Activos)"
-                : filtroAlumnos === "inactivos"
-                ? "(Inactivos)"
-                : "(Todos)"}
+(Activos)
             </span>
           </h3>
 
