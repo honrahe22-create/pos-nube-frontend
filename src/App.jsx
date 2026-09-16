@@ -11755,7 +11755,7 @@ Disponible: ${formatearMoneda(
 
   const cargarResumenCierre = async (
     fecha = cierreForm.fecha,
-    jornadaForzada = null
+    cajaForzada = null
   ) => {
     if (!fecha) return;
 
@@ -11763,19 +11763,18 @@ Disponible: ${formatearMoneda(
       const token = localStorage.getItem("token");
       const institucionId = obtenerInstitucionActivaId();
 
-      const jornadaPendiente =
-        estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE"
-          ? estadoOperativoCaja?.jornada
-          : null;
-
-      const jornadaObjetivo =
-        jornadaForzada ||
-        jornadaPendiente ||
+      // POS NUBE SIN JORNADAS: el cierre usa operador + punto + movimientos.
+      const cajaObjetivo =
+        cajaForzada ||
         jornadaCierreSeleccionada ||
-        jornadaActiva ||
+        (Array.isArray(cajasPendientesCierre)
+          ? cajasPendientesCierre.find(
+              (fila) =>
+                Number(fila?.usuario_id || fila?.operador_id || 0) ===
+                Number(usuario?.id || 0)
+            )
+          : null) ||
         null;
-
-      const cajaObjetivo = jornadaObjetivo || null;
       const operadorId = Number(
         cajaObjetivo?.operador_id ||
         cajaObjetivo?.usuario_id ||
@@ -12019,12 +12018,14 @@ Disponible: ${formatearMoneda(
     }
   };
 
+  // Cierre por movimientos reales, sin jornada.
+  // Cierre por movimientos reales, sin jornada.
   const guardarCierre = async () => {
     try {
       setGuardandoCierre(true);
       const token = localStorage.getItem("token");
       const institucionId = obtenerInstitucionActivaId();
-      const jornadaParaCerrar =
+      const cajaParaCerrar =
         jornadaCierreSeleccionada ||
         (Array.isArray(cajasPendientesCierre)
           ? cajasPendientesCierre.find(
@@ -12039,7 +12040,7 @@ Disponible: ${formatearMoneda(
         return;
       }
 
-      if (!jornadaParaCerrar?.id) {
+      if (!cajaParaCerrar?.id) {
         alert("No existen movimientos nuevos para cerrar en esta caja.");
         return;
       }
@@ -12054,14 +12055,14 @@ Disponible: ${formatearMoneda(
           body: JSON.stringify({
             institucion_id: Number(institucionId),
             operador_id: Number(
-              jornadaParaCerrar?.operador_id ||
-              jornadaParaCerrar?.usuario_id ||
+              cajaParaCerrar?.operador_id ||
+              cajaParaCerrar?.usuario_id ||
               usuario?.id ||
               0
             ),
-            punto_id: Number(jornadaParaCerrar?.punto_id || 0) || null,
+            punto_id: Number(cajaParaCerrar?.punto_id || 0) || null,
             punto_nombre: String(
-              jornadaParaCerrar?.punto_nombre ||
+              cajaParaCerrar?.punto_nombre ||
               localNuevaOrden ||
               "PRINCIPAL"
             ),
@@ -14977,12 +14978,9 @@ if (!usuario) {
               <input
                 style={styles.input}
                 value={
-                  (estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE"
-                    ? estadoOperativoCaja?.jornada?.usuario_nombre
-                    : jornadaActiva?.usuario_nombre) ||
-                  (estadoOperativoCaja?.estado_operativo === "CIERRE_PENDIENTE"
-                    ? estadoOperativoCaja?.jornada?.usuario_correo
-                    : jornadaActiva?.usuario_correo) ||
+                  jornadaCierreSeleccionada?.usuario_nombre ||
+                  jornadaCierreSeleccionada?.usuario_correo ||
+                  resumenCierreServidor?.operador_nombre ||
                   usuario?.nombre ||
                   usuario?.correo ||
                   "Operador"
@@ -14994,15 +14992,20 @@ if (!usuario) {
               <label style={styles.label}>Ubicación</label>
               <input
                 style={{...styles.input,fontWeight:900}}
-                value={jornadaActiva?.punto_nombre || "SIN UBICACIÓN"}
+                value={
+                  jornadaCierreSeleccionada?.punto_nombre ||
+                  resumenCierreServidor?.punto_nombre ||
+                  localNuevaOrden ||
+                  "PUNTO"
+                }
                 readOnly
               />
             </div>
             <div style={styles.filterField}>
-              <label style={styles.label}>Jornada</label>
+              <label style={styles.label}>Tipo de cierre</label>
               <input
                 style={styles.input}
-                value={jornadaActiva?.id ? `#${jornadaActiva.id}` : "Sin jornada"}
+                value="Caja por operador y punto"
                 readOnly
               />
             </div>
@@ -15129,15 +15132,15 @@ if (!usuario) {
               }}>
                 <div style={{padding:10,border:"1px solid #dbeafe",borderRadius:10}}>
                   <strong>Ubicación</strong>
-                  <div>{resumenCierreServidor.punto_nombre || jornadaActiva?.punto_nombre || "-"}</div>
+                  <div>{resumenCierreServidor.punto_nombre || jornadaCierreSeleccionada?.punto_nombre || "-"}</div>
                 </div>
                 <div style={{padding:10,border:"1px solid #dbeafe",borderRadius:10}}>
                   <strong>Operador</strong>
-                  <div>{resumenCierreServidor.operador_nombre || jornadaActiva?.usuario_nombre || jornadaActiva?.usuario_correo || "-"}</div>
+                  <div>{resumenCierreServidor.operador_nombre || jornadaCierreSeleccionada?.usuario_nombre || jornadaCierreSeleccionada?.usuario_correo || "-"}</div>
                 </div>
                 <div style={{padding:10,border:"1px solid #dbeafe",borderRadius:10}}>
-                  <strong>Jornada</strong>
-                  <div>#{resumenCierreServidor.jornada_id || jornadaActiva?.id || "-"}</div>
+                  <strong>Tipo de cierre</strong>
+                  <div>Caja por operador y punto</div>
                 </div>
               </div>
               <div
@@ -15162,7 +15165,7 @@ if (!usuario) {
               </div>
               {/* El resumen previo se deja intencionalmente compacto. */}
               {/* Los valores económicos se muestran después de guardar el cierre. */}
-              {/* Ubicación, operador y jornada permanecen visibles arriba. */}
+              {/* Ubicación y operador permanecen visibles arriba. */}
               {/* El período exacto permanece visible para confirmar el corte. */}
               {/* Detalle de ventas/recargas/egresos: disponible en cierre guardado. */}
               {/* Evita saturar la pantalla de conteo en PC e iMin. */}
@@ -19431,23 +19434,20 @@ onClick={guardarEgreso}
         <div>
           <strong style={{fontSize:18}}>
             {["ADMIN","SUPER_ADMIN"].includes(rolActual)
-              ? "Administración: jornada no requerida"
-              : `Punto de trabajo: ${jornadaActiva?.punto_nombre||"SIN JORNADA"}`}
+              ? "Administración"
+              : `Punto de trabajo: ${localNuevaOrden||"PUNTO"}`}
           </strong>
           <div style={{color:"#64748b",marginTop:6}}>
             Operador:{" "}
-            {jornadaActiva?.usuario_nombre||
-              jornadaActiva?.usuario_correo||
-              usuario?.nombre||
+            {usuario?.nombre||
               usuario?.correo||
-              "-"}{" "}
-            · Caja {jornadaActiva?.id||"-"}
+              "-"}
           </div>
         </div>
 
-        {jornadaActiva?.id&&(
+        {!["ADMIN","SUPER_ADMIN"].includes(rolActual)&&(
           <div style={{color:"#64748b",fontSize:13,fontWeight:600}}>
-            La jornada se mantiene abierta hasta realizar el cierre de caja.
+            El cierre se calcula por los movimientos reales de este operador y punto.
           </div>
         )}
       </div>
