@@ -20102,6 +20102,187 @@ onClick={guardarEgreso}
           </div>
         </div>
 
+        {esPantallaCompacta ? (
+          <div
+            style={{
+              marginTop:16,
+              display:"grid",
+              gap:10,
+              maxHeight:520,
+              overflowY:"auto",
+              overflowX:"hidden",
+              WebkitOverflowScrolling:"touch",
+              paddingRight:2
+            }}
+          >
+            {productosOperacionStock.length===0 ? (
+              <div
+                style={{
+                  ...styles.td,
+                  border:"1px solid #e2e8f0",
+                  borderRadius:12,
+                  background:"#ffffff"
+                }}
+              >
+                No hay productos para este filtro.
+              </div>
+            ) : (
+              productosOperacionStock.map((producto)=>{
+                const id=String(producto.id);
+                const seleccionado=Object.prototype.hasOwnProperty.call(
+                  stockItemsOperacion,id
+                );
+                const stockPunto=stockProductoEnPunto(
+                  producto.id,
+                  puntoInventarioSeleccionado||
+                    localNuevaOrden||
+                    "PRINCIPAL"
+                );
+
+                return (
+                  <div
+                    key={producto.id}
+                    style={{
+                      border:"1px solid #dbe4f0",
+                      borderRadius:12,
+                      padding:12,
+                      background:"#ffffff",
+                      boxSizing:"border-box",
+                      width:"100%",
+                      minWidth:0
+                    }}
+                  >
+                    <div
+                      style={{
+                        display:"flex",
+                        alignItems:"flex-start",
+                        gap:10,
+                        minWidth:0
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={seleccionado}
+                        onChange={()=>toggleProductoOperacionStock(producto)}
+                        style={{
+                          width:22,
+                          height:22,
+                          marginTop:2,
+                          flex:"0 0 auto"
+                        }}
+                      />
+
+                      <div style={{flex:"1 1 auto",minWidth:0}}>
+                        <div
+                          style={{
+                            fontWeight:900,
+                            fontSize:16,
+                            lineHeight:1.25,
+                            overflowWrap:"anywhere"
+                          }}
+                        >
+                          {producto.nombre}
+                        </div>
+
+                        <div
+                          style={{
+                            marginTop:5,
+                            color:"#64748b",
+                            fontSize:12,
+                            lineHeight:1.35
+                          }}
+                        >
+                          Código: {producto.codigo||"-"} · Familia:{" "}
+                          {producto.categoria||"Sin familia"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        display:"grid",
+                        gridTemplateColumns:"minmax(0,1fr) minmax(110px,140px)",
+                        gap:10,
+                        alignItems:"end",
+                        marginTop:12
+                      }}
+                    >
+                      <div>
+                        <div
+                          style={{
+                            fontSize:12,
+                            color:"#64748b",
+                            fontWeight:800,
+                            marginBottom:5
+                          }}
+                        >
+                          Stock en punto
+                        </div>
+                        <div
+                          style={{
+                            minHeight:44,
+                            display:"flex",
+                            alignItems:"center",
+                            padding:"0 12px",
+                            border:"1px solid #dbe4f0",
+                            borderRadius:10,
+                            background:"#f8fafc",
+                            fontSize:18,
+                            fontWeight:900
+                          }}
+                        >
+                          {stockPunto}
+                        </div>
+                      </div>
+
+                      <label
+                        style={{
+                          display:"grid",
+                          gap:5,
+                          fontSize:12,
+                          fontWeight:900
+                        }}
+                      >
+                        Cantidad
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min="0"
+                          max="9999"
+                          step="1"
+                          disabled={!seleccionado}
+                          value={seleccionado?stockItemsOperacion[id]:""}
+                          onChange={(e)=>{
+                            const valor=String(e.target.value||"")
+                              .replace(/[^0-9]/g,"")
+                              .slice(0,4);
+
+                            cambiarCantidadOperacionStock(
+                              producto.id,
+                              valor
+                            );
+                          }}
+                          style={{
+                            ...styles.input,
+                            width:"100%",
+                            minWidth:0,
+                            boxSizing:"border-box",
+                            padding:"10px 8px",
+                            textAlign:"center",
+                            fontSize:18,
+                            fontWeight:900,
+                            opacity:seleccionado?1:.5
+                          }}
+                          placeholder="0"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        ) : (
         <div style={{
           ...styles.tableWrap,
           marginTop:16,
@@ -20254,6 +20435,7 @@ onClick={guardarEgreso}
           </table>
         </div>
 
+        )}
         <div style={{
           display:"flex",
           justifyContent:"flex-end",
