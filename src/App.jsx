@@ -1686,6 +1686,11 @@ const totalRecargasVista = useMemo(() => {
           ? "CUENTAS POR PAGAR"
           : venta.metodo_pago || "EFECTIVO";
 
+      const puntoVenta = (puntosOperacion || []).find(
+        (punto) =>
+          Number(punto?.id || 0) === Number(venta?.punto_id || 0)
+      );
+
       return {
         ...venta,
         alumno_nombre: nombreAlumno,
@@ -1702,12 +1707,15 @@ const totalRecargasVista = useMemo(() => {
           venta.operador_correo ||
           "Sistema",
         ubicacion_visual: normalizarUbicacionFrontend(
-          venta.ubicacion_visual || venta.ubicacion || "PRINCIPAL",
+          puntoVenta?.nombre ||
+            venta.ubicacion_visual ||
+            venta.ubicacion ||
+            "PRINCIPAL",
           institucionActivaId
         ),
       };
     });
-  }, [ventas, alumnos, institucionActivaId]);
+  }, [ventas, alumnos, institucionActivaId, puntosOperacion]);
 
   const operadoresVentasDisponibles = useMemo(() => {
     let listaVentas = [...ventasEnriquecidas];
@@ -7937,6 +7945,7 @@ if (institucionIdLogin) {
       vistaVentasInterna === "consultar" &&
       ["ADMIN", "SUPER_ADMIN"].includes(rolActual)
     ) {
+      cargarPuntosOperacion();
       cargarOperadoresVentas();
     }
   }, [
@@ -9431,11 +9440,31 @@ if (institucionIdLogin) {
     const granTotalTicket = subtotalRecargasTicket + subtotalVentasTicket;
     const estadoTicket = String(cierre.estado_cierre || "CERRADA").toUpperCase();
     const fechaOperativaTicket = formatearSoloFecha(cierre.fecha);
+
+    // IMPORTANTE Q2 / iMin:
+    // periodo_hasta_ecuador ya viene convertido por backend a hora Ecuador.
+    // Antes se ignoraba ese valor al imprimir un cierre recién creado y el
+    // dispositivo volvía a interpretar el timestamp crudo, provocando una hora
+    // distinta a la mostrada en pantalla.
+    const periodoHastaEcuadorTexto = String(
+      cierre.periodo_hasta_ecuador || ""
+    ).trim();
+
+    const partesPeriodoHastaEcuador =
+      periodoHastaEcuadorTexto.match(
+        /^(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2}:\d{2})$/
+      );
+
     const fechaCierreTicket =
       cierre.fecha_cierre_ecuador ||
-      formatearSoloFecha(cierre.periodo_hasta || cierre.created_at || cierre.fecha);
+      partesPeriodoHastaEcuador?.[1] ||
+      formatearSoloFecha(
+        cierre.periodo_hasta || cierre.created_at || cierre.fecha
+      );
+
     const horaCierreTicket =
       cierre.hora_cierre_ecuador ||
+      partesPeriodoHastaEcuador?.[2] ||
       formatearSoloHora(cierre.periodo_hasta || cierre.created_at);
     const signoDiferenciaTicket =
       Math.abs(diferenciaEfectivoTicket) < 0.005
@@ -14597,64 +14626,66 @@ if (!usuario) {
           )}
         </div>
       </div>
-      <div style={{marginBottom:14}}>
-        <div style={{fontWeight:1000,fontSize:18,marginBottom:8}}>
-          Cajas pendientes de cierre
-        </div>
-        <div style={{fontSize:13,color:"#475569",marginBottom:10}}>
-          Una caja aparece aquí únicamente cuando existen movimientos reales pendientes desde su último cierre.
-        </div>
+      {!["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+        <div style={{marginBottom:14}}>
+          <div style={{fontWeight:1000,fontSize:18,marginBottom:8}}>
+            Cajas pendientes de cierre
+          </div>
+          <div style={{fontSize:13,color:"#475569",marginBottom:10}}>
+            Una caja aparece aquí únicamente cuando existen movimientos reales pendientes desde su último cierre.
+          </div>
 
-        {cajasPendientesVisuales.length === 0 ? (
-          <div style={{padding:"12px",border:"1px solid #cbd5e1",borderRadius:10,background:"#f8fafc",color:"#475569"}}>
-            No hay movimientos pendientes de cierre en este momento.
-          </div>
-        ) : (
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:10}}>
-            {cajasPendientesVisuales.map((caja) => (
-              <div
-                key={`caja-pendiente-${caja.id}`}
-                style={{
-                  border:"2px solid #ef4444",
-                  borderRadius:12,
-                  padding:"12px",
-                  background:"#fee2e2",
-                  color:"#991b1b",
-                }}
-              >
-                <div style={{fontWeight:1000,fontSize:17}}>
-                  ⚠ CAJA PENDIENTE DE CIERRE
-                </div>
-                <div style={{fontSize:14,fontWeight:1000,marginTop:6}}>
-                  {caja.punto_nombre || "PUNTO"}
-                </div>
-                <div style={{fontSize:13,lineHeight:1.5,marginTop:4}}>
-                  Operador: {caja.usuario_nombre || caja.usuario_correo || "Operador"}
-                  {" · "}Fecha: {formatearSoloFecha(
-                    caja.fecha_operativa_texto ||
-                    caja.fecha_operativa ||
-                    obtenerFechaEcuadorISO()
-                  )}
-                </div>
-                <button
-                  type="button"
+          {cajasPendientesVisuales.length === 0 ? (
+            <div style={{padding:"12px",border:"1px solid #cbd5e1",borderRadius:10,background:"#f8fafc",color:"#475569"}}>
+              No hay movimientos pendientes de cierre en este momento.
+            </div>
+          ) : (
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:10}}>
+              {cajasPendientesVisuales.map((caja) => (
+                <div
+                  key={`caja-pendiente-${caja.id}`}
                   style={{
-                    ...styles.button,
-                    width:"100%",
-                    marginTop:10,
-                    background:"#dc2626",
-                    borderColor:"#dc2626",
-                    color:"#fff",
+                    border:"2px solid #ef4444",
+                    borderRadius:12,
+                    padding:"12px",
+                    background:"#fee2e2",
+                    color:"#991b1b",
                   }}
-                  onClick={() => abrirCajaPendienteDesdeListado(caja)}
                 >
-                  Crear cierre de caja
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+                  <div style={{fontWeight:1000,fontSize:17}}>
+                    ⚠ CAJA PENDIENTE DE CIERRE
+                  </div>
+                  <div style={{fontSize:14,fontWeight:1000,marginTop:6}}>
+                    {caja.punto_nombre || "PUNTO"}
+                  </div>
+                  <div style={{fontSize:13,lineHeight:1.5,marginTop:4}}>
+                    Operador: {caja.usuario_nombre || caja.usuario_correo || "Operador"}
+                    {" · "}Fecha: {formatearSoloFecha(
+                      caja.fecha_operativa_texto ||
+                      caja.fecha_operativa ||
+                      obtenerFechaEcuadorISO()
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    style={{
+                      ...styles.button,
+                      width:"100%",
+                      marginTop:10,
+                      background:"#dc2626",
+                      borderColor:"#dc2626",
+                      color:"#fff",
+                    }}
+                    onClick={() => abrirCajaPendienteDesdeListado(caja)}
+                  >
+                    Crear cierre de caja
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={styles.tableWrap}>
         <table style={styles.table}>
