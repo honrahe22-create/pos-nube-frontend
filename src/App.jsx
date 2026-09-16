@@ -5861,7 +5861,28 @@ const exportarVentasExcel = () => {
 
     localStorage.setItem("token", data.token);
     localStorage.setItem("usuario", JSON.stringify(data.usuario));
-    localStorage.setItem("accesoOperativo", JSON.stringify({ punto_id: Number(loginPuntoId), institucion_id: Number(loginInstitucionId) }));
+
+    const puntoLoginSeleccionado =
+      (Array.isArray(loginPuntosOperacion) ? loginPuntosOperacion : []).find(
+        (punto) => Number(punto?.id || 0) === Number(loginPuntoId)
+      ) || null;
+
+    const puntoNombreAcceso =
+      String(
+        data.jornada?.punto_nombre ||
+        puntoLoginSeleccionado?.nombre ||
+        ""
+      ).trim() || null;
+
+    localStorage.setItem(
+      "accesoOperativo",
+      JSON.stringify({
+        punto_id: Number(loginPuntoId),
+        punto_nombre: puntoNombreAcceso,
+        institucion_id: Number(loginInstitucionId),
+      })
+    );
+
     localStorage.setItem(
       "institucionSeleccionadaId",
       String(data.usuario.institucion_id)
@@ -10705,10 +10726,74 @@ if (institucionIdLogin) {
       return;
     }
 
+    let accesoOperativoVenta = null;
+
+    try {
+      accesoOperativoVenta = JSON.parse(
+        localStorage.getItem("accesoOperativo") || "null"
+      );
+    } catch (_error) {
+      accesoOperativoVenta = null;
+    }
+
+    const accesoMismaInstitucion =
+      Number(accesoOperativoVenta?.institucion_id || 0) ===
+      Number(institucionId);
+
+    const puntoAccesoId =
+      accesoMismaInstitucion
+        ? Number(accesoOperativoVenta?.punto_id || 0) || null
+        : null;
+
+    const puntoAccesoReal =
+      puntoAccesoId
+        ? (Array.isArray(puntosOperacion) ? puntosOperacion : []).find(
+            (punto) => Number(punto?.id || 0) === Number(puntoAccesoId)
+          ) || null
+        : null;
+
+    const ubicacionDesdeAcceso =
+      String(
+        puntoAccesoReal?.nombre ||
+        accesoOperativoVenta?.punto_nombre ||
+        ""
+      ).trim();
+
     const ubicacionVentaActual = normalizarUbicacionFrontend(
-      localNuevaOrden || "PRINCIPAL",
+      ubicacionDesdeAcceso ||
+        localNuevaOrden ||
+        "PRINCIPAL",
       institucionId
     );
+
+    const puntoVentaPorNombre =
+      (Array.isArray(puntosOperacion) ? puntosOperacion : []).find(
+        (punto) =>
+          normalizarUbicacionFrontend(
+            punto?.nombre || "",
+            institucionId
+          ) === ubicacionVentaActual
+      ) || null;
+
+    // Para CAJERO / ENCARGADO_LOCAL el punto elegido al iniciar sesión manda.
+    // ADMIN/SUPER_ADMIN conservan el flujo actual y pueden resolver el punto
+    // por el nombre visible de Nueva Orden.
+    const puntoVentaId =
+      puntoAccesoId ||
+      Number(puntoVentaPorNombre?.id || 0) ||
+      null;
+
+    const rolVentaActual = normalizarRol(usuario?.rol);
+
+    if (
+      ["CAJERO", "ENCARGADO_LOCAL"].includes(rolVentaActual) &&
+      !puntoAccesoId
+    ) {
+      alert(
+        "La sesión operativa no tiene una ubicación válida. Cierra sesión y vuelve a ingresar seleccionando el local/punto."
+      );
+      return;
+    }
 
     const itemsLimpios = ventaItems
       .map((item) => {
@@ -10887,6 +10972,7 @@ Disponible: ${formatearMoneda(
       items: itemsLimpios,
       observacion:ventaForm.observacion?.trim()||"",
       ubicacion:ubicacionVentaActual,
+      punto_id: puntoVentaId,
       jornada_id:null,
     };
 
