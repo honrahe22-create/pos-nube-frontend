@@ -2495,40 +2495,40 @@ const exportarReporteStockPdf=()=>{
 const exportarStockExcel = () => {
   try {
     const encabezados = ["Nombre", "Código", "Precio", "Categoría", "Stock actual"];
+
     const filas = productos.map((p) => [
       p.nombre || "",
       p.codigo || "",
-      Number(p.precio || 0).toFixed(4),
+      Number(p.precio || 0),
       p.categoria || "",
       Number(p.stock || 0),
     ]);
 
-    const contenido = [encabezados, ...filas]
-      .map((fila) =>
-        fila
-          .map((valor) => `"${String(valor ?? "").replace(/"/g, '""')}"`)
-          .join(",")
-      )
-      .join("\n");
+    const hoja = XLSX.utils.aoa_to_sheet([encabezados, ...filas]);
 
-    const blob = new Blob([contenido], {
-      type: "text/csv;charset=utf-8;",
-    });
+    hoja["!cols"] = [
+      { wch: 34 },
+      { wch: 18 },
+      { wch: 12 },
+      { wch: 24 },
+      { wch: 14 },
+    ];
 
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "existencias_stock.csv";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
+    for (let fila = 2; fila <= filas.length + 1; fila += 1) {
+      const celdaPrecio = hoja[`C${fila}`];
+      if (celdaPrecio) celdaPrecio.z = "0.0000";
+    }
+
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Existencias");
+    XLSX.writeFile(libro, "existencias_stock.xlsx");
   } catch (error) {
     console.error("Error al exportar stock:", error);
     alert("No se pudo exportar el stock.");
   }
 };
 
+// exportar stock xlsx
 const abrirImportadorStock = () => {
   if (inputImportarStockRef.current) {
     inputImportarStockRef.current.click();
