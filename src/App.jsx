@@ -9502,7 +9502,7 @@ if (institucionIdLogin) {
       `Fecha operativa: ${fechaOperativaTicket}`,
       `Cierre: ${fechaCierreTicket} ${horaCierreTicket}`,
       `Estado: ${estadoTicket}`,
-      `Usuario: ${cierre.usuario_nombre || cierre.usuario_correo || usuario?.correo || usuario?.nombre || "Administrador"}`,
+      `Usuario: ${cierre.usuario_nombre || cierre.usuario_correo || "Operador no registrado"}`,
       "------------------------------",
       "RECARGAS",
       `Efectivo: ${monedaTicket(recargaEfectivoTicket)}`,
@@ -9551,9 +9551,8 @@ if (institucionIdLogin) {
         usuario:
           cierre.usuario_nombre ||
           cierre.usuario_correo ||
-          usuario?.correo ||
-          usuario?.nombre ||
-          "Administrador",
+          "Operador no registrado",
+          // conservar operador del cierre
 
         recargas_efectivo: Number(cierre.recargas_efectivo || 0),
         recargas_transferencia: Number(
@@ -9720,7 +9719,7 @@ if (institucionIdLogin) {
         ["Fecha de cierre", fechaCierreTicket],
         ["Hora de cierre", horaCierreTicket],
         ["Estado", estadoTicket],
-        ["Usuario", cierre.usuario_nombre || cierre.usuario_correo || usuario?.correo || usuario?.nombre || "Administrador"],
+        ["Usuario", cierre.usuario_nombre || cierre.usuario_correo || "Operador no registrado"],
         ["Recargas efectivo", moneda(recargaEfectivoTicket)],
         ["Recargas transferencia", moneda(recargaTransferenciaTicket)],
         ["Subtotal recargas", moneda(subtotalRecargasTicket)],
@@ -10063,12 +10062,11 @@ if (institucionIdLogin) {
           ticket.cliente ||
           "Consumidor final",
         cajero:
+          ticket.operador_nombre ||
+          ticket.operador_correo ||
           ticket.cajero ||
-          ticket.usuario_nombre ||
-          ticket.usuario_correo ||
-          usuario?.correo ||
-          usuario?.nombre ||
-          "Administrador",
+          "Operador no registrado",
+          // operador real guardado en la venta
         metodo_pago:
           ticket.metodo_pago ||
           ticket.forma_pago ||
@@ -10194,12 +10192,11 @@ if (institucionIdLogin) {
           ticket.cliente ||
           "Consumidor final",
         cajero:
+          ticket.operador_nombre ||
+          ticket.operador_correo ||
           ticket.cajero ||
-          ticket.usuario_nombre ||
-          ticket.usuario_correo ||
-          usuario?.correo ||
-          usuario?.nombre ||
-          "Administrador",
+          "Operador no registrado",
+          // operador real guardado en la venta
         metodo_pago:
           ticket.metodo_pago ||
           ticket.forma_pago ||
@@ -10494,7 +10491,10 @@ if (institucionIdLogin) {
                   : ""
               }
               <div><strong>Cajero:</strong> ${escaparHtmlTicket(
-                usuario?.correo || usuario?.nombre || "Administrador"
+                ticket.operador_nombre ||
+                  ticket.operador_correo ||
+                  ticket.cajero ||
+                  "Operador no registrado"
               )}</div>
             </div>
 
