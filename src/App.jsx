@@ -1758,12 +1758,11 @@ const totalRecargasVista = useMemo(() => {
       const nombre = String(venta?.operador_visual || "").trim();
       if (!nombre || nombre === "Sistema") return;
 
+      // IMPORTANTE:
+      // las ventas históricas NO crean nuevas opciones en el selector.
+      // Solo se conserva la lista real de usuarios de la institución activa.
       if (!mapa.has(nombre)) {
-        mapa.set(nombre, {
-          id: Number(venta?.operador_id || 0) || null,
-          nombre,
-          correo: String(venta?.operador_correo || "").trim(),
-        });
+        return;
       }
     });
 
@@ -23188,6 +23187,11 @@ onClick={guardarEgreso}
                         <option value="">Selecciona</option>
                         {Number(institucionActivaId) === 1 ? (
                           <option value="BAR">BAR</option>
+                        ) : Number(institucionActivaId) === 2 ? (
+                          <>
+                            <option value="BAR PRINCIPAL">BAR PRINCIPAL</option>
+                            <option value="KIOSKO">KIOSKO</option>
+                          </>
                         ) : (
                           <option value="PRINCIPAL">Principal</option>
                         )}
