@@ -12247,189 +12247,536 @@ Disponible: ${formatearMoneda(
     )?.nombre ||
     "Institución";
 
+  const redondearValorCierre = (valor) =>
+    Math.round((Number(valor || 0) + Number.EPSILON) * 100) / 100;
+
+  const calcularDetalleFinancieroCierre = (cierre) => {
+    const ventasEfectivo = redondearValorCierre(cierre?.ventas_efectivo);
+    const ventasTransferencia = redondearValorCierre(cierre?.ventas_transferencia);
+    const ventasTarjeta = redondearValorCierre(cierre?.ventas_tarjeta);
+    const ventasSaldo = redondearValorCierre(cierre?.ventas_saldo);
+    const ventasCredito = redondearValorCierre(cierre?.ventas_credito);
+
+    const subtotalVentas = redondearValorCierre(
+      ventasEfectivo +
+        ventasTransferencia +
+        ventasTarjeta +
+        ventasSaldo +
+        ventasCredito
+    );
+
+    const recargasEfectivo = redondearValorCierre(cierre?.recargas_efectivo);
+    const recargasTransferencia = redondearValorCierre(cierre?.recargas_transferencia);
+    const subtotalRecargas = redondearValorCierre(
+      recargasEfectivo + recargasTransferencia
+    );
+
+    const egresos = redondearValorCierre(
+      cierre?.egresos_total ?? cierre?.subtotal_egresos
+    );
+
+    // CUADRE DE EFECTIVO:
+    // efectivo esperado = ventas efectivo + recargas efectivo - egresos
+    // diferencia efectivo = efectivo contado - efectivo esperado
+    const efectivoEsperado = redondearValorCierre(
+      ventasEfectivo + recargasEfectivo - egresos
+    );
+    const efectivoContado = redondearValorCierre(cierre?.efectivo_contado);
+    const diferenciaEfectivo = redondearValorCierre(
+      efectivoContado - efectivoEsperado
+    );
+
+    // CUADRE DE TRANSFERENCIAS:
+    // esperado = ventas transferencia + recargas transferencia
+    // contado/comprobado = transferencia_manual
+    const transferenciaEsperada = redondearValorCierre(
+      ventasTransferencia + recargasTransferencia
+    );
+    const transferenciaContada = redondearValorCierre(
+      cierre?.transferencia_manual
+    );
+    const diferenciaTransferencia = redondearValorCierre(
+      transferenciaContada - transferenciaEsperada
+    );
+
+    // CUADRE DE TARJETA:
+    // esperado = ventas tarjeta
+    // contado/comprobado = tarjeta_manual
+    const tarjetaEsperada = ventasTarjeta;
+    const tarjetaContada = redondearValorCierre(cierre?.tarjeta_manual);
+    const diferenciaTarjeta = redondearValorCierre(
+      tarjetaContada - tarjetaEsperada
+    );
+
+    const diferenciaGeneral = redondearValorCierre(
+      diferenciaEfectivo + diferenciaTransferencia + diferenciaTarjeta
+    );
+
+    // Se conserva la definición histórica de GRAN TOTAL:
+    // ventas + recargas. Los egresos se muestran aparte.
+    const granTotal = redondearValorCierre(subtotalVentas + subtotalRecargas);
+    const netoDespuesEgresos = redondearValorCierre(granTotal - egresos);
+
+    return {
+      ventasEfectivo,
+      ventasTransferencia,
+      ventasTarjeta,
+      ventasSaldo,
+      ventasCredito,
+      subtotalVentas,
+      recargasEfectivo,
+      recargasTransferencia,
+      subtotalRecargas,
+      egresos,
+      efectivoEsperado,
+      efectivoContado,
+      diferenciaEfectivo,
+      transferenciaEsperada,
+      transferenciaContada,
+      diferenciaTransferencia,
+      tarjetaEsperada,
+      tarjetaContada,
+      diferenciaTarjeta,
+      diferenciaGeneral,
+      granTotal,
+      netoDespuesEgresos,
+    };
+  };
+
+  const obtenerResumenCierreConsolidadoDetallado = () => {
+    const cierres = Array.isArray(cierreConsolidado?.puntos)
+      ? cierreConsolidado.puntos
+      : [];
+    const detalles = cierres.map(calcularDetalleFinancieroCierre);
+
+    const sumar = (campo) =>
+      redondearValorCierre(
+        detalles.reduce(
+          (total, detalle) => total + Number(detalle?.[campo] || 0),
+          0
+        )
+      );
+
+    return {
+      cantidadCierres: cierres.length,
+      ventasEfectivo: sumar("ventasEfectivo"),
+      ventasTransferencia: sumar("ventasTransferencia"),
+      ventasTarjeta: sumar("ventasTarjeta"),
+      ventasSaldo: sumar("ventasSaldo"),
+      ventasCredito: sumar("ventasCredito"),
+      subtotalVentas: sumar("subtotalVentas"),
+      recargasEfectivo: sumar("recargasEfectivo"),
+      recargasTransferencia: sumar("recargasTransferencia"),
+      subtotalRecargas: sumar("subtotalRecargas"),
+      egresos: sumar("egresos"),
+      efectivoEsperado: sumar("efectivoEsperado"),
+      efectivoContado: sumar("efectivoContado"),
+      diferenciaEfectivo: sumar("diferenciaEfectivo"),
+      transferenciaEsperada: sumar("transferenciaEsperada"),
+      transferenciaContada: sumar("transferenciaContada"),
+      diferenciaTransferencia: sumar("diferenciaTransferencia"),
+      tarjetaEsperada: sumar("tarjetaEsperada"),
+      tarjetaContada: sumar("tarjetaContada"),
+      diferenciaTarjeta: sumar("diferenciaTarjeta"),
+      diferenciaGeneral: sumar("diferenciaGeneral"),
+      granTotal: sumar("granTotal"),
+      netoDespuesEgresos: sumar("netoDespuesEgresos"),
+    };
+  };
+
   const construirFilasCierreConsolidado = () =>
-    (cierreConsolidado?.puntos || []).map((cierre) => ({
-      "Código cierre": obtenerCodigoCierre(cierre),
-      "Ubicación": cierre.punto_nombre || "-",
-      "Operador": cierre.usuario_nombre || cierre.usuario_correo || "-",
-      "Jornada": cierre.jornada_id ? `#${cierre.jornada_id}` : "-",
-      "Subtotal recargas": Number(subtotalRecargasCierre(cierre) || 0),
-      "Subtotal ventas": Number(subtotalVentasCierre(cierre) || 0),
-      "Subtotal egresos": Number(subtotalEgresosCierre(cierre) || 0),
-      "Efectivo esperado": Number(efectivoEsperadoCierre(cierre) || 0),
-      "Efectivo contado": Number(cierre.efectivo_contado || 0),
-      "Diferencia general": Number(cierre.diferencia_general || 0),
-      "Gran total": Number(granTotalCierre(cierre) || 0),
-    }));
+    (cierreConsolidado?.puntos || []).map((cierre) => {
+      const detalle = calcularDetalleFinancieroCierre(cierre);
+
+      return {
+        "Código cierre": obtenerCodigoCierre(cierre),
+        "Ubicación": cierre.punto_nombre || "-",
+        "Operador": cierre.usuario_nombre || cierre.usuario_correo || "-",
+        "Jornada": cierre.jornada_id ? `#${cierre.jornada_id}` : "-",
+
+        "Ventas efectivo": detalle.ventasEfectivo,
+        "Ventas transferencia": detalle.ventasTransferencia,
+        "Ventas tarjeta": detalle.ventasTarjeta,
+        "Ventas saldo": detalle.ventasSaldo,
+        "Ventas crédito": detalle.ventasCredito,
+        "SUBTOTAL VENTAS": detalle.subtotalVentas,
+
+        "Recargas efectivo": detalle.recargasEfectivo,
+        "Recargas transferencia": detalle.recargasTransferencia,
+        "SUBTOTAL RECARGAS": detalle.subtotalRecargas,
+
+        "SUBTOTAL EGRESOS": detalle.egresos,
+
+        "Efectivo esperado": detalle.efectivoEsperado,
+        "Efectivo contado": detalle.efectivoContado,
+        "Diferencia efectivo": detalle.diferenciaEfectivo,
+
+        "Transferencia esperada": detalle.transferenciaEsperada,
+        "Transferencia contada": detalle.transferenciaContada,
+        "Diferencia transferencia": detalle.diferenciaTransferencia,
+
+        "Tarjeta esperada": detalle.tarjetaEsperada,
+        "Tarjeta contada": detalle.tarjetaContada,
+        "Diferencia tarjeta": detalle.diferenciaTarjeta,
+
+        "DIFERENCIA GENERAL": detalle.diferenciaGeneral,
+        "GRAN TOTAL": detalle.granTotal,
+        "Neto después de egresos": detalle.netoDespuesEgresos,
+      };
+    });
 
   const descargarCierreConsolidadoExcel = () => {
     if (!cierreConsolidado) return;
 
-    const fecha = normalizarFechaISO(cierreConsolidado.fecha) || obtenerFechaEcuadorISO();
+    const fecha =
+      normalizarFechaISO(cierreConsolidado.fecha) || obtenerFechaEcuadorISO();
     const institucion = obtenerNombreInstitucionConsolidado();
     const codigo =
       cierreConsolidado.codigo_consolidado ||
       `CIE-TOTAL-${String(fecha).replace(/-/g, "")}`;
+    const resumen = obtenerResumenCierreConsolidadoDetallado();
 
     const resumenGeneral = [
-      ["CIERRE TOTAL DEL LOCAL"],
+      ["CIERRE TOTAL DEL LOCAL - DETALLE FINANCIERO"],
       ["Institución", institucion],
       ["Fecha", formatearSoloFecha(fecha)],
       ["Código consolidado", codigo],
-      ["Cierres incluidos", Number(cierreConsolidado.cantidad_cierres || 0)],
-      ["Subtotal recargas", Number(subtotalRecargasCierre(cierreConsolidado) || 0)],
-      ["Subtotal ventas", Number(subtotalVentasCierre(cierreConsolidado) || 0)],
-      ["Subtotal egresos", Number(subtotalEgresosCierre(cierreConsolidado) || 0)],
-      ["Efectivo esperado", Number(efectivoEsperadoCierre(cierreConsolidado) || 0)],
-      ["Efectivo contado", Number(cierreConsolidado.efectivo_contado || 0)],
-      ["Diferencia general", Number(cierreConsolidado.diferencia_general || 0)],
-      ["GRAN TOTAL", Number(granTotalCierre(cierreConsolidado) || 0)],
+      ["Cierres incluidos", resumen.cantidadCierres],
       [],
-      ["DETALLE POR UBICACIÓN"],
+      ["VENTAS"],
+      ["Ventas efectivo", resumen.ventasEfectivo],
+      ["Ventas transferencia", resumen.ventasTransferencia],
+      ["Ventas tarjeta", resumen.ventasTarjeta],
+      ["Ventas saldo", resumen.ventasSaldo],
+      ["Ventas crédito", resumen.ventasCredito],
+      ["SUBTOTAL VENTAS", resumen.subtotalVentas],
+      [],
+      ["RECARGAS"],
+      ["Recargas efectivo", resumen.recargasEfectivo],
+      ["Recargas transferencia", resumen.recargasTransferencia],
+      ["SUBTOTAL RECARGAS", resumen.subtotalRecargas],
+      [],
+      ["EGRESOS"],
+      ["SUBTOTAL EGRESOS", resumen.egresos],
+      [],
+      ["CUADRE DE EFECTIVO"],
+      ["Efectivo esperado", resumen.efectivoEsperado],
+      ["Efectivo contado", resumen.efectivoContado],
+      ["DIFERENCIA EFECTIVO", resumen.diferenciaEfectivo],
+      [],
+      ["CUADRE DE TRANSFERENCIAS"],
+      ["Transferencia esperada", resumen.transferenciaEsperada],
+      ["Transferencia contada/comprobada", resumen.transferenciaContada],
+      ["DIFERENCIA TRANSFERENCIA", resumen.diferenciaTransferencia],
+      [],
+      ["CUADRE DE TARJETA"],
+      ["Tarjeta esperada", resumen.tarjetaEsperada],
+      ["Tarjeta contada/comprobada", resumen.tarjetaContada],
+      ["DIFERENCIA TARJETA", resumen.diferenciaTarjeta],
+      [],
+      ["RESULTADO FINAL"],
+      ["DIFERENCIA GENERAL", resumen.diferenciaGeneral],
+      ["GRAN TOTAL", resumen.granTotal],
+      ["NETO DESPUÉS DE EGRESOS", resumen.netoDespuesEgresos],
     ];
 
-    const worksheet = XLSX.utils.aoa_to_sheet(resumenGeneral);
-    const filas = construirFilasCierreConsolidado();
+    const hojaResumen = XLSX.utils.aoa_to_sheet(resumenGeneral);
+    hojaResumen["!cols"] = [{ wch: 34 }, { wch: 22 }];
 
-    if (filas.length) {
-      XLSX.utils.sheet_add_json(worksheet, filas, {
-        origin: resumenGeneral.length,
-        skipHeader: false,
-      });
-    }
-
-    worksheet["!cols"] = [
-      { wch: 24 },
-      { wch: 22 },
-      { wch: 28 },
-      { wch: 12 },
-      { wch: 18 },
-      { wch: 18 },
-      { wch: 18 },
-      { wch: 18 },
-      { wch: 18 },
-      { wch: 18 },
-      { wch: 18 },
-    ];
-
-    const moneda = '"$"#,##0.00';
-    Object.keys(worksheet).forEach((celda) => {
+    const moneda = '"$"#,##0.00;[Red]-"$"#,##0.00';
+    Object.keys(hojaResumen).forEach((celda) => {
       if (celda.startsWith("!")) return;
       const ref = XLSX.utils.decode_cell(celda);
-      if (ref.c === 1 && ref.r >= 5 && ref.r <= 11) {
-        worksheet[celda].z = moneda;
+      if (ref.c === 1 && ref.r >= 6) {
+        const valor = hojaResumen[celda]?.v;
+        if (typeof valor === "number") hojaResumen[celda].z = moneda;
       }
-      if (ref.r >= resumenGeneral.length + 1 && ref.c >= 4 && ref.c <= 10) {
-        worksheet[celda].z = moneda;
+    });
+
+    const filas = construirFilasCierreConsolidado();
+    const hojaDetalle = XLSX.utils.json_to_sheet(filas);
+
+    hojaDetalle["!cols"] = [
+      { wch: 24 }, { wch: 18 }, { wch: 28 }, { wch: 12 },
+      { wch: 16 }, { wch: 20 }, { wch: 16 }, { wch: 15 }, { wch: 16 }, { wch: 18 },
+      { wch: 17 }, { wch: 22 }, { wch: 18 },
+      { wch: 18 },
+      { wch: 18 }, { wch: 18 }, { wch: 19 },
+      { wch: 22 }, { wch: 22 }, { wch: 24 },
+      { wch: 18 }, { wch: 18 }, { wch: 20 },
+      { wch: 20 }, { wch: 18 }, { wch: 22 },
+    ];
+
+    Object.keys(hojaDetalle).forEach((celda) => {
+      if (celda.startsWith("!")) return;
+      const ref = XLSX.utils.decode_cell(celda);
+      if (ref.r >= 1 && ref.c >= 4) {
+        const valor = hojaDetalle[celda]?.v;
+        if (typeof valor === "number") hojaDetalle[celda].z = moneda;
       }
     });
 
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Cierre total");
+    XLSX.utils.book_append_sheet(workbook, hojaResumen, "Resumen local");
+    XLSX.utils.book_append_sheet(workbook, hojaDetalle, "Detalle operadores");
+
     XLSX.writeFile(
       workbook,
-      `cierre_total_${String(institucion).replace(/[^a-z0-9]+/gi, "_")}_${fecha}.xlsx`
+      `cierre_total_detallado_${String(institucion).replace(
+        /[^a-z0-9]+/gi,
+        "_"
+      )}_${fecha}.xlsx`
     );
   };
 
   const descargarCierreConsolidadoPdf = () => {
     if (!cierreConsolidado) return;
 
-    const fecha = normalizarFechaISO(cierreConsolidado.fecha) || obtenerFechaEcuadorISO();
+    const fecha =
+      normalizarFechaISO(cierreConsolidado.fecha) || obtenerFechaEcuadorISO();
     const institucion = obtenerNombreInstitucionConsolidado();
     const codigo =
       cierreConsolidado.codigo_consolidado ||
       `CIE-TOTAL-${String(fecha).replace(/-/g, "")}`;
+    const resumen = obtenerResumenCierreConsolidadoDetallado();
 
     const doc = new jsPDF({
-      orientation: "landscape",
+      orientation: "portrait",
       unit: "mm",
       format: "a4",
     });
 
-    doc.setFontSize(18);
-    doc.text("CIERRE TOTAL DEL LOCAL", 14, 16);
-    doc.setFontSize(10);
+    doc.setFontSize(17);
+    doc.text("CIERRE TOTAL DEL LOCAL - DETALLE FINANCIERO", 14, 16);
+    doc.setFontSize(9.5);
     doc.text(`Institución: ${institucion}`, 14, 23);
     doc.text(`Fecha: ${formatearSoloFecha(fecha)}`, 14, 29);
     doc.text(`Código consolidado: ${codigo}`, 14, 35);
+    doc.text(`Cierres incluidos: ${resumen.cantidadCierres}`, 14, 41);
 
-    const resumen = [
-      ["Cierres incluidos", String(Number(cierreConsolidado.cantidad_cierres || 0))],
-      ["Subtotal recargas", formatearMoneda(subtotalRecargasCierre(cierreConsolidado))],
-      ["Subtotal ventas", formatearMoneda(subtotalVentasCierre(cierreConsolidado))],
-      ["Subtotal egresos", formatearMoneda(subtotalEgresosCierre(cierreConsolidado))],
-      ["Efectivo esperado", formatearMoneda(efectivoEsperadoCierre(cierreConsolidado))],
-      ["Efectivo contado", formatearMoneda(cierreConsolidado.efectivo_contado)],
-      ["Diferencia general", formatearMoneda(cierreConsolidado.diferencia_general)],
-      ["GRAN TOTAL", formatearMoneda(granTotalCierre(cierreConsolidado))],
+    const resumenPdf = [
+      ["VENTAS", "", ""],
+      ["Ventas efectivo", formatearMoneda(resumen.ventasEfectivo), ""],
+      ["Ventas transferencia", formatearMoneda(resumen.ventasTransferencia), ""],
+      ["Ventas tarjeta", formatearMoneda(resumen.ventasTarjeta), ""],
+      ["Ventas saldo", formatearMoneda(resumen.ventasSaldo), ""],
+      ["Ventas crédito", formatearMoneda(resumen.ventasCredito), ""],
+      ["SUBTOTAL VENTAS", formatearMoneda(resumen.subtotalVentas), ""],
+
+      ["RECARGAS", "", ""],
+      ["Recargas efectivo", formatearMoneda(resumen.recargasEfectivo), ""],
+      ["Recargas transferencia", formatearMoneda(resumen.recargasTransferencia), ""],
+      ["SUBTOTAL RECARGAS", formatearMoneda(resumen.subtotalRecargas), ""],
+
+      ["EGRESOS", "", ""],
+      ["SUBTOTAL EGRESOS", formatearMoneda(resumen.egresos), ""],
+
+      ["CUADRE", "ESPERADO", "CONTADO / DIFERENCIA"],
+      [
+        "Efectivo",
+        formatearMoneda(resumen.efectivoEsperado),
+        `${formatearMoneda(resumen.efectivoContado)} / ${formatearMoneda(
+          resumen.diferenciaEfectivo
+        )}`,
+      ],
+      [
+        "Transferencias",
+        formatearMoneda(resumen.transferenciaEsperada),
+        `${formatearMoneda(
+          resumen.transferenciaContada
+        )} / ${formatearMoneda(resumen.diferenciaTransferencia)}`,
+      ],
+      [
+        "Tarjeta",
+        formatearMoneda(resumen.tarjetaEsperada),
+        `${formatearMoneda(resumen.tarjetaContada)} / ${formatearMoneda(
+          resumen.diferenciaTarjeta
+        )}`,
+      ],
+
+      ["RESULTADO FINAL", "", ""],
+      ["DIFERENCIA GENERAL", formatearMoneda(resumen.diferenciaGeneral), ""],
+      ["GRAN TOTAL", formatearMoneda(resumen.granTotal), ""],
+      [
+        "NETO DESPUÉS DE EGRESOS",
+        formatearMoneda(resumen.netoDespuesEgresos),
+        "",
+      ],
     ];
 
     autoTable(doc, {
-      startY: 41,
-      head: [["Resumen", "Valor"]],
-      body: resumen,
-      styles: { fontSize: 9 },
+      startY: 47,
+      head: [["Concepto", "Valor", "Detalle"]],
+      body: resumenPdf,
+      styles: { fontSize: 8.5, cellPadding: 1.8 },
       headStyles: { fontStyle: "bold" },
       columnStyles: {
-        0: { cellWidth: 48 },
-        1: { cellWidth: 38, halign: "right" },
+        0: { cellWidth: 62 },
+        1: { cellWidth: 42, halign: "right" },
+        2: { cellWidth: 76, halign: "right" },
       },
-      margin: { left: 14 },
-      tableWidth: 86,
+      margin: { left: 14, right: 14 },
+      didParseCell: (data) => {
+        const texto = String(data.cell.raw || "");
+        if (
+          [
+            "VENTAS",
+            "RECARGAS",
+            "EGRESOS",
+            "CUADRE",
+            "RESULTADO FINAL",
+          ].includes(texto)
+        ) {
+          data.cell.styles.fontStyle = "bold";
+          data.cell.styles.fillColor = [235, 241, 250];
+        }
+
+        if (
+          texto.startsWith("SUBTOTAL") ||
+          texto === "DIFERENCIA GENERAL" ||
+          texto === "GRAN TOTAL" ||
+          texto === "NETO DESPUÉS DE EGRESOS"
+        ) {
+          data.cell.styles.fontStyle = "bold";
+        }
+      },
     });
 
-    const filas = (cierreConsolidado.puntos || []).map((cierre) => [
-      obtenerCodigoCierre(cierre),
-      cierre.punto_nombre || "-",
-      cierre.usuario_nombre || cierre.usuario_correo || "-",
-      cierre.jornada_id ? `#${cierre.jornada_id}` : "-",
-      formatearMoneda(subtotalRecargasCierre(cierre)),
-      formatearMoneda(subtotalVentasCierre(cierre)),
-      formatearMoneda(subtotalEgresosCierre(cierre)),
-      formatearMoneda(efectivoEsperadoCierre(cierre)),
-      formatearMoneda(cierre.efectivo_contado),
-      formatearMoneda(cierre.diferencia_general),
-      formatearMoneda(granTotalCierre(cierre)),
-    ]);
+    const cierres = Array.isArray(cierreConsolidado.puntos)
+      ? cierreConsolidado.puntos
+      : [];
 
-    autoTable(doc, {
-      startY: 112,
-      head: [[
-        "Código",
-        "Ubicación",
-        "Operador",
-        "Jornada",
-        "Recargas",
-        "Ventas",
-        "Egresos",
-        "Ef. esperado",
-        "Ef. contado",
-        "Diferencia",
-        "Gran total",
-      ]],
-      body:
-        filas.length > 0
-          ? filas
-          : [["-", "-", "Sin cierres", "-", "$0.00", "$0.00", "$0.00", "$0.00", "$0.00", "$0.00", "$0.00"]],
-      styles: { fontSize: 7.5, cellPadding: 1.7 },
-      headStyles: { fontStyle: "bold" },
-      margin: { left: 8, right: 8 },
+    cierres.forEach((cierre, indice) => {
+      const detalle = calcularDetalleFinancieroCierre(cierre);
+
+      if (indice > 0) doc.addPage();
+
+      const yInicio =
+        indice === 0
+          ? Math.max((doc.lastAutoTable?.finalY || 47) + 10, 155)
+          : 20;
+
+      doc.setFontSize(12);
+      doc.text(
+        `${cierre.punto_nombre || "UBICACIÓN"} - ${
+          cierre.usuario_nombre || cierre.usuario_correo || "OPERADOR"
+        }`,
+        14,
+        yInicio
+      );
+      doc.setFontSize(8.5);
+      doc.text(`Código: ${obtenerCodigoCierre(cierre)}`, 14, yInicio + 6);
+
+      const cuerpoOperador = [
+        ["VENTAS", ""],
+        ["Ventas efectivo", formatearMoneda(detalle.ventasEfectivo)],
+        ["Ventas transferencia", formatearMoneda(detalle.ventasTransferencia)],
+        ["Ventas tarjeta", formatearMoneda(detalle.ventasTarjeta)],
+        ["Ventas saldo", formatearMoneda(detalle.ventasSaldo)],
+        ["Ventas crédito", formatearMoneda(detalle.ventasCredito)],
+        ["SUBTOTAL VENTAS", formatearMoneda(detalle.subtotalVentas)],
+
+        ["RECARGAS", ""],
+        ["Recargas efectivo", formatearMoneda(detalle.recargasEfectivo)],
+        ["Recargas transferencia", formatearMoneda(detalle.recargasTransferencia)],
+        ["SUBTOTAL RECARGAS", formatearMoneda(detalle.subtotalRecargas)],
+
+        ["EGRESOS", ""],
+        ["SUBTOTAL EGRESOS", formatearMoneda(detalle.egresos)],
+
+        ["CUADRE DE EFECTIVO", ""],
+        ["Efectivo esperado", formatearMoneda(detalle.efectivoEsperado)],
+        ["Efectivo contado", formatearMoneda(detalle.efectivoContado)],
+        ["DIFERENCIA EFECTIVO", formatearMoneda(detalle.diferenciaEfectivo)],
+
+        ["CUADRE DE TRANSFERENCIAS", ""],
+        [
+          "Transferencia esperada",
+          formatearMoneda(detalle.transferenciaEsperada),
+        ],
+        [
+          "Transferencia contada/comprobada",
+          formatearMoneda(detalle.transferenciaContada),
+        ],
+        [
+          "DIFERENCIA TRANSFERENCIA",
+          formatearMoneda(detalle.diferenciaTransferencia),
+        ],
+
+        ["CUADRE DE TARJETA", ""],
+        ["Tarjeta esperada", formatearMoneda(detalle.tarjetaEsperada)],
+        [
+          "Tarjeta contada/comprobada",
+          formatearMoneda(detalle.tarjetaContada),
+        ],
+        ["DIFERENCIA TARJETA", formatearMoneda(detalle.diferenciaTarjeta)],
+
+        ["RESULTADO", ""],
+        ["DIFERENCIA GENERAL", formatearMoneda(detalle.diferenciaGeneral)],
+        ["GRAN TOTAL", formatearMoneda(detalle.granTotal)],
+        [
+          "NETO DESPUÉS DE EGRESOS",
+          formatearMoneda(detalle.netoDespuesEgresos),
+        ],
+      ];
+
+      autoTable(doc, {
+        startY: yInicio + 10,
+        head: [["Concepto", "Valor"]],
+        body: cuerpoOperador,
+        styles: { fontSize: 8.1, cellPadding: 1.5 },
+        columnStyles: {
+          0: { cellWidth: 105 },
+          1: { cellWidth: 70, halign: "right" },
+        },
+        margin: { left: 14, right: 14 },
+        didParseCell: (data) => {
+          const texto = String(data.cell.raw || "");
+          if (
+            [
+              "VENTAS",
+              "RECARGAS",
+              "EGRESOS",
+              "CUADRE DE EFECTIVO",
+              "CUADRE DE TRANSFERENCIAS",
+              "CUADRE DE TARJETA",
+              "RESULTADO",
+            ].includes(texto)
+          ) {
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.fillColor = [241, 245, 249];
+          }
+
+          if (
+            texto.startsWith("SUBTOTAL") ||
+            texto.startsWith("DIFERENCIA") ||
+            texto === "GRAN TOTAL" ||
+            texto === "NETO DESPUÉS DE EGRESOS"
+          ) {
+            data.cell.styles.fontStyle = "bold";
+          }
+        },
+      });
     });
 
     const paginas = doc.getNumberOfPages();
     for (let pagina = 1; pagina <= paginas; pagina += 1) {
       doc.setPage(pagina);
-      doc.setFontSize(8);
+      doc.setFontSize(7.5);
       doc.text(
-        `POS NUBE · ${institucion} · ${formatearSoloFecha(fecha)} · Página ${pagina} de ${paginas}`,
+        `POS NUBE · ${institucion} · ${formatearSoloFecha(
+          fecha
+        )} · Página ${pagina} de ${paginas}`,
         14,
-        202
+        289
       );
     }
 
     doc.save(
-      `cierre_total_${String(institucion).replace(/[^a-z0-9]+/gi, "_")}_${fecha}.pdf`
+      `cierre_total_detallado_${String(institucion).replace(
+        /[^a-z0-9]+/gi,
+        "_"
+      )}_${fecha}.pdf`
     );
   };
 
@@ -12443,6 +12790,7 @@ Disponible: ${formatearMoneda(
 
     descargarCierreConsolidadoExcel();
   };
+
 
   const verCierre = async (cierre) => {
     try {
@@ -15628,7 +15976,7 @@ if (!usuario) {
         padding:12
       }}>
         <div style={{
-          width:"min(1000px,96vw)",
+          width:"min(1180px,96vw)",
           maxHeight:"94vh",
           overflowY:"auto",
           background:"#fff",
@@ -15643,6 +15991,9 @@ if (!usuario) {
               <h2 style={{margin:0}}>Cierre total del local</h2>
               <p style={{margin:"6px 0 0",color:"#64748b"}}>
                 {institucionActiva?.nombre || INSTITUCIONES.find(i=>Number(i.id)===Number(obtenerInstitucionActivaId()))?.nombre || "Institución"} · {formatearSoloFecha(cierreConsolidado.fecha)}
+              </p>
+              <p style={{margin:"5px 0 0",fontSize:13,color:"#475569"}}>
+                Detalle consolidado por operador, forma de pago, recargas, egresos y cuadre.
               </p>
             </div>
             <div style={{
@@ -15684,65 +16035,181 @@ if (!usuario) {
             </div>
           </div>
 
-          <div style={{
-            display:"grid",
-            gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",
-            gap:10,
-            marginTop:18
-          }}>
-            <div style={styles.statCard}><span>Código consolidado</span><strong>{cierreConsolidado.codigo_consolidado || `CIE-TOTAL-${String(cierreConsolidado.fecha||"").replace(/-/g,"")}`}</strong></div>
-            <div style={styles.statCard}><span>Cierres incluidos</span><strong>{cierreConsolidado.cantidad_cierres || 0}</strong></div>
-            <div style={styles.statCard}><span>Subtotal recargas</span><strong>{formatearMoneda(subtotalRecargasCierre(cierreConsolidado))}</strong></div>
-            <div style={styles.statCard}><span>Subtotal ventas</span><strong>{formatearMoneda(subtotalVentasCierre(cierreConsolidado))}</strong></div>
-            <div style={styles.statCard}><span>Subtotal egresos</span><strong>{formatearMoneda(subtotalEgresosCierre(cierreConsolidado))}</strong></div>
-            <div style={styles.statCard}><span>Efectivo esperado</span><strong>{formatearMoneda(efectivoEsperadoCierre(cierreConsolidado))}</strong></div>
-            <div style={styles.statCard}><span>Efectivo contado</span><strong>{formatearMoneda(cierreConsolidado.efectivo_contado)}</strong></div>
-            <div style={styles.statCard}><span>Diferencia general</span><strong>{formatearMoneda(cierreConsolidado.diferencia_general)}</strong></div>
-            <div style={{...styles.statCard,border:"2px solid #1d4ed8"}}><span>GRAN TOTAL</span><strong>{formatearMoneda(granTotalCierre(cierreConsolidado))}</strong></div>
-          </div>
+          {(()=>{
+            const resumen = obtenerResumenCierreConsolidadoDetallado();
+            const stat = (titulo, valor, extra={}) => (
+              <div style={{...styles.statCard,...extra}}>
+                <span>{titulo}</span>
+                <strong>{typeof valor === "number" ? formatearMoneda(valor) : valor}</strong>
+              </div>
+            );
 
-          <h3 style={{marginTop:24}}>Cierres por ubicación</h3>
+            return (
+              <>
+                <div style={{
+                  display:"grid",
+                  gridTemplateColumns:"repeat(auto-fit,minmax(175px,1fr))",
+                  gap:10,
+                  marginTop:18
+                }}>
+                  {stat(
+                    "Código consolidado",
+                    cierreConsolidado.codigo_consolidado ||
+                      `CIE-TOTAL-${String(cierreConsolidado.fecha||"").replace(/-/g,"")}`
+                  )}
+                  {stat("Cierres incluidos", String(resumen.cantidadCierres))}
+                </div>
 
-          <div style={styles.tableWrap}>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Código cierre</th>
-                  <th style={styles.th}>Ubicación</th>
-                  <th style={styles.th}>Operador</th>
-                  <th style={styles.th}>Jornada</th>
-                  <th style={styles.th}>Subtotal recargas</th>
-                  <th style={styles.th}>Subtotal ventas</th>
-                  <th style={styles.th}>Subtotal egresos</th>
-                  <th style={styles.th}>Efectivo contado</th>
-                  <th style={styles.th}>GRAN TOTAL</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(cierreConsolidado.puntos||[]).length===0 ? (
-                  <tr>
-                    <td colSpan={9} style={styles.td}>
-                      Todavía no existen cierres por punto para esta fecha.
-                    </td>
-                  </tr>
-                ) : (
-                  (cierreConsolidado.puntos||[]).map((c)=>(
-                    <tr key={c.id}>
-                      <td style={{...styles.td,fontWeight:900,whiteSpace:"nowrap"}}>{obtenerCodigoCierre(c)}</td>
-                      <td style={{...styles.td,fontWeight:900}}>{c.punto_nombre || "-"}</td>
-                      <td style={styles.td}>{c.usuario_nombre || c.usuario_correo || "-"}</td>
-                      <td style={styles.td}>{c.jornada_id ? `#${c.jornada_id}` : "-"}</td>
-                      <td style={styles.td}>{formatearMoneda(subtotalRecargasCierre(c))}</td>
-                      <td style={styles.td}>{formatearMoneda(subtotalVentasCierre(c))}</td>
-                      <td style={styles.td}>{formatearMoneda(subtotalEgresosCierre(c))}</td>
-                      <td style={styles.td}>{formatearMoneda(c.efectivo_contado)}</td>
-                      <td style={{...styles.td,fontWeight:900}}>{formatearMoneda(granTotalCierre(c))}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                <h3 style={{margin:"22px 0 10px"}}>Ventas</h3>
+                <div style={{
+                  display:"grid",
+                  gridTemplateColumns:"repeat(auto-fit,minmax(165px,1fr))",
+                  gap:10
+                }}>
+                  {stat("Ventas efectivo", resumen.ventasEfectivo)}
+                  {stat("Ventas transferencia", resumen.ventasTransferencia)}
+                  {stat("Ventas tarjeta", resumen.ventasTarjeta)}
+                  {stat("Ventas saldo", resumen.ventasSaldo)}
+                  {stat("Ventas crédito", resumen.ventasCredito)}
+                  {stat("SUBTOTAL VENTAS", resumen.subtotalVentas, {border:"2px solid #94a3b8"})}
+                </div>
+
+                <h3 style={{margin:"22px 0 10px"}}>Recargas y egresos</h3>
+                <div style={{
+                  display:"grid",
+                  gridTemplateColumns:"repeat(auto-fit,minmax(175px,1fr))",
+                  gap:10
+                }}>
+                  {stat("Recargas efectivo", resumen.recargasEfectivo)}
+                  {stat("Recargas transferencia", resumen.recargasTransferencia)}
+                  {stat("SUBTOTAL RECARGAS", resumen.subtotalRecargas, {border:"2px solid #94a3b8"})}
+                  {stat("SUBTOTAL EGRESOS", resumen.egresos, {border:"2px solid #f59e0b"})}
+                </div>
+
+                <h3 style={{margin:"22px 0 10px"}}>Cuadre del local</h3>
+                <div style={{
+                  display:"grid",
+                  gridTemplateColumns:"repeat(auto-fit,minmax(175px,1fr))",
+                  gap:10
+                }}>
+                  {stat("Efectivo esperado", resumen.efectivoEsperado)}
+                  {stat("Efectivo contado", resumen.efectivoContado)}
+                  {stat("Diferencia efectivo", resumen.diferenciaEfectivo, {border:"2px solid #cbd5e1"})}
+
+                  {stat("Transferencia esperada", resumen.transferenciaEsperada)}
+                  {stat("Transferencia comprobada", resumen.transferenciaContada)}
+                  {stat("Diferencia transferencia", resumen.diferenciaTransferencia, {border:"2px solid #cbd5e1"})}
+
+                  {stat("Tarjeta esperada", resumen.tarjetaEsperada)}
+                  {stat("Tarjeta comprobada", resumen.tarjetaContada)}
+                  {stat("Diferencia tarjeta", resumen.diferenciaTarjeta, {border:"2px solid #cbd5e1"})}
+
+                  {stat("DIFERENCIA GENERAL", resumen.diferenciaGeneral, {border:"2px solid #ef4444"})}
+                  {stat("GRAN TOTAL", resumen.granTotal, {border:"2px solid #1d4ed8"})}
+                  {stat("NETO DESPUÉS DE EGRESOS", resumen.netoDespuesEgresos, {border:"2px solid #0f766e"})}
+                </div>
+              </>
+            );
+          })()}
+
+          <h3 style={{marginTop:26}}>Detalle por operador</h3>
+
+          {(cierreConsolidado.puntos||[]).length===0 ? (
+            <div style={{...styles.box,marginTop:10}}>
+              Todavía no existen cierres por punto para esta fecha.
+            </div>
+          ) : (
+            <div style={{display:"grid",gap:14}}>
+              {(cierreConsolidado.puntos||[]).map((c)=>{
+                const detalle = calcularDetalleFinancieroCierre(c);
+
+                return (
+                  <div
+                    key={c.id}
+                    style={{
+                      border:"1px solid #dbe4f0",
+                      borderRadius:14,
+                      padding:16,
+                      background:"#fff"
+                    }}
+                  >
+                    <div style={{
+                      display:"flex",
+                      justifyContent:"space-between",
+                      gap:12,
+                      flexWrap:"wrap",
+                      alignItems:"flex-start"
+                    }}>
+                      <div>
+                        <div style={{fontSize:18,fontWeight:900}}>
+                          {c.punto_nombre || "-"} · {c.usuario_nombre || c.usuario_correo || "-"}
+                        </div>
+                        <div style={{marginTop:4,fontSize:13,color:"#64748b"}}>
+                          {obtenerCodigoCierre(c)} {c.jornada_id ? `· Jornada #${c.jornada_id}` : ""}
+                        </div>
+                      </div>
+                      <div style={{fontWeight:900,fontSize:18}}>
+                        GRAN TOTAL {formatearMoneda(detalle.granTotal)}
+                      </div>
+                    </div>
+
+                    <div style={{
+                      display:"grid",
+                      gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",
+                      gap:12,
+                      marginTop:14
+                    }}>
+                      <div style={{...styles.statCard}}>
+                        <strong>VENTAS</strong>
+                        <span>Efectivo: {formatearMoneda(detalle.ventasEfectivo)}</span>
+                        <span>Transferencia: {formatearMoneda(detalle.ventasTransferencia)}</span>
+                        <span>Tarjeta: {formatearMoneda(detalle.ventasTarjeta)}</span>
+                        <span>Saldo: {formatearMoneda(detalle.ventasSaldo)}</span>
+                        <span>Crédito: {formatearMoneda(detalle.ventasCredito)}</span>
+                        <strong>Subtotal: {formatearMoneda(detalle.subtotalVentas)}</strong>
+                      </div>
+
+                      <div style={{...styles.statCard}}>
+                        <strong>RECARGAS / EGRESOS</strong>
+                        <span>Recargas efectivo: {formatearMoneda(detalle.recargasEfectivo)}</span>
+                        <span>Recargas transferencia: {formatearMoneda(detalle.recargasTransferencia)}</span>
+                        <strong>Subtotal recargas: {formatearMoneda(detalle.subtotalRecargas)}</strong>
+                        <span>Egresos: {formatearMoneda(detalle.egresos)}</span>
+                      </div>
+
+                      <div style={{...styles.statCard}}>
+                        <strong>CUADRE EFECTIVO</strong>
+                        <span>Esperado: {formatearMoneda(detalle.efectivoEsperado)}</span>
+                        <span>Contado: {formatearMoneda(detalle.efectivoContado)}</span>
+                        <strong>Diferencia: {formatearMoneda(detalle.diferenciaEfectivo)}</strong>
+                      </div>
+
+                      <div style={{...styles.statCard}}>
+                        <strong>CUADRE TRANSFERENCIAS</strong>
+                        <span>Esperado: {formatearMoneda(detalle.transferenciaEsperada)}</span>
+                        <span>Comprobado: {formatearMoneda(detalle.transferenciaContada)}</span>
+                        <strong>Diferencia: {formatearMoneda(detalle.diferenciaTransferencia)}</strong>
+                      </div>
+
+                      <div style={{...styles.statCard}}>
+                        <strong>CUADRE TARJETA</strong>
+                        <span>Esperado: {formatearMoneda(detalle.tarjetaEsperada)}</span>
+                        <span>Comprobado: {formatearMoneda(detalle.tarjetaContada)}</span>
+                        <strong>Diferencia: {formatearMoneda(detalle.diferenciaTarjeta)}</strong>
+                      </div>
+
+                      <div style={{...styles.statCard,border:"2px solid #1d4ed8"}}>
+                        <strong>RESULTADO</strong>
+                        <span>Diferencia general: {formatearMoneda(detalle.diferenciaGeneral)}</span>
+                        <span>Gran total: {formatearMoneda(detalle.granTotal)}</span>
+                        <strong>Neto después de egresos: {formatearMoneda(detalle.netoDespuesEgresos)}</strong>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     ), document.body)}
