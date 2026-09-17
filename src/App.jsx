@@ -1257,10 +1257,7 @@ const [mostrarCrearCierre, setMostrarCrearCierre] = useState(false);
 // Selector administrativo de caja pendiente.
 // Solo sirve para elegir operador + punto; NO crea jornada para ADMIN/SUPER_ADMIN.
 const [mostrarSeleccionCajaAdminCierre, setMostrarSeleccionCajaAdminCierre] = useState(false);
-const [fechaSeleccionCierreAdmin, setFechaSeleccionCierreAdmin] = useState(() => obtenerFechaEcuadorISO());
-const [cajasSeleccionCierreAdmin, setCajasSeleccionCierreAdmin] = useState([]);
-const [cargandoCajasSeleccionCierreAdmin, setCargandoCajasSeleccionCierreAdmin] = useState(false);
-const [consultaCajasCierreAdminRealizada, setConsultaCajasCierreAdminRealizada] = useState(false);
+const [fechaCierreAdminSeleccionada, setFechaCierreAdminSeleccionada] = useState(() => obtenerFechaEcuadorISO());
 const [cierreDetalle, setCierreDetalle] = useState(null);
 const [guardandoCierre, setGuardandoCierre] = useState(false);
 const [cargandoCierres, setCargandoCierres] = useState(false);
@@ -11885,55 +11882,6 @@ Disponible: ${formatearMoneda(
     }
   };
 
-  const cargarCajasCierreAdminPorFecha = async () => {
-    try {
-      const fechaObjetivo = normalizarFechaISO(fechaSeleccionCierreAdmin);
-      if (!fechaObjetivo) {
-        alert("Selecciona una fecha válida.");
-        return;
-      }
-      if (fechaObjetivo > obtenerFechaEcuadorISO()) {
-        alert("No se puede crear un cierre para una fecha futura.");
-        return;
-      }
-
-      const token = localStorage.getItem("token");
-      const institucionId = obtenerInstitucionActivaId();
-      if (!token || !institucionId) {
-        alert("Sesión o institución no válida.");
-        return;
-      }
-
-      setCargandoCajasSeleccionCierreAdmin(true);
-      setConsultaCajasCierreAdminRealizada(false);
-
-      const params = new URLSearchParams({
-        institucion_id: String(institucionId),
-        fecha: fechaObjetivo,
-      });
-
-      const respuesta = await fetch(
-        `${API_URL}/api/cierres/pendientes?${params.toString()}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          cache: "no-store",
-        }
-      );
-      const data = await respuesta.json();
-      if (!respuesta.ok) {
-        throw new Error(data?.message || data?.error || "No se pudieron consultar las cajas pendientes.");
-      }
-
-      setCajasSeleccionCierreAdmin(Array.isArray(data) ? data : []);
-      setConsultaCajasCierreAdminRealizada(true);
-    } catch (error) {
-      console.error("Error consultando cajas ADMIN por fecha:", error);
-      alert(error.message || "No se pudieron consultar las cajas pendientes.");
-    } finally {
-      setCargandoCajasSeleccionCierreAdmin(false);
-    }
-  };
-
   const abrirCajaPendienteDesdeListado = async (caja) => {
     if (!caja?.id) return;
 
@@ -14342,14 +14290,113 @@ if (!usuario) {
         )}
 
         {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+          <input
+            type="date"
+            value={fechaCierreAdminSeleccionada}
+            max={obtenerFechaEcuadorISO()}
+            onChange={(e) => setFechaCierreAdminSeleccionada(e.target.value)}
+            style={{...styles.input,width:165,minWidth:165,padding:"8px 10px"}}
+            title="Fecha que desea cerrar"
+            aria-label="Fecha que desea cerrar"
+          />
+        )}
+
+        {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
           <button
             type="button"
             style={styles.button}
-            onClick={() => {
-              setFechaSeleccionCierreAdmin(obtenerFechaEcuadorISO());
-              setCajasSeleccionCierreAdmin([]);
-              setConsultaCajasCierreAdminRealizada(false);
-              setMostrarSeleccionCajaAdminCierre(true);
+            onClick={async () => {
+              try {
+                const fechaObjetivo = normalizarFechaISO(fechaCierreAdminSeleccionada);
+                const hoyEcuador = obtenerFechaEcuadorISO();
+
+                if (!fechaObjetivo) {
+                  alert("Selecciona una fecha válida en el calendario.");
+                  return;
+                }
+
+                if (fechaObjetivo > hoyEcuador) {
+                  alert("No se puede crear un cierre para una fecha futura.");
+                  return;
+                }
+
+                const token = localStorage.getItem("token");
+                const institucionId = obtenerInstitucionActivaId();
+
+                if (!token || !institucionId) {
+                  alert("Sesión o institución no válida.");
+                  return;
+                }
+
+                const params = new URLSearchParams({
+                  institucion_id: String(institucionId),
+                  fecha: fechaObjetivo,
+                });
+
+                const respuesta = await fetch(
+                  `${API_URL}/api/cierres/pendientes?${params.toString()}`,
+                  {
+                    headers: { Authorization: `Bearer ${token}` },
+                    cache: "no-store",
+                  }
+                );
+
+                const data = await respuesta.json();
+
+                if (!respuesta.ok) {
+                  throw new Error(
+                    data?.message ||
+                    data?.error ||
+                    "No se pudieron consultar las cajas pendientes."
+                  );
+                }
+
+                const cajasDisponibles = Array.isArray(data) ? data : [];
+
+                if (cajasDisponibles.length === 0) {
+                  alert(`No existen movimientos pendientes de cierre para ${fechaObjetivo}.`);
+                  return;
+                }
+
+                if (cajasDisponibles.length === 1) {
+                  await abrirCajaPendienteDesdeListado(cajasDisponibles[0]);
+                  return;
+                }
+
+                const detalleOpciones = cajasDisponibles
+                  .map(
+                    (caja, indice) =>
+                      `${indice + 1}. ${caja.punto_nombre || "PUNTO"} - ${
+                        caja.usuario_nombre || caja.usuario_correo || "Operador"
+                      }`
+                  )
+                  .join("\n");
+
+                const opcionIngresada = window.prompt(
+                  `Selecciona la caja que deseas cerrar para ${fechaObjetivo}:\n\n${detalleOpciones}\n\nEscribe el número de la opción.`,
+                  "1"
+                );
+
+                if (opcionIngresada === null) return;
+
+                const indiceSeleccionado = Number(opcionIngresada) - 1;
+
+                if (
+                  !Number.isInteger(indiceSeleccionado) ||
+                  indiceSeleccionado < 0 ||
+                  indiceSeleccionado >= cajasDisponibles.length
+                ) {
+                  alert("La opción seleccionada no es válida.");
+                  return;
+                }
+
+                await abrirCajaPendienteDesdeListado(
+                  cajasDisponibles[indiceSeleccionado]
+                );
+              } catch (error) {
+                console.error("Error preparando cierre ADMIN por fecha:", error);
+                alert(error.message || "No se pudo preparar el cierre de caja.");
+              }
             }}
           >
             Crear cierre de caja
@@ -15028,7 +15075,7 @@ if (!usuario) {
             <div>
               <h2 style={{margin:0}}>Crear cierre de caja</h2>
               <p style={{margin:"7px 0 0",color:"#64748b",lineHeight:1.45}}>
-                Selecciona la fecha en el calendario y luego la caja real que deseas cerrar. ADMIN puede supervisar todas las ubicaciones, pero sus movimientos propios pertenecen a ADMINISTRACIÓN.
+                Selecciona la caja real que deseas cerrar. El cierre se calcula por operador + punto + período y no crea una jornada para el administrador.
               </p>
             </div>
             <button
@@ -15040,78 +15087,41 @@ if (!usuario) {
             </button>
           </div>
 
-          <div style={{display:"grid",gridTemplateColumns:"minmax(220px,1fr) auto",gap:10,alignItems:"end",marginTop:18}}>
-            <div style={styles.filterField}>
-              <label style={styles.label}>Fecha a cerrar</label>
-              <input
-                type="date"
-                value={fechaSeleccionCierreAdmin}
-                max={obtenerFechaEcuadorISO()}
-                onChange={(e) => {
-                  setFechaSeleccionCierreAdmin(e.target.value);
-                  setCajasSeleccionCierreAdmin([]);
-                  setConsultaCajasCierreAdminRealizada(false);
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:12,marginTop:18}}>
+            {cajasPendientesVisuales.map((caja) => (
+              <div
+                key={`selector-cierre-admin-${caja.id}`}
+                style={{
+                  border:"1px solid #cbd5e1",
+                  borderRadius:12,
+                  padding:14,
+                  background:"#f8fafc",
                 }}
-                style={styles.input}
-              />
-            </div>
-            <button
-              type="button"
-              style={{...styles.button,minHeight:44}}
-              onClick={cargarCajasCierreAdminPorFecha}
-              disabled={cargandoCajasSeleccionCierreAdmin || !fechaSeleccionCierreAdmin}
-            >
-              {cargandoCajasSeleccionCierreAdmin ? "Buscando..." : "Buscar cajas"}
-            </button>
-          </div>
-
-          {consultaCajasCierreAdminRealizada && cajasSeleccionCierreAdmin.length === 0 && (
-            <div style={{marginTop:18,padding:14,border:"1px solid #cbd5e1",borderRadius:12,background:"#f8fafc",color:"#475569",fontWeight:800}}>
-              No existen movimientos pendientes de cierre para {formatearSoloFecha(fechaSeleccionCierreAdmin)}.
-            </div>
-          )}
-
-          {cajasSeleccionCierreAdmin.length > 0 && (
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:12,marginTop:18}}>
-              {cajasSeleccionCierreAdmin.map((caja) => (
-                <div
-                  key={`selector-cierre-admin-${caja.id}-${caja.punto_nombre || "punto"}`}
-                  style={{
-                    border:"1px solid #cbd5e1",
-                    borderRadius:12,
-                    padding:14,
-                    background: ["ADMIN","SUPER_ADMIN"].includes(String(caja?.usuario_rol || "").trim().toUpperCase())
-                      ? "#eff6ff"
-                      : "#f8fafc",
-                  }}
-                >
-                  <div style={{fontWeight:1000,fontSize:16,color:"#0f172a"}}>
-                    {caja.punto_nombre || "PUNTO"}
-                  </div>
-                  <div style={{fontSize:14,color:"#334155",marginTop:6,lineHeight:1.45}}>
-                    <strong>Operador:</strong>{" "}
-                    {caja.usuario_nombre || caja.usuario_correo || "Operador"}
-                  </div>
-                  <div style={{fontSize:13,color:"#64748b",marginTop:4}}>
-                    Rol: {caja.usuario_rol || "-"}
-                  </div>
-                  <div style={{fontSize:13,color:"#64748b",marginTop:4}}>
-                    Fecha: {formatearSoloFecha(caja.fecha_operativa_texto || caja.fecha_operativa || fechaSeleccionCierreAdmin)}
-                  </div>
-                  <button
-                    type="button"
-                    style={{...styles.button,width:"100%",marginTop:12}}
-                    onClick={async () => {
-                      setMostrarSeleccionCajaAdminCierre(false);
-                      await abrirCajaPendienteDesdeListado(caja);
-                    }}
-                  >
-                    Crear cierre de esta caja
-                  </button>
+              >
+                <div style={{fontWeight:1000,fontSize:16,color:"#0f172a"}}>
+                  {caja.punto_nombre || "PUNTO"}
                 </div>
-              ))}
-            </div>
-          )}
+                <div style={{fontSize:14,color:"#334155",marginTop:6,lineHeight:1.45}}>
+                  <strong>Operador:</strong>{" "}
+                  {caja.usuario_nombre || caja.usuario_correo || "Operador"}
+                </div>
+                <div style={{fontSize:13,color:"#64748b",marginTop:4}}>
+                  Fecha: {formatearSoloFecha(
+                    caja.fecha_operativa_texto ||
+                    caja.fecha_operativa ||
+                    obtenerFechaEcuadorISO()
+                  )}
+                </div>
+                <button
+                  type="button"
+                  style={{...styles.button,width:"100%",marginTop:12}}
+                  onClick={() => abrirCajaPendienteDesdeListado(caja)}
+                >
+                  Crear cierre de esta caja
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       </div>,
       document.body
