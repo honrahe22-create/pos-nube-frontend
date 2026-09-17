@@ -1867,6 +1867,7 @@ const totalRecargasVista = useMemo(() => {
       lista = lista.filter((venta) => {
         const metodo = (venta.metodo_visual || "").toLowerCase();
         const alumno = (venta.alumno_nombre || "").toLowerCase();
+        const operador = (venta.operador_visual || "").toLowerCase();
         const observacion = (venta.observacion || "").toLowerCase();
         const id = String(venta.id || "");
         const total = String(venta.total || "");
@@ -1874,6 +1875,7 @@ const totalRecargasVista = useMemo(() => {
         return (
           metodo.includes(texto) ||
           alumno.includes(texto) ||
+          operador.includes(texto) ||
           observacion.includes(texto) ||
           id.includes(texto) ||
           total.includes(texto)
@@ -5342,7 +5344,8 @@ const exportarVentasExcel = () => {
 
   const datos = ventasFiltradas.map((v) => ({
     "Orden No": `#${v.id}`,
-    Usuario: v.alumno_nombre || "",
+    Cliente: v.alumno_nombre || "",
+    Operador: v.operador_visual || v.operador_nombre || v.operador_correo || "Sistema",
     "Ubicación": normalizarUbicacionFrontend(
       v.ubicacion_visual || v.ubicacion || "PRINCIPAL",
       institucionActivaId
@@ -12094,12 +12097,14 @@ Disponible: ${formatearMoneda(
 
       let { respuesta, data } = await enviarCierre(false);
 
+      let mensajeNovedadCierre = "";
+
       if (
         !respuesta.ok &&
         data?.code === "REQUIERE_CONFIRMACION_DESCUADRE"
       ) {
         const lineas = [
-          "⚠️ SE DETECTÓ UNA NOVEDAD EN EL CIERRE",
+          "⚠️ CIERRE GUARDADO CON NOVEDAD",
           "",
         ];
 
@@ -12123,20 +12128,31 @@ Disponible: ${formatearMoneda(
           );
         }
 
-        lineas.push(
-          "Si eliges Aceptar, la caja SE CERRARÁ y esta diferencia quedará registrada como novedad para revisión administrativa.",
-          "",
-          "Aceptar = cerrar de todas formas",
-          "Cancelar = volver y revisar los valores"
-        );
+        const esAdminCierre = ["ADMIN", "SUPER_ADMIN"].includes(rolActual);
 
-        const cerrarConNovedad = window.confirm(lineas.join("\n"));
+        if (esAdminCierre) {
+          // ADMIN/SUPER_ADMIN: no se obliga a corregir ni cuadrar valores.
+          // Se cierra de todas formas y el backend registra la diferencia
+          // automáticamente en observación/observación_automatica.
+          mensajeNovedadCierre = lineas.join("\n");
+          ({ respuesta, data } = await enviarCierre(true));
+        } else {
+          lineas[0] = "⚠️ SE DETECTÓ UNA NOVEDAD EN EL CIERRE";
+          lineas.push(
+            "La diferencia quedará registrada como novedad para revisión administrativa.",
+            "",
+            "Aceptar = cerrar de todas formas",
+            "Cancelar = volver y revisar los valores"
+          );
 
-        if (!cerrarConNovedad) {
-          return;
+          const cerrarConNovedad = window.confirm(lineas.join("\n"));
+
+          if (!cerrarConNovedad) {
+            return;
+          }
+
+          ({ respuesta, data } = await enviarCierre(true));
         }
-
-        ({ respuesta, data } = await enviarCierre(true));
       }
 
       if (!respuesta.ok) {
@@ -12169,9 +12185,15 @@ Disponible: ${formatearMoneda(
       setJornadaCierreSeleccionada(null);
       await cargarCierres();
 
-      alert(
-        "Cierre de caja guardado correctamente. Puedes continuar operando normalmente."
-      );
+      if (mensajeNovedadCierre) {
+        alert(
+          `${mensajeNovedadCierre}\nLa caja se cerró correctamente y la diferencia quedó registrada en la observación del cierre.`
+        );
+      } else {
+        alert(
+          "Cierre de caja guardado correctamente. Puedes continuar operando normalmente."
+        );
+      }
 
     } catch (error) {
       console.error("Error guardando cierre:", error);
@@ -23655,7 +23677,8 @@ onClick={guardarEgreso}
                               <th style={styles.th}>Seleccionar</th>
                             )}
                             <th style={styles.th}>Orden No</th>
-                            <th style={styles.th}>Usuario</th>
+                            <th style={styles.th}>Cliente</th>
+                            <th style={styles.th}>Operador</th>
                             <th style={styles.th}>Ubicación</th>
                             <th style={styles.th}>Fecha de Consumo</th>
                             <th style={styles.th}>Fecha de Pago</th>
@@ -23685,6 +23708,12 @@ onClick={guardarEgreso}
                               )}
                               <td style={styles.td}>#{v.id}</td>
                               <td style={styles.td}>{v.alumno_nombre}</td>
+                              <td style={styles.td}>
+                                {v.operador_visual ||
+                                  v.operador_nombre ||
+                                  v.operador_correo ||
+                                  "Sistema"}
+                              </td>
                               <td style={styles.td}>
                                 {normalizarUbicacionFrontend(
                                   v.ubicacion_visual || v.ubicacion || "PRINCIPAL",
