@@ -1,4 +1,6 @@
 import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import AlumnosModulo from "./components/AlumnosModulo.jsx";
@@ -1267,6 +1269,7 @@ const [resumenCierreServidor, setResumenCierreServidor] = useState(null);
 const [jornadaCierreSeleccionada, setJornadaCierreSeleccionada] = useState(null);
 const [cierreConsolidado, setCierreConsolidado] = useState(null);
 const [cargandoConsolidado, setCargandoConsolidado] = useState(false);
+const [formatoDescargaConsolidado, setFormatoDescargaConsolidado] = useState("EXCEL");
 
 const cajasPendientesVisuales = (() => {
   // POS NUBE SIN JORNADAS:
@@ -12236,6 +12239,211 @@ Disponible: ${formatearMoneda(
     }
   };
 
+  const obtenerNombreInstitucionConsolidado = () =>
+    institucionActiva?.nombre ||
+    INSTITUCIONES.find(
+      (item) =>
+        Number(item.id) === Number(obtenerInstitucionActivaId())
+    )?.nombre ||
+    "Institución";
+
+  const construirFilasCierreConsolidado = () =>
+    (cierreConsolidado?.puntos || []).map((cierre) => ({
+      "Código cierre": obtenerCodigoCierre(cierre),
+      "Ubicación": cierre.punto_nombre || "-",
+      "Operador": cierre.usuario_nombre || cierre.usuario_correo || "-",
+      "Jornada": cierre.jornada_id ? `#${cierre.jornada_id}` : "-",
+      "Subtotal recargas": Number(subtotalRecargasCierre(cierre) || 0),
+      "Subtotal ventas": Number(subtotalVentasCierre(cierre) || 0),
+      "Subtotal egresos": Number(subtotalEgresosCierre(cierre) || 0),
+      "Efectivo esperado": Number(efectivoEsperadoCierre(cierre) || 0),
+      "Efectivo contado": Number(cierre.efectivo_contado || 0),
+      "Diferencia general": Number(cierre.diferencia_general || 0),
+      "Gran total": Number(granTotalCierre(cierre) || 0),
+    }));
+
+  const descargarCierreConsolidadoExcel = () => {
+    if (!cierreConsolidado) return;
+
+    const fecha = normalizarFechaISO(cierreConsolidado.fecha) || obtenerFechaEcuadorISO();
+    const institucion = obtenerNombreInstitucionConsolidado();
+    const codigo =
+      cierreConsolidado.codigo_consolidado ||
+      `CIE-TOTAL-${String(fecha).replace(/-/g, "")}`;
+
+    const resumenGeneral = [
+      ["CIERRE TOTAL DEL LOCAL"],
+      ["Institución", institucion],
+      ["Fecha", formatearSoloFecha(fecha)],
+      ["Código consolidado", codigo],
+      ["Cierres incluidos", Number(cierreConsolidado.cantidad_cierres || 0)],
+      ["Subtotal recargas", Number(subtotalRecargasCierre(cierreConsolidado) || 0)],
+      ["Subtotal ventas", Number(subtotalVentasCierre(cierreConsolidado) || 0)],
+      ["Subtotal egresos", Number(subtotalEgresosCierre(cierreConsolidado) || 0)],
+      ["Efectivo esperado", Number(efectivoEsperadoCierre(cierreConsolidado) || 0)],
+      ["Efectivo contado", Number(cierreConsolidado.efectivo_contado || 0)],
+      ["Diferencia general", Number(cierreConsolidado.diferencia_general || 0)],
+      ["GRAN TOTAL", Number(granTotalCierre(cierreConsolidado) || 0)],
+      [],
+      ["DETALLE POR UBICACIÓN"],
+    ];
+
+    const worksheet = XLSX.utils.aoa_to_sheet(resumenGeneral);
+    const filas = construirFilasCierreConsolidado();
+
+    if (filas.length) {
+      XLSX.utils.sheet_add_json(worksheet, filas, {
+        origin: resumenGeneral.length,
+        skipHeader: false,
+      });
+    }
+
+    worksheet["!cols"] = [
+      { wch: 24 },
+      { wch: 22 },
+      { wch: 28 },
+      { wch: 12 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 18 },
+    ];
+
+    const moneda = '"$"#,##0.00';
+    Object.keys(worksheet).forEach((celda) => {
+      if (celda.startsWith("!")) return;
+      const ref = XLSX.utils.decode_cell(celda);
+      if (ref.c === 1 && ref.r >= 5 && ref.r <= 11) {
+        worksheet[celda].z = moneda;
+      }
+      if (ref.r >= resumenGeneral.length + 1 && ref.c >= 4 && ref.c <= 10) {
+        worksheet[celda].z = moneda;
+      }
+    });
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Cierre total");
+    XLSX.writeFile(
+      workbook,
+      `cierre_total_${String(institucion).replace(/[^a-z0-9]+/gi, "_")}_${fecha}.xlsx`
+    );
+  };
+
+  const descargarCierreConsolidadoPdf = () => {
+    if (!cierreConsolidado) return;
+
+    const fecha = normalizarFechaISO(cierreConsolidado.fecha) || obtenerFechaEcuadorISO();
+    const institucion = obtenerNombreInstitucionConsolidado();
+    const codigo =
+      cierreConsolidado.codigo_consolidado ||
+      `CIE-TOTAL-${String(fecha).replace(/-/g, "")}`;
+
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4",
+    });
+
+    doc.setFontSize(18);
+    doc.text("CIERRE TOTAL DEL LOCAL", 14, 16);
+    doc.setFontSize(10);
+    doc.text(`Institución: ${institucion}`, 14, 23);
+    doc.text(`Fecha: ${formatearSoloFecha(fecha)}`, 14, 29);
+    doc.text(`Código consolidado: ${codigo}`, 14, 35);
+
+    const resumen = [
+      ["Cierres incluidos", String(Number(cierreConsolidado.cantidad_cierres || 0))],
+      ["Subtotal recargas", formatearMoneda(subtotalRecargasCierre(cierreConsolidado))],
+      ["Subtotal ventas", formatearMoneda(subtotalVentasCierre(cierreConsolidado))],
+      ["Subtotal egresos", formatearMoneda(subtotalEgresosCierre(cierreConsolidado))],
+      ["Efectivo esperado", formatearMoneda(efectivoEsperadoCierre(cierreConsolidado))],
+      ["Efectivo contado", formatearMoneda(cierreConsolidado.efectivo_contado)],
+      ["Diferencia general", formatearMoneda(cierreConsolidado.diferencia_general)],
+      ["GRAN TOTAL", formatearMoneda(granTotalCierre(cierreConsolidado))],
+    ];
+
+    autoTable(doc, {
+      startY: 41,
+      head: [["Resumen", "Valor"]],
+      body: resumen,
+      styles: { fontSize: 9 },
+      headStyles: { fontStyle: "bold" },
+      columnStyles: {
+        0: { cellWidth: 48 },
+        1: { cellWidth: 38, halign: "right" },
+      },
+      margin: { left: 14 },
+      tableWidth: 86,
+    });
+
+    const filas = (cierreConsolidado.puntos || []).map((cierre) => [
+      obtenerCodigoCierre(cierre),
+      cierre.punto_nombre || "-",
+      cierre.usuario_nombre || cierre.usuario_correo || "-",
+      cierre.jornada_id ? `#${cierre.jornada_id}` : "-",
+      formatearMoneda(subtotalRecargasCierre(cierre)),
+      formatearMoneda(subtotalVentasCierre(cierre)),
+      formatearMoneda(subtotalEgresosCierre(cierre)),
+      formatearMoneda(efectivoEsperadoCierre(cierre)),
+      formatearMoneda(cierre.efectivo_contado),
+      formatearMoneda(cierre.diferencia_general),
+      formatearMoneda(granTotalCierre(cierre)),
+    ]);
+
+    autoTable(doc, {
+      startY: 112,
+      head: [[
+        "Código",
+        "Ubicación",
+        "Operador",
+        "Jornada",
+        "Recargas",
+        "Ventas",
+        "Egresos",
+        "Ef. esperado",
+        "Ef. contado",
+        "Diferencia",
+        "Gran total",
+      ]],
+      body:
+        filas.length > 0
+          ? filas
+          : [["-", "-", "Sin cierres", "-", "$0.00", "$0.00", "$0.00", "$0.00", "$0.00", "$0.00", "$0.00"]],
+      styles: { fontSize: 7.5, cellPadding: 1.7 },
+      headStyles: { fontStyle: "bold" },
+      margin: { left: 8, right: 8 },
+    });
+
+    const paginas = doc.getNumberOfPages();
+    for (let pagina = 1; pagina <= paginas; pagina += 1) {
+      doc.setPage(pagina);
+      doc.setFontSize(8);
+      doc.text(
+        `POS NUBE · ${institucion} · ${formatearSoloFecha(fecha)} · Página ${pagina} de ${paginas}`,
+        14,
+        202
+      );
+    }
+
+    doc.save(
+      `cierre_total_${String(institucion).replace(/[^a-z0-9]+/gi, "_")}_${fecha}.pdf`
+    );
+  };
+
+  const descargarCierreConsolidado = () => {
+    if (!cierreConsolidado) return;
+
+    if (formatoDescargaConsolidado === "PDF") {
+      descargarCierreConsolidadoPdf();
+      return;
+    }
+
+    descargarCierreConsolidadoExcel();
+  };
+
   const verCierre = async (cierre) => {
     try {
       const token = localStorage.getItem("token");
@@ -15437,13 +15645,43 @@ if (!usuario) {
                 {institucionActiva?.nombre || INSTITUCIONES.find(i=>Number(i.id)===Number(obtenerInstitucionActivaId()))?.nombre || "Institución"} · {formatearSoloFecha(cierreConsolidado.fecha)}
               </p>
             </div>
-            <button
-              type="button"
-              style={styles.outlineButton}
-              onClick={()=>setCierreConsolidado(null)}
-            >
-              Cerrar
-            </button>
+            <div style={{
+              display:"flex",
+              alignItems:"center",
+              gap:8,
+              flexWrap:"wrap",
+              justifyContent:"flex-end"
+            }}>
+              <select
+                value={formatoDescargaConsolidado}
+                onChange={(event)=>setFormatoDescargaConsolidado(event.target.value)}
+                style={{
+                  ...styles.input,
+                  width:"auto",
+                  minWidth:150,
+                  padding:"10px 12px"
+                }}
+                aria-label="Formato de descarga del cierre total"
+              >
+                <option value="EXCEL">Excel (.xlsx)</option>
+                <option value="PDF">PDF</option>
+              </select>
+              <button
+                type="button"
+                style={styles.button}
+                onClick={descargarCierreConsolidado}
+                disabled={!(cierreConsolidado?.puntos || []).length}
+              >
+                Descargar
+              </button>
+              <button
+                type="button"
+                style={styles.outlineButton}
+                onClick={()=>setCierreConsolidado(null)}
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
 
           <div style={{
