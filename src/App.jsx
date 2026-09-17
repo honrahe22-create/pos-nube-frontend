@@ -1254,6 +1254,9 @@ const [editandoEgresoId, setEditandoEgresoId] = useState(null);
 const [cierresCaja, setCierresCaja] = useState([]);
 const [cajasPendientesCierre, setCajasPendientesCierre] = useState([]);
 const [mostrarCrearCierre, setMostrarCrearCierre] = useState(false);
+// Selector administrativo de caja pendiente.
+// Solo sirve para elegir operador + punto; NO crea jornada para ADMIN/SUPER_ADMIN.
+const [mostrarSeleccionCajaAdminCierre, setMostrarSeleccionCajaAdminCierre] = useState(false);
 const [cierreDetalle, setCierreDetalle] = useState(null);
 const [guardandoCierre, setGuardandoCierre] = useState(false);
 const [cargandoCierres, setCargandoCierres] = useState(false);
@@ -11887,6 +11890,7 @@ Disponible: ${formatearMoneda(
     ) || obtenerFechaEcuadorISO();
 
     setJornadaCierreSeleccionada(caja);
+    setMostrarSeleccionCajaAdminCierre(false);
 
     setCierreForm({
       fecha: fechaCaja,
@@ -14287,6 +14291,32 @@ if (!usuario) {
         {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
           <button
             type="button"
+            style={styles.button}
+            onClick={async () => {
+              const cajasDisponibles = Array.isArray(cajasPendientesVisuales)
+                ? cajasPendientesVisuales
+                : [];
+
+              if (cajasDisponibles.length === 0) {
+                alert("No existen movimientos nuevos pendientes de cierre.");
+                return;
+              }
+
+              if (cajasDisponibles.length === 1) {
+                await abrirCajaPendienteDesdeListado(cajasDisponibles[0]);
+                return;
+              }
+
+              setMostrarSeleccionCajaAdminCierre(true);
+            }}
+          >
+            Crear cierre de caja
+          </button>
+        )}
+
+        {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+          <button
+            type="button"
             style={styles.outlineButton}
             onClick={verCierreConsolidado}
             disabled={cargandoConsolidado}
@@ -14925,6 +14955,88 @@ if (!usuario) {
         </div>
       </>
     )}
+
+    {mostrarSeleccionCajaAdminCierre && ["SUPER_ADMIN","ADMIN"].includes(rolActual) && createPortal((
+      <div
+        style={{
+          position:"fixed",
+          inset:0,
+          zIndex:99998,
+          background:"rgba(15,23,42,.68)",
+          display:"flex",
+          alignItems:"center",
+          justifyContent:"center",
+          padding:14,
+        }}
+        onClick={() => setMostrarSeleccionCajaAdminCierre(false)}
+      >
+        <div
+          style={{
+            width:"min(760px, 96vw)",
+            maxHeight:"90vh",
+            overflowY:"auto",
+            background:"#fff",
+            borderRadius:16,
+            padding:20,
+            boxShadow:"0 24px 70px rgba(0,0,0,.35)",
+          }}
+          onClick={(evento) => evento.stopPropagation()}
+        >
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+            <div>
+              <h2 style={{margin:0}}>Crear cierre de caja</h2>
+              <p style={{margin:"7px 0 0",color:"#64748b",lineHeight:1.45}}>
+                Selecciona la caja real que deseas cerrar. El cierre se calcula por operador + punto + período y no crea una jornada para el administrador.
+              </p>
+            </div>
+            <button
+              type="button"
+              style={styles.outlineButton}
+              onClick={() => setMostrarSeleccionCajaAdminCierre(false)}
+            >
+              Cerrar
+            </button>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:12,marginTop:18}}>
+            {cajasPendientesVisuales.map((caja) => (
+              <div
+                key={`selector-cierre-admin-${caja.id}`}
+                style={{
+                  border:"1px solid #cbd5e1",
+                  borderRadius:12,
+                  padding:14,
+                  background:"#f8fafc",
+                }}
+              >
+                <div style={{fontWeight:1000,fontSize:16,color:"#0f172a"}}>
+                  {caja.punto_nombre || "PUNTO"}
+                </div>
+                <div style={{fontSize:14,color:"#334155",marginTop:6,lineHeight:1.45}}>
+                  <strong>Operador:</strong>{" "}
+                  {caja.usuario_nombre || caja.usuario_correo || "Operador"}
+                </div>
+                <div style={{fontSize:13,color:"#64748b",marginTop:4}}>
+                  Fecha: {formatearSoloFecha(
+                    caja.fecha_operativa_texto ||
+                    caja.fecha_operativa ||
+                    obtenerFechaEcuadorISO()
+                  )}
+                </div>
+                <button
+                  type="button"
+                  style={{...styles.button,width:"100%",marginTop:12}}
+                  onClick={() => abrirCajaPendienteDesdeListado(caja)}
+                >
+                  Crear cierre de esta caja
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>,
+      document.body
+    ))}
 
     {mostrarCrearCierre && createPortal((
       <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, width:"100vw", height:"100dvh", minHeight:"100vh", background:"rgba(15,23,42,.65)", zIndex:99999, padding:"8px", boxSizing:"border-box", overflow:"hidden", display:"flex", alignItems:"stretch", justifyContent:"center" }}>
