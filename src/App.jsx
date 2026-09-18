@@ -1270,10 +1270,6 @@ const [jornadaCierreSeleccionada, setJornadaCierreSeleccionada] = useState(null)
 const [cierreConsolidado, setCierreConsolidado] = useState(null);
 const [cargandoConsolidado, setCargandoConsolidado] = useState(false);
 const [formatoDescargaConsolidado, setFormatoDescargaConsolidado] = useState("EXCEL");
-const [rangoCierreConsolidado, setRangoCierreConsolidado] = useState(() => ({
-  fecha_inicio: obtenerFechaEcuadorISO(),
-  fecha_fin: obtenerFechaEcuadorISO(),
-}));
 
 const cajasPendientesVisuales = (() => {
   // POS NUBE SIN JORNADAS:
@@ -12210,33 +12206,22 @@ Disponible: ${formatearMoneda(
     }
   };
 
-  const verCierreConsolidado = async (rangoOverride = null) => {
+  const verCierreConsolidado = async () => {
     try {
       setCargandoConsolidado(true);
       const token = localStorage.getItem("token");
       const institucionId = obtenerInstitucionActivaId();
-      const hoy = obtenerFechaEcuadorISO();
+      const fechaInicio =
+        cierreCajaFiltros.fecha_inicio ||
+        cierreCajaFiltros.fecha_fin ||
+        obtenerFechaEcuadorISO();
+      const fechaFin =
+        cierreCajaFiltros.fecha_fin ||
+        cierreCajaFiltros.fecha_inicio ||
+        obtenerFechaEcuadorISO();
 
-      const fechaInicio = String(
-        rangoOverride?.fecha_inicio ||
-          rangoCierreConsolidado.fecha_inicio ||
-          cierreCajaFiltros.fecha_inicio ||
-          hoy
-      ).trim();
-      const fechaFin = String(
-        rangoOverride?.fecha_fin ||
-          rangoCierreConsolidado.fecha_fin ||
-          cierreCajaFiltros.fecha_fin ||
-          fechaInicio ||
-          hoy
-      ).trim();
-
-      if (!fechaInicio || !fechaFin) {
-        throw new Error("Selecciona la fecha inicial y la fecha final.");
-      }
-
-      if (fechaInicio > fechaFin) {
-        throw new Error("La fecha inicial no puede ser posterior a la fecha final.");
+      if (fechaFin < fechaInicio) {
+        throw new Error("La fecha final no puede ser menor que la fecha inicial.");
       }
 
       const params = new URLSearchParams({
@@ -12246,7 +12231,7 @@ Disponible: ${formatearMoneda(
       });
 
       const respuesta = await fetch(
-        `${API_URL}/api/cierres?${params.toString()}`,
+        `${API_URL}/api/cierres/consolidado?${params.toString()}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -12258,38 +12243,14 @@ Disponible: ${formatearMoneda(
 
       if (!respuesta.ok) {
         throw new Error(
-          data.message || data.error || "No se pudo consultar el reporte de cierres"
+          data.message || data.error || "No se pudo calcular el cierre total"
         );
       }
 
-      const cierres = (Array.isArray(data) ? data : []).filter(
-        (cierre) =>
-          String(cierre?.tipo_cierre || "PUNTO").trim().toUpperCase() === "PUNTO"
-      );
-
-      setRangoCierreConsolidado({
-        fecha_inicio: fechaInicio,
-        fecha_fin: fechaFin,
-      });
-
-      setCierreConsolidado({
-        institucion_id: Number(institucionId),
-        tipo_cierre: "REPORTE_RESUMEN_CIERRES",
-        fecha: fechaFin,
-        fecha_inicio: fechaInicio,
-        fecha_fin: fechaFin,
-        cantidad_cierres: cierres.length,
-        puntos: cierres,
-        codigo_consolidado:
-          fechaInicio === fechaFin
-            ? `CIE-TOTAL-${String(fechaFin).replace(/-/g, "")}`
-            : `CIE-RES-${String(fechaInicio).replace(/-/g, "")}-${String(
-                fechaFin
-              ).replace(/-/g, "")}`,
-      });
+      setCierreConsolidado(data);
     } catch (error) {
-      console.error("Error cargando reporte de cierres:", error);
-      alert(error.message || "No se pudo consultar el reporte de cierres.");
+      console.error("Error cargando cierre total:", error);
+      alert(error.message || "No se pudo calcular el cierre total.");
     } finally {
       setCargandoConsolidado(false);
     }
@@ -12312,13 +12273,8 @@ Disponible: ${formatearMoneda(
     const ventasTarjeta = redondearValorCierre(cierre?.ventas_tarjeta);
     const ventasSaldo = redondearValorCierre(cierre?.ventas_saldo);
     const ventasCredito = redondearValorCierre(cierre?.ventas_credito);
-
     const subtotalVentas = redondearValorCierre(
-      ventasEfectivo +
-        ventasTransferencia +
-        ventasTarjeta +
-        ventasSaldo +
-        ventasCredito
+      ventasEfectivo + ventasTransferencia + ventasTarjeta + ventasSaldo + ventasCredito
     );
 
     const recargasEfectivo = redondearValorCierre(cierre?.recargas_efectivo);
@@ -12331,9 +12287,6 @@ Disponible: ${formatearMoneda(
       cierre?.egresos_total ?? cierre?.subtotal_egresos
     );
 
-    // CUADRE DE EFECTIVO:
-    // efectivo esperado = ventas efectivo + recargas efectivo - egresos
-    // diferencia efectivo = efectivo contado - efectivo esperado
     const efectivoEsperado = redondearValorCierre(
       ventasEfectivo + recargasEfectivo - egresos
     );
@@ -12342,9 +12295,6 @@ Disponible: ${formatearMoneda(
       efectivoContado - efectivoEsperado
     );
 
-    // CUADRE DE TRANSFERENCIAS:
-    // esperado = ventas transferencia + recargas transferencia
-    // contado/comprobado = transferencia_manual
     const transferenciaEsperada = redondearValorCierre(
       ventasTransferencia + recargasTransferencia
     );
@@ -12355,9 +12305,6 @@ Disponible: ${formatearMoneda(
       transferenciaContada - transferenciaEsperada
     );
 
-    // CUADRE DE TARJETA:
-    // esperado = ventas tarjeta
-    // contado/comprobado = tarjeta_manual
     const tarjetaEsperada = ventasTarjeta;
     const tarjetaContada = redondearValorCierre(cierre?.tarjeta_manual);
     const diferenciaTarjeta = redondearValorCierre(
@@ -12367,11 +12314,7 @@ Disponible: ${formatearMoneda(
     const diferenciaGeneral = redondearValorCierre(
       diferenciaEfectivo + diferenciaTransferencia + diferenciaTarjeta
     );
-
-    // Se conserva la definición histórica de GRAN TOTAL:
-    // ventas + recargas. Los egresos se muestran aparte.
     const granTotal = redondearValorCierre(subtotalVentas + subtotalRecargas);
-    const netoDespuesEgresos = redondearValorCierre(granTotal - egresos);
 
     return {
       ventasEfectivo,
@@ -12395,266 +12338,381 @@ Disponible: ${formatearMoneda(
       diferenciaTarjeta,
       diferenciaGeneral,
       granTotal,
-      netoDespuesEgresos,
     };
   };
 
-  const construirFilasReporteCierres = () =>
-    (cierreConsolidado?.puntos || []).map((cierre) => {
-      const detalle = calcularDetalleFinancieroCierre(cierre);
-      return {
-        fecha: normalizarFechaISO(cierre?.fecha) || "",
-        ubicacion: cierre?.punto_nombre || "-",
-        operador: cierre?.usuario_nombre || cierre?.usuario_correo || "-",
-        recargas_efectivo: detalle.recargasEfectivo,
-        recargas_transferencia: detalle.recargasTransferencia,
-        subtotal_recargas: detalle.subtotalRecargas,
-        ventas_efectivo: detalle.ventasEfectivo,
-        ventas_transferencia: detalle.ventasTransferencia,
-        ventas_tarjeta: detalle.ventasTarjeta,
-        ventas_saldo: detalle.ventasSaldo,
-        ventas_credito: detalle.ventasCredito,
-        subtotal_ventas: detalle.subtotalVentas,
-        egresos: detalle.egresos,
-        efectivo_esperado: detalle.efectivoEsperado,
-        efectivo_contado: detalle.efectivoContado,
-        diferencia_efectivo: detalle.diferenciaEfectivo,
-        gran_total: detalle.granTotal,
-      };
-    });
+  const obtenerResumenCierreConsolidadoDetallado = () => {
+    const cierres = Array.isArray(cierreConsolidado?.puntos)
+      ? cierreConsolidado.puntos
+      : [];
+    const detalles = cierres.map(calcularDetalleFinancieroCierre);
+    const sumar = (campo) =>
+      redondearValorCierre(
+        detalles.reduce(
+          (total, detalle) => total + Number(detalle?.[campo] || 0),
+          0
+        )
+      );
 
-  const obtenerTotalesReporteCierres = (filas = construirFilasReporteCierres()) => {
-    const campos = [
-      "recargas_efectivo",
-      "recargas_transferencia",
-      "subtotal_recargas",
-      "ventas_efectivo",
-      "ventas_transferencia",
-      "ventas_tarjeta",
-      "ventas_saldo",
-      "ventas_credito",
-      "subtotal_ventas",
-      "egresos",
-      "efectivo_esperado",
-      "efectivo_contado",
-      "diferencia_efectivo",
-      "gran_total",
-    ];
-
-    return campos.reduce(
-      (totales, campo) => ({
-        ...totales,
-        [campo]: redondearValorCierre(
-          filas.reduce((suma, fila) => suma + Number(fila?.[campo] || 0), 0)
-        ),
-      }),
-      { cantidad_cierres: filas.length }
-    );
+    return {
+      cantidadCierres: cierres.length,
+      ventasEfectivo: sumar("ventasEfectivo"),
+      ventasTransferencia: sumar("ventasTransferencia"),
+      ventasTarjeta: sumar("ventasTarjeta"),
+      ventasSaldo: sumar("ventasSaldo"),
+      ventasCredito: sumar("ventasCredito"),
+      subtotalVentas: sumar("subtotalVentas"),
+      recargasEfectivo: sumar("recargasEfectivo"),
+      recargasTransferencia: sumar("recargasTransferencia"),
+      subtotalRecargas: sumar("subtotalRecargas"),
+      egresos: sumar("egresos"),
+      efectivoEsperado: sumar("efectivoEsperado"),
+      efectivoContado: sumar("efectivoContado"),
+      diferenciaEfectivo: sumar("diferenciaEfectivo"),
+      transferenciaEsperada: sumar("transferenciaEsperada"),
+      transferenciaContada: sumar("transferenciaContada"),
+      diferenciaTransferencia: sumar("diferenciaTransferencia"),
+      tarjetaEsperada: sumar("tarjetaEsperada"),
+      tarjetaContada: sumar("tarjetaContada"),
+      diferenciaTarjeta: sumar("diferenciaTarjeta"),
+      diferenciaGeneral: sumar("diferenciaGeneral"),
+      granTotal: sumar("granTotal"),
+    };
   };
 
-  const columnasReporteCierres = [
-    ["Fecha", "fecha"],
-    ["Ubicación", "ubicacion"],
-    ["Operador", "operador"],
-    ["Rec. efectivo", "recargas_efectivo"],
-    ["Rec. transferencia", "recargas_transferencia"],
-    ["Subtotal recargas", "subtotal_recargas"],
-    ["Venta efectivo", "ventas_efectivo"],
-    ["Venta transferencia", "ventas_transferencia"],
-    ["Venta tarjeta", "ventas_tarjeta"],
-    ["Venta saldo", "ventas_saldo"],
-    ["Venta crédito", "ventas_credito"],
-    ["Subtotal ventas", "subtotal_ventas"],
-    ["Egresos", "egresos"],
-    ["Ef. esperado", "efectivo_esperado"],
-    ["Ef. contado", "efectivo_contado"],
-    ["Dif. efectivo", "diferencia_efectivo"],
-    ["GRAN TOTAL", "gran_total"],
-  ];
+  const obtenerRangoTextoCierreConsolidado = () => {
+    if (!cierreConsolidado) return "-";
+    const inicio =
+      normalizarFechaISO(cierreConsolidado.fecha_inicio) ||
+      normalizarFechaISO(cierreConsolidado.fecha);
+    const fin =
+      normalizarFechaISO(cierreConsolidado.fecha_fin) ||
+      normalizarFechaISO(cierreConsolidado.fecha);
+    if (!inicio && !fin) return "-";
+    if (inicio === fin) return formatearSoloFecha(inicio);
+    return `${formatearSoloFecha(inicio)} al ${formatearSoloFecha(fin)}`;
+  };
+
+  const obtenerEgresosDetalladosConsolidado = () => {
+    const cierres = Array.isArray(cierreConsolidado?.puntos)
+      ? cierreConsolidado.puntos
+      : [];
+    const filas = [];
+
+    cierres.forEach((cierre) => {
+      const operador = cierre.usuario_nombre || cierre.usuario_correo || "-";
+      const ubicacion = cierre.punto_nombre || "-";
+      const detalle = Array.isArray(cierre.egresos_detalle)
+        ? cierre.egresos_detalle
+        : [];
+
+      if (detalle.length) {
+        detalle.forEach((egreso) => {
+          filas.push({
+            fecha: egreso.fecha || normalizarFechaISO(cierre.fecha) || "-",
+            operador:
+              egreso.usuario_nombre || egreso.usuario_correo || operador,
+            ubicacion: egreso.punto_nombre || ubicacion,
+            concepto: egreso.nombre_egreso || egreso.tipo_egreso || "Egreso",
+            descripcion: egreso.descripcion || "-",
+            factura: egreso.numero_factura || "-",
+            total: redondearValorCierre(egreso.total),
+          });
+        });
+        return;
+      }
+
+      const totalCierre = redondearValorCierre(cierre.egresos_total);
+      if (totalCierre > 0) {
+        filas.push({
+          fecha: normalizarFechaISO(cierre.fecha) || "-",
+          operador,
+          ubicacion,
+          concepto: "Egreso histórico",
+          descripcion: "El cierre conserva el total, pero no existe detalle vinculado para este registro histórico.",
+          factura: "-",
+          total: totalCierre,
+        });
+      }
+    });
+
+    return filas;
+  };
 
   const descargarCierreConsolidadoExcel = () => {
     if (!cierreConsolidado) return;
 
-    const filas = construirFilasReporteCierres();
-    if (!filas.length) {
-      alert("No existen cierres en el rango seleccionado.");
-      return;
+    const institucion = obtenerNombreInstitucionConsolidado();
+    const rango = obtenerRangoTextoCierreConsolidado();
+    const resumen = obtenerResumenCierreConsolidadoDetallado();
+    const cierres = Array.isArray(cierreConsolidado.puntos)
+      ? cierreConsolidado.puntos
+      : [];
+    const egresos = obtenerEgresosDetalladosConsolidado();
+    const filas = [];
+    const merges = [];
+
+    filas.push(["REPORTE CONSOLIDADO DE CIERRES DE CAJA", "", "", ""]);
+    merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } });
+    filas.push(["Institución", institucion, "Período", rango]);
+    filas.push(["Cierres incluidos", resumen.cantidadCierres, "Código", cierreConsolidado.codigo_consolidado || "-"]);
+    filas.push([]);
+
+    cierres.forEach((cierre, indice) => {
+      const d = calcularDetalleFinancieroCierre(cierre);
+      const fecha = formatearSoloFecha(cierre.fecha);
+      const operador = cierre.usuario_nombre || cierre.usuario_correo || "-";
+      const ubicacion = cierre.punto_nombre || "-";
+
+      const filaTitulo = filas.length;
+      filas.push([`${fecha} · ${ubicacion} · ${operador}`, "", "", ""]);
+      merges.push({ s: { r: filaTitulo, c: 0 }, e: { r: filaTitulo, c: 3 } });
+
+      const izquierda = [
+        ["Recargas efectivo", d.recargasEfectivo],
+        ["Recargas transferencia", d.recargasTransferencia],
+        ["SUBTOTAL RECARGAS", d.subtotalRecargas],
+        ["Ventas efectivo", d.ventasEfectivo],
+        ["Ventas transferencia", d.ventasTransferencia],
+        ["Ventas tarjeta", d.ventasTarjeta],
+        ["Ventas saldo", d.ventasSaldo],
+        ["Ventas crédito", d.ventasCredito],
+        ["SUBTOTAL VENTAS", d.subtotalVentas],
+      ];
+
+      const derecha = [
+        ["Total egresos", d.egresos],
+        ["Efectivo esperado", d.efectivoEsperado],
+        ["Efectivo contado", d.efectivoContado],
+        ["DIFERENCIA EFECTIVO", d.diferenciaEfectivo],
+        ["Transferencia esperada", d.transferenciaEsperada],
+        ["Transferencia comprobada", d.transferenciaContada],
+        ["DIF. TRANSFERENCIA", d.diferenciaTransferencia],
+        ["Tarjeta esperada", d.tarjetaEsperada],
+        ["Tarjeta comprobada", d.tarjetaContada],
+        ["DIFERENCIA TARJETA", d.diferenciaTarjeta],
+      ];
+
+      const maximo = Math.max(izquierda.length, derecha.length);
+      for (let i = 0; i < maximo; i += 1) {
+        filas.push([
+          izquierda[i]?.[0] || "",
+          izquierda[i]?.[1] ?? "",
+          derecha[i]?.[0] || "",
+          derecha[i]?.[1] ?? "",
+        ]);
+      }
+
+      filas.push(["DIFERENCIA GENERAL", d.diferenciaGeneral, "GRAN TOTAL", d.granTotal]);
+      if (indice < cierres.length - 1) filas.push([]);
+    });
+
+    filas.push([]);
+    const filaGranTotal = filas.length;
+    filas.push(["GRAN TOTAL DEL LOCAL", resumen.granTotal, "DIFERENCIA GENERAL", resumen.diferenciaGeneral]);
+
+    filas.push([]);
+    const filaEgresosTitulo = filas.length;
+    filas.push(["DETALLE DE EGRESOS REGISTRADOS POR OPERARIO", "", "", ""]);
+    merges.push({ s: { r: filaEgresosTitulo, c: 0 }, e: { r: filaEgresosTitulo, c: 3 } });
+    filas.push(["Fecha / Operador", "Ubicación", "Concepto / Descripción / Factura", "Valor"]);
+
+    if (!egresos.length) {
+      filas.push(["Sin egresos registrados en el período", "", "", 0]);
+    } else {
+      egresos.forEach((e) => {
+        filas.push([
+          `${formatearSoloFecha(e.fecha)} · ${e.operador}`,
+          e.ubicacion,
+          `${e.concepto}${e.descripcion && e.descripcion !== "-" ? ` · ${e.descripcion}` : ""}${e.factura && e.factura !== "-" ? ` · Factura: ${e.factura}` : ""}`,
+          e.total,
+        ]);
+      });
     }
 
-    const totales = obtenerTotalesReporteCierres(filas);
-    const institucion = obtenerNombreInstitucionConsolidado();
-    const fechaInicio =
-      cierreConsolidado.fecha_inicio || rangoCierreConsolidado.fecha_inicio;
-    const fechaFin = cierreConsolidado.fecha_fin || rangoCierreConsolidado.fecha_fin;
+    filas.push(["TOTAL EGRESOS", resumen.egresos, "", ""]);
 
-    const encabezados = columnasReporteCierres.map(([titulo]) => titulo);
-    const cuerpo = filas.map((fila) =>
-      columnasReporteCierres.map(([, campo]) => {
-        if (campo === "fecha") return formatearSoloFecha(fila[campo]);
-        return fila[campo];
-      })
-    );
-
-    const filaTotales = columnasReporteCierres.map(([, campo], indice) => {
-      if (indice === 0) return "TOTALES GENERALES";
-      if (campo === "ubicacion" || campo === "operador") return "";
-      return Number(totales[campo] || 0);
-    });
-
-    const datos = [
-      ["REPORTE RESUMEN DE CIERRES DE CAJA"],
-      ["Institución", institucion],
-      [
-        "Rango",
-        fechaInicio === fechaFin
-          ? formatearSoloFecha(fechaInicio)
-          : `${formatearSoloFecha(fechaInicio)} al ${formatearSoloFecha(fechaFin)}`,
-      ],
-      ["Cierres incluidos", filas.length],
-      [],
-      encabezados,
-      ...cuerpo,
-      filaTotales,
+    const hoja = XLSX.utils.aoa_to_sheet(filas);
+    hoja["!merges"] = merges;
+    hoja["!cols"] = [
+      { wch: 30 },
+      { wch: 18 },
+      { wch: 38 },
+      { wch: 18 },
     ];
-
-    const hoja = XLSX.utils.aoa_to_sheet(datos);
-    const ultimaColumna = XLSX.utils.encode_col(encabezados.length - 1);
-    hoja["!merges"] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: encabezados.length - 1 } },
-    ];
-    hoja["!autofilter"] = {
-      ref: `A6:${ultimaColumna}${6 + filas.length}`,
-    };
-    hoja["!freeze"] = { xSplit: 3, ySplit: 6 };
-    hoja["!cols"] = columnasReporteCierres.map(([, campo]) => {
-      if (campo === "fecha") return { wch: 13 };
-      if (campo === "ubicacion") return { wch: 18 };
-      if (campo === "operador") return { wch: 28 };
-      return { wch: 16 };
-    });
 
     const moneda = '"$"#,##0.00;[Red]-"$"#,##0.00';
-    const inicioDatosExcel = 6;
-    for (let fila = inicioDatosExcel; fila <= inicioDatosExcel + filas.length; fila += 1) {
-      for (let col = 3; col < encabezados.length; col += 1) {
-        const ref = XLSX.utils.encode_cell({ r: fila, c: col });
-        if (hoja[ref] && typeof hoja[ref].v === "number") hoja[ref].z = moneda;
+    Object.keys(hoja).forEach((celda) => {
+      if (celda.startsWith("!")) return;
+      const ref = XLSX.utils.decode_cell(celda);
+      const valor = hoja[celda]?.v;
+      if (typeof valor === "number" && [1, 3].includes(ref.c)) {
+        hoja[celda].z = moneda;
       }
-    }
+    });
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, hoja, "Resumen cierres");
 
+    const inicio = normalizarFechaISO(cierreConsolidado.fecha_inicio || cierreConsolidado.fecha);
+    const fin = normalizarFechaISO(cierreConsolidado.fecha_fin || cierreConsolidado.fecha);
+    const sufijo = inicio === fin ? fin : `${inicio}_${fin}`;
+
     XLSX.writeFile(
       workbook,
-      `reporte_cierres_${String(institucion).replace(/[^a-z0-9]+/gi, "_")}_${fechaInicio}_${fechaFin}.xlsx`
+      `reporte_cierres_${String(institucion).replace(/[^a-z0-9]+/gi, "_")}_${sufijo}.xlsx`
     );
   };
 
   const descargarCierreConsolidadoPdf = () => {
     if (!cierreConsolidado) return;
 
-    const filas = construirFilasReporteCierres();
-    if (!filas.length) {
-      alert("No existen cierres en el rango seleccionado.");
-      return;
-    }
-
-    const totales = obtenerTotalesReporteCierres(filas);
     const institucion = obtenerNombreInstitucionConsolidado();
-    const fechaInicio =
-      cierreConsolidado.fecha_inicio || rangoCierreConsolidado.fecha_inicio;
-    const fechaFin = cierreConsolidado.fecha_fin || rangoCierreConsolidado.fecha_fin;
+    const rango = obtenerRangoTextoCierreConsolidado();
+    const resumen = obtenerResumenCierreConsolidadoDetallado();
+    const cierres = Array.isArray(cierreConsolidado.puntos)
+      ? cierreConsolidado.puntos
+      : [];
+    const egresos = obtenerEgresosDetalladosConsolidado();
 
-    // UNA SOLA PÁGINA: se usa una hoja horizontal de ancho amplio y altura
-    // dinámica según la cantidad de cierres. Así autoTable no necesita paginar.
-    const altoPagina = Math.max(210, 58 + (filas.length + 2) * 8);
-    const anchoPagina = Math.max(430, altoPagina + 40);
+    const altoBloqueCierre = 82;
+    const altoEgresos = Math.max(18, egresos.length * 10 + 22);
+    const altoPagina = Math.max(
+      297,
+      44 + cierres.length * altoBloqueCierre + 22 + altoEgresos + 18
+    );
+
     const doc = new jsPDF({
-      orientation: "landscape",
+      orientation: "portrait",
       unit: "mm",
-      format: [altoPagina, anchoPagina],
+      format: [210, altoPagina],
     });
 
-    doc.setFontSize(14);
-    doc.text("REPORTE RESUMEN DE CIERRES DE CAJA", 7, 10);
-    doc.setFontSize(7.5);
-    doc.text(`Institución: ${institucion}`, 7, 16);
-    doc.text(
-      `Rango: ${
-        fechaInicio === fechaFin
-          ? formatearSoloFecha(fechaInicio)
-          : `${formatearSoloFecha(fechaInicio)} al ${formatearSoloFecha(fechaFin)}`
-      }`,
-      7,
-      21
-    );
-    doc.text(`Cierres incluidos: ${filas.length}`, 7, 26);
+    const xIzq = 12;
+    const xDer = 106;
+    const ancho = 92;
+    const altoFila = 6;
 
-    const encabezados = columnasReporteCierres.map(([titulo]) => titulo);
-    const body = filas.map((fila) =>
-      columnasReporteCierres.map(([, campo]) => {
-        if (campo === "fecha") return formatearSoloFecha(fila[campo]);
-        if (["ubicacion", "operador"].includes(campo)) return String(fila[campo] || "-");
-        return Number(fila[campo] || 0).toFixed(2);
-      })
-    );
+    const caja = (x, y, etiqueta, valor, fuerte = false) => {
+      doc.rect(x, y, ancho, altoFila);
+      doc.line(x + 62, y, x + 62, y + altoFila);
+      doc.setFont(undefined, fuerte ? "bold" : "normal");
+      doc.setFontSize(7.4);
+      doc.text(String(etiqueta || ""), x + 2, y + 4.1, { maxWidth: 58 });
+      doc.text(String(valor || ""), x + ancho - 2, y + 4.1, {
+        align: "right",
+        maxWidth: 27,
+      });
+    };
 
-    body.push(
-      columnasReporteCierres.map(([, campo], indice) => {
-        if (indice === 0) return "TOTALES";
-        if (campo === "ubicacion" || campo === "operador") return "";
-        return Number(totales[campo] || 0).toFixed(2);
-      })
-    );
+    doc.setFont(undefined, "bold");
+    doc.setFontSize(15);
+    doc.text("REPORTE CONSOLIDADO DE CIERRES DE CAJA", 12, 13);
+    doc.setFont(undefined, "normal");
+    doc.setFontSize(9);
+    doc.text(`Institución: ${institucion}`, 12, 20);
+    doc.text(`Período: ${rango}`, 12, 26);
+    doc.text(`Cierres incluidos: ${resumen.cantidadCierres}`, 12, 32);
 
-    autoTable(doc, {
-      head: [encabezados],
-      body,
-      startY: 30,
-      margin: { left: 5, right: 5, top: 5, bottom: 8 },
-      theme: "grid",
-      styles: {
-        fontSize: 5.5,
-        cellPadding: 0.75,
-        overflow: "linebreak",
-        valign: "middle",
-        halign: "right",
-        lineWidth: 0.1,
-      },
-      headStyles: {
-        fontSize: 5.4,
-        fontStyle: "bold",
-        halign: "center",
-      },
-      columnStyles: {
-        0: { halign: "center", cellWidth: 15 },
-        1: { halign: "left", cellWidth: 24 },
-        2: { halign: "left", cellWidth: 32 },
-      },
-      didParseCell: (data) => {
-        if (data.section === "body" && data.row.index === body.length - 1) {
-          data.cell.styles.fontStyle = "bold";
-        }
-      },
+    let y = 39;
+
+    cierres.forEach((cierre) => {
+      const d = calcularDetalleFinancieroCierre(cierre);
+      const operador = cierre.usuario_nombre || cierre.usuario_correo || "-";
+      const ubicacion = cierre.punto_nombre || "-";
+      const fecha = formatearSoloFecha(cierre.fecha);
+
+      doc.setFont(undefined, "bold");
+      doc.setFontSize(9.2);
+      doc.text(`${fecha} · ${ubicacion} · ${operador}`, 12, y);
+      doc.setFont(undefined, "normal");
+      doc.setFontSize(7.5);
+      doc.text(obtenerCodigoCierre(cierre), 198, y, { align: "right" });
+      y += 4;
+
+      const izquierda = [
+        ["RECARGAS EFECTIVO", formatearMoneda(d.recargasEfectivo)],
+        ["RECARGAS TRANSFERENCIA", formatearMoneda(d.recargasTransferencia)],
+        ["SUBTOTAL RECARGAS", formatearMoneda(d.subtotalRecargas), true],
+        ["VENTAS EFECTIVO", formatearMoneda(d.ventasEfectivo)],
+        ["VENTAS TRANSFERENCIA", formatearMoneda(d.ventasTransferencia)],
+        ["VENTAS TARJETA", formatearMoneda(d.ventasTarjeta)],
+        ["VENTAS SALDO", formatearMoneda(d.ventasSaldo)],
+        ["VENTAS CRÉDITO", formatearMoneda(d.ventasCredito)],
+        ["SUBTOTAL VENTAS", formatearMoneda(d.subtotalVentas), true],
+      ];
+
+      const derecha = [
+        ["TOTAL EGRESOS", formatearMoneda(d.egresos), true],
+        ["EFECTIVO ESPERADO", formatearMoneda(d.efectivoEsperado)],
+        ["EFECTIVO CONTADO", formatearMoneda(d.efectivoContado)],
+        ["DIFERENCIA EFECTIVO", formatearMoneda(d.diferenciaEfectivo), true],
+        ["TRANSF. ESPERADA", formatearMoneda(d.transferenciaEsperada)],
+        ["TRANSF. COMPROBADA", formatearMoneda(d.transferenciaContada)],
+        ["DIF. TRANSFERENCIA", formatearMoneda(d.diferenciaTransferencia), true],
+        ["TARJETA ESPERADA", formatearMoneda(d.tarjetaEsperada)],
+        ["TARJETA COMPROBADA", formatearMoneda(d.tarjetaContada)],
+        ["DIFERENCIA TARJETA", formatearMoneda(d.diferenciaTarjeta), true],
+      ];
+
+      const yCaja = y;
+      izquierda.forEach((fila, i) =>
+        caja(xIzq, yCaja + i * altoFila, fila[0], fila[1], Boolean(fila[2]))
+      );
+      derecha.forEach((fila, i) =>
+        caja(xDer, yCaja + i * altoFila, fila[0], fila[1], Boolean(fila[2]))
+      );
+
+      const yResultado = yCaja + Math.max(izquierda.length, derecha.length) * altoFila + 2;
+      caja(xIzq, yResultado, "DIFERENCIA GENERAL", formatearMoneda(d.diferenciaGeneral), true);
+      caja(xDer, yResultado, "GRAN TOTAL", formatearMoneda(d.granTotal), true);
+      y = yResultado + altoFila + 8;
     });
 
-    // La página se dimensiona para contener toda la tabla; esta validación es
-    // defensiva y evita entregar un PDF silenciosamente fragmentado.
-    if (doc.getNumberOfPages() > 1) {
-      console.warn("El reporte generó más de una página; revisa el rango seleccionado.");
+    doc.setFont(undefined, "bold");
+    doc.setLineWidth(0.6);
+    doc.rect(12, y, 186, 9);
+    doc.setFontSize(11);
+    doc.text("GRAN TOTAL DEL LOCAL", 15, y + 6);
+    doc.text(formatearMoneda(resumen.granTotal), 195, y + 6, { align: "right" });
+    y += 15;
+
+    doc.setFontSize(10);
+    doc.text("DETALLE DE EGRESOS REGISTRADOS POR OPERARIO", 12, y);
+    y += 5;
+
+    doc.setFont(undefined, "normal");
+    doc.setFontSize(7.3);
+
+    if (!egresos.length) {
+      doc.rect(12, y, 186, 8);
+      doc.text("Sin egresos registrados en el período.", 14, y + 5);
+      y += 10;
+    } else {
+      egresos.forEach((e) => {
+        const texto = `${formatearSoloFecha(e.fecha)} · ${e.operador} · ${e.ubicacion} · ${e.concepto}${e.descripcion && e.descripcion !== "-" ? ` · ${e.descripcion}` : ""}${e.factura && e.factura !== "-" ? ` · Factura: ${e.factura}` : ""}`;
+        const lineas = doc.splitTextToSize(texto, 155).slice(0, 2);
+        const alto = Math.max(8, lineas.length * 4 + 3);
+        doc.rect(12, y, 186, alto);
+        doc.text(lineas, 14, y + 4.5);
+        doc.setFont(undefined, "bold");
+        doc.text(formatearMoneda(e.total), 195, y + 4.5, { align: "right" });
+        doc.setFont(undefined, "normal");
+        y += alto;
+      });
     }
 
-    const altoReal = doc.internal.pageSize.getHeight();
-    doc.setFontSize(6.5);
-    doc.text(
-      `POS NUBE · ${institucion} · ${formatearSoloFecha(fechaInicio)} - ${formatearSoloFecha(fechaFin)} · Página única`,
-      7,
-      altoReal - 4
-    );
+    doc.setFont(undefined, "bold");
+    doc.rect(12, y, 186, 8);
+    doc.text("TOTAL EGRESOS", 14, y + 5.2);
+    doc.text(formatearMoneda(resumen.egresos), 195, y + 5.2, { align: "right" });
+
+    const inicio = normalizarFechaISO(cierreConsolidado.fecha_inicio || cierreConsolidado.fecha);
+    const fin = normalizarFechaISO(cierreConsolidado.fecha_fin || cierreConsolidado.fecha);
+    const sufijo = inicio === fin ? fin : `${inicio}_${fin}`;
 
     doc.save(
-      `reporte_cierres_${String(institucion).replace(/[^a-z0-9]+/gi, "_")}_${fechaInicio}_${fechaFin}.pdf`
+      `reporte_cierres_${String(institucion).replace(/[^a-z0-9]+/gi, "_")}_${sufijo}.pdf`
     );
   };
 
@@ -15854,186 +15912,152 @@ if (!usuario) {
         padding:12
       }}>
         <div style={{
-          width:"min(1500px,98vw)",
+          width:"min(1050px,96vw)",
           maxHeight:"94vh",
           overflowY:"auto",
           background:"#fff",
           borderRadius:16,
-          padding:18
+          padding:20
         }}>
           <div style={{
             display:"flex",justifyContent:"space-between",
-            alignItems:"flex-start",gap:12,flexWrap:"wrap"
+            alignItems:"center",gap:12,flexWrap:"wrap"
           }}>
             <div>
-              <h2 style={{margin:0}}>Reporte resumen de cierres de caja</h2>
+              <h2 style={{margin:0}}>Cierre total del local</h2>
               <p style={{margin:"6px 0 0",color:"#64748b"}}>
-                {obtenerNombreInstitucionConsolidado()}
-              </p>
-              <p style={{margin:"5px 0 0",fontSize:13,color:"#475569"}}>
-                Una fila por cierre y operador. Totales generales al final.
+                {obtenerNombreInstitucionConsolidado()} · {obtenerRangoTextoCierreConsolidado()}
               </p>
             </div>
-
-            <button
-              type="button"
-              style={styles.outlineButton}
-              onClick={()=>setCierreConsolidado(null)}
-            >
-              Cerrar
-            </button>
-          </div>
-
-          <div style={{
-            display:"flex",
-            gap:10,
-            alignItems:"end",
-            flexWrap:"wrap",
-            marginTop:16,
-            padding:12,
-            border:"1px solid #dbe4f0",
-            borderRadius:12,
-            background:"#f8fafc"
-          }}>
-            <div style={{minWidth:155}}>
-              <label style={styles.label}>Fecha inicial</label>
-              <input
-                type="date"
-                style={styles.input}
-                value={rangoCierreConsolidado.fecha_inicio}
-                onChange={(e)=>setRangoCierreConsolidado((actual)=>({
-                  ...actual,
-                  fecha_inicio:e.target.value,
-                }))}
-              />
-            </div>
-            <div style={{minWidth:155}}>
-              <label style={styles.label}>Fecha final</label>
-              <input
-                type="date"
-                style={styles.input}
-                value={rangoCierreConsolidado.fecha_fin}
-                onChange={(e)=>setRangoCierreConsolidado((actual)=>({
-                  ...actual,
-                  fecha_fin:e.target.value,
-                }))}
-              />
-            </div>
-            <button
-              type="button"
-              style={styles.outlineButton}
-              onClick={()=>verCierreConsolidado(rangoCierreConsolidado)}
-              disabled={cargandoConsolidado}
-            >
-              {cargandoConsolidado ? "Consultando..." : "Consultar"}
-            </button>
-            <div style={{minWidth:150}}>
-              <label style={styles.label}>Formato</label>
+            <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
               <select
                 value={formatoDescargaConsolidado}
                 onChange={(event)=>setFormatoDescargaConsolidado(event.target.value)}
-                style={styles.input}
-                aria-label="Formato de descarga del reporte de cierres"
+                style={{...styles.input,width:"auto",minWidth:150,padding:"10px 12px"}}
               >
                 <option value="EXCEL">Excel (.xlsx)</option>
-                <option value="PDF">PDF - una página</option>
+                <option value="PDF">PDF</option>
               </select>
+              <button
+                type="button"
+                style={styles.button}
+                onClick={descargarCierreConsolidado}
+                disabled={!(cierreConsolidado?.puntos || []).length}
+              >
+                Descargar
+              </button>
+              <button type="button" style={styles.outlineButton} onClick={()=>setCierreConsolidado(null)}>
+                Cerrar
+              </button>
             </div>
-            <button
-              type="button"
-              style={styles.button}
-              onClick={descargarCierreConsolidado}
-              disabled={!(cierreConsolidado?.puntos || []).length}
-            >
-              Descargar
-            </button>
           </div>
 
-          {(()=>{
-            const filas = construirFilasReporteCierres();
-            const totales = obtenerTotalesReporteCierres(filas);
-            const rangoTexto =
-              rangoCierreConsolidado.fecha_inicio === rangoCierreConsolidado.fecha_fin
-                ? formatearSoloFecha(rangoCierreConsolidado.fecha_inicio)
-                : `${formatearSoloFecha(rangoCierreConsolidado.fecha_inicio)} al ${formatearSoloFecha(rangoCierreConsolidado.fecha_fin)}`;
+          {(cierreConsolidado.puntos||[]).length===0 ? (
+            <div style={{...styles.box,marginTop:18}}>
+              No existen cierres en el rango seleccionado.
+            </div>
+          ) : (
+            <div style={{display:"grid",gap:16,marginTop:18}}>
+              {(cierreConsolidado.puntos||[]).map((c)=>{
+                const d = calcularDetalleFinancieroCierre(c);
+                const cuadro = (titulo, filas) => (
+                  <div style={{border:"1px solid #cbd5e1",borderRadius:10,overflow:"hidden"}}>
+                    <div style={{fontWeight:900,padding:"8px 10px",background:"#f8fafc"}}>{titulo}</div>
+                    {filas.map(([etiqueta,valor,fuerte],idx)=>(
+                      <div key={`${titulo}-${idx}`} style={{display:"grid",gridTemplateColumns:"1fr auto",gap:10,padding:"7px 10px",borderTop:"1px solid #e2e8f0",fontWeight:fuerte?800:500}}>
+                        <span>{etiqueta}</span>
+                        <span>{formatearMoneda(valor)}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
 
+                return (
+                  <div key={c.id} style={{border:"1px solid #dbe4f0",borderRadius:14,padding:14}}>
+                    <div style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:12}}>
+                      <div>
+                        <strong style={{fontSize:17}}>{c.punto_nombre || "-"} · {c.usuario_nombre || c.usuario_correo || "-"}</strong>
+                        <div style={{fontSize:13,color:"#64748b",marginTop:3}}>
+                          {formatearSoloFecha(c.fecha)} · {obtenerCodigoCierre(c)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:12}}>
+                      <div style={{display:"grid",gap:12}}>
+                        {cuadro("RECARGAS", [
+                          ["Efectivo",d.recargasEfectivo],
+                          ["Transferencia",d.recargasTransferencia],
+                          ["SUBTOTAL RECARGAS",d.subtotalRecargas,true],
+                        ])}
+                        {cuadro("VENTAS", [
+                          ["Efectivo",d.ventasEfectivo],
+                          ["Transferencia",d.ventasTransferencia],
+                          ["Tarjeta",d.ventasTarjeta],
+                          ["Saldo",d.ventasSaldo],
+                          ["Crédito",d.ventasCredito],
+                          ["SUBTOTAL VENTAS",d.subtotalVentas,true],
+                        ])}
+                      </div>
+
+                      <div style={{display:"grid",gap:12}}>
+                        {cuadro("CUADRE", [
+                          ["Total egresos",d.egresos,true],
+                          ["Efectivo esperado",d.efectivoEsperado],
+                          ["Efectivo contado",d.efectivoContado],
+                          ["DIFERENCIA EFECTIVO",d.diferenciaEfectivo,true],
+                          ["Transferencia esperada",d.transferenciaEsperada],
+                          ["Transferencia comprobada",d.transferenciaContada],
+                          ["DIF. TRANSFERENCIA",d.diferenciaTransferencia,true],
+                          ["Tarjeta esperada",d.tarjetaEsperada],
+                          ["Tarjeta comprobada",d.tarjetaContada],
+                          ["DIFERENCIA TARJETA",d.diferenciaTarjeta,true],
+                        ])}
+                        {cuadro("RESULTADO", [
+                          ["DIFERENCIA GENERAL",d.diferenciaGeneral,true],
+                          ["GRAN TOTAL",d.granTotal,true],
+                        ])}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {(()=>{
+            const resumen = obtenerResumenCierreConsolidadoDetallado();
+            const egresos = obtenerEgresosDetalladosConsolidado();
             return (
               <>
-                <div style={{
-                  display:"grid",
-                  gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",
-                  gap:10,
-                  marginTop:14
-                }}>
-                  <div style={styles.statCard}>
-                    <span>Rango</span>
-                    <strong>{rangoTexto}</strong>
-                  </div>
-                  <div style={styles.statCard}>
-                    <span>Cierres incluidos</span>
-                    <strong>{filas.length}</strong>
-                  </div>
-                  <div style={styles.statCard}>
-                    <span>Subtotal recargas</span>
-                    <strong>{formatearMoneda(totales.subtotal_recargas)}</strong>
-                  </div>
-                  <div style={styles.statCard}>
-                    <span>Subtotal ventas</span>
-                    <strong>{formatearMoneda(totales.subtotal_ventas)}</strong>
-                  </div>
-                  <div style={styles.statCard}>
-                    <span>Subtotal egresos</span>
-                    <strong>{formatearMoneda(totales.egresos)}</strong>
-                  </div>
-                  <div style={{...styles.statCard,border:"2px solid #1d4ed8"}}>
-                    <span>GRAN TOTAL</span>
-                    <strong>{formatearMoneda(totales.gran_total)}</strong>
-                  </div>
+                <div style={{marginTop:18,border:"2px solid #1d4ed8",borderRadius:12,padding:14,display:"flex",justifyContent:"space-between",gap:12,fontSize:19,fontWeight:900}}>
+                  <span>GRAN TOTAL DEL LOCAL</span>
+                  <span>{formatearMoneda(resumen.granTotal)}</span>
                 </div>
 
-                {filas.length===0 ? (
-                  <div style={{...styles.box,marginTop:14}}>
-                    No existen cierres en el rango seleccionado.
+                <h3 style={{margin:"22px 0 10px"}}>Detalle de egresos registrados por operario</h3>
+                <div style={{border:"1px solid #cbd5e1",borderRadius:10,overflow:"hidden"}}>
+                  {!egresos.length ? (
+                    <div style={{padding:12}}>Sin egresos registrados en el período.</div>
+                  ) : egresos.map((e,idx)=>(
+                    <div key={`${e.operador}-${e.fecha}-${idx}`} style={{display:"grid",gridTemplateColumns:"150px 1fr auto",gap:10,padding:"9px 10px",borderTop:idx?"1px solid #e2e8f0":"none",alignItems:"start"}}>
+                      <div>
+                        <strong>{e.operador}</strong>
+                        <div style={{fontSize:12,color:"#64748b"}}>{formatearSoloFecha(e.fecha)} · {e.ubicacion}</div>
+                      </div>
+                      <div>
+                        <strong>{e.concepto}</strong>
+                        {e.descripcion && e.descripcion!=="-" ? <div style={{fontSize:13,color:"#475569"}}>{e.descripcion}</div> : null}
+                        {e.factura && e.factura!=="-" ? <div style={{fontSize:12,color:"#64748b"}}>Factura: {e.factura}</div> : null}
+                      </div>
+                      <strong>{formatearMoneda(e.total)}</strong>
+                    </div>
+                  ))}
+                  <div style={{display:"flex",justifyContent:"space-between",gap:12,padding:"10px",borderTop:"2px solid #94a3b8",fontWeight:900}}>
+                    <span>TOTAL EGRESOS</span>
+                    <span>{formatearMoneda(resumen.egresos)}</span>
                   </div>
-                ) : (
-                  <div style={{...styles.tableWrap,marginTop:14,maxHeight:"52vh"}}>
-                    <table style={{...styles.table,minWidth:1800}}>
-                      <thead>
-                        <tr>
-                          {columnasReporteCierres.map(([titulo])=>(
-                            <th key={titulo} style={{...styles.th,whiteSpace:"nowrap"}}>{titulo}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filas.map((fila,indice)=>(
-                          <tr key={`${fila.fecha}-${fila.ubicacion}-${fila.operador}-${indice}`}>
-                            {columnasReporteCierres.map(([,campo])=>(
-                              <td key={campo} style={{...styles.td,whiteSpace:"nowrap"}}>
-                                {campo==="fecha"
-                                  ? formatearSoloFecha(fila[campo])
-                                  : ["ubicacion","operador"].includes(campo)
-                                  ? fila[campo]
-                                  : formatearMoneda(fila[campo])}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                        <tr style={{fontWeight:900,background:"#eef6ff"}}>
-                          {columnasReporteCierres.map(([,campo],indice)=>(
-                            <td key={`total-${campo}`} style={{...styles.td,whiteSpace:"nowrap"}}>
-                              {indice===0
-                                ? "TOTALES GENERALES"
-                                : ["ubicacion","operador"].includes(campo)
-                                ? ""
-                                : formatearMoneda(totales[campo])}
-                            </td>
-                          ))}
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                </div>
               </>
             );
           })()}
