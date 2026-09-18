@@ -12305,14 +12305,8 @@ Disponible: ${formatearMoneda(
       transferenciaContada - transferenciaEsperada
     );
 
-    const tarjetaEsperada = ventasTarjeta;
-    const tarjetaContada = redondearValorCierre(cierre?.tarjeta_manual);
-    const diferenciaTarjeta = redondearValorCierre(
-      tarjetaContada - tarjetaEsperada
-    );
-
     const diferenciaGeneral = redondearValorCierre(
-      diferenciaEfectivo + diferenciaTransferencia + diferenciaTarjeta
+      diferenciaEfectivo + diferenciaTransferencia
     );
     const granTotal = redondearValorCierre(subtotalVentas + subtotalRecargas);
 
@@ -12333,9 +12327,6 @@ Disponible: ${formatearMoneda(
       transferenciaEsperada,
       transferenciaContada,
       diferenciaTransferencia,
-      tarjetaEsperada,
-      tarjetaContada,
-      diferenciaTarjeta,
       diferenciaGeneral,
       granTotal,
     };
@@ -12372,9 +12363,6 @@ Disponible: ${formatearMoneda(
       transferenciaEsperada: sumar("transferenciaEsperada"),
       transferenciaContada: sumar("transferenciaContada"),
       diferenciaTransferencia: sumar("diferenciaTransferencia"),
-      tarjetaEsperada: sumar("tarjetaEsperada"),
-      tarjetaContada: sumar("tarjetaContada"),
-      diferenciaTarjeta: sumar("diferenciaTarjeta"),
       diferenciaGeneral: sumar("diferenciaGeneral"),
       granTotal: sumar("granTotal"),
     };
@@ -12495,9 +12483,6 @@ Disponible: ${formatearMoneda(
         ["Transferencia esperada", d.transferenciaEsperada],
         ["Transferencia comprobada", d.transferenciaContada],
         ["DIF. TRANSFERENCIA", d.diferenciaTransferencia],
-        ["Tarjeta esperada", d.tarjetaEsperada],
-        ["Tarjeta comprobada", d.tarjetaContada],
-        ["DIFERENCIA TARJETA", d.diferenciaTarjeta],
       ];
 
       const maximo = Math.max(izquierda.length, derecha.length);
@@ -12657,9 +12642,6 @@ Disponible: ${formatearMoneda(
         ["TRANSF. ESPERADA", formatearMoneda(d.transferenciaEsperada)],
         ["TRANSF. COMPROBADA", formatearMoneda(d.transferenciaContada)],
         ["DIF. TRANSFERENCIA", formatearMoneda(d.diferenciaTransferencia), true],
-        ["TARJETA ESPERADA", formatearMoneda(d.tarjetaEsperada)],
-        ["TARJETA COMPROBADA", formatearMoneda(d.tarjetaContada)],
-        ["DIFERENCIA TARJETA", formatearMoneda(d.diferenciaTarjeta), true],
       ];
 
       const yCaja = y;
@@ -16072,9 +16054,6 @@ if (!usuario) {
                           ["Transferencia esperada",d.transferenciaEsperada],
                           ["Transferencia comprobada",d.transferenciaContada],
                           ["DIF. TRANSFERENCIA",d.diferenciaTransferencia,true],
-                          ["Tarjeta esperada",d.tarjetaEsperada],
-                          ["Tarjeta comprobada",d.tarjetaContada],
-                          ["DIFERENCIA TARJETA",d.diferenciaTarjeta,true],
                         ])}
                         {cuadro("RESULTADO", [
                           ["DIFERENCIA GENERAL",d.diferenciaGeneral,true],
