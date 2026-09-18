@@ -15959,6 +15959,62 @@ if (!usuario) {
             </div>
           </div>
 
+          <div style={{
+            display:"flex",
+            alignItems:"flex-end",
+            gap:10,
+            flexWrap:"wrap",
+            marginTop:16,
+            padding:"12px 14px",
+            border:"1px solid #dbe4f0",
+            borderRadius:12,
+            background:"#f8fafc"
+          }}>
+            <div>
+              <label style={{display:"block",fontSize:12,fontWeight:800,marginBottom:5}}>
+                Fecha desde
+              </label>
+              <input
+                type="date"
+                value={cierreCajaFiltros.fecha_inicio || ""}
+                max={cierreCajaFiltros.fecha_fin || obtenerFechaEcuadorISO()}
+                onChange={(e)=>setCierreCajaFiltros({
+                  ...cierreCajaFiltros,
+                  fecha_inicio:e.target.value
+                })}
+                style={{...styles.input,width:165,minWidth:165,padding:"9px 10px"}}
+                aria-label="Fecha inicial del cierre total"
+              />
+            </div>
+
+            <div>
+              <label style={{display:"block",fontSize:12,fontWeight:800,marginBottom:5}}>
+                Fecha hasta
+              </label>
+              <input
+                type="date"
+                value={cierreCajaFiltros.fecha_fin || ""}
+                min={cierreCajaFiltros.fecha_inicio || undefined}
+                max={obtenerFechaEcuadorISO()}
+                onChange={(e)=>setCierreCajaFiltros({
+                  ...cierreCajaFiltros,
+                  fecha_fin:e.target.value
+                })}
+                style={{...styles.input,width:165,minWidth:165,padding:"9px 10px"}}
+                aria-label="Fecha final del cierre total"
+              />
+            </div>
+
+            <button
+              type="button"
+              style={styles.button}
+              onClick={verCierreConsolidado}
+              disabled={cargandoConsolidado}
+            >
+              {cargandoConsolidado ? "Consultando..." : "Consultar"}
+            </button>
+          </div>
+
           {(cierreConsolidado.puntos||[]).length===0 ? (
             <div style={{...styles.box,marginTop:18}}>
               No existen cierres en el rango seleccionado.
