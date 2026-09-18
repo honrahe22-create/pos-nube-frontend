@@ -12434,6 +12434,31 @@ Disponible: ${formatearMoneda(
     return filas;
   };
 
+  const obtenerRecargasDetalladasConsolidado = () => {
+    const cierres = Array.isArray(cierreConsolidado?.puntos)
+      ? cierreConsolidado.puntos
+      : [];
+    const filas = [];
+
+    cierres.forEach((cierre) => {
+      const detalle = Array.isArray(cierre.recargas_detalle)
+        ? cierre.recargas_detalle
+        : [];
+
+      detalle.forEach((recarga) => {
+        const alumno = String(recarga.alumno_nombre || "").trim() || "Alumno";
+        filas.push({
+          fecha: recarga.fecha_pago || normalizarFechaISO(cierre.fecha) || "-",
+          alumno,
+          valor: redondearValorCierre(recarga.monto),
+          forma_pago: String(recarga.metodo_pago || "-").trim().toUpperCase(),
+        });
+      });
+    });
+
+    return filas;
+  };
+
   const descargarCierreConsolidadoExcel = () => {
     if (!cierreConsolidado) return;
 
@@ -12444,6 +12469,7 @@ Disponible: ${formatearMoneda(
       ? cierreConsolidado.puntos
       : [];
     const egresos = obtenerEgresosDetalladosConsolidado();
+    const recargas = obtenerRecargasDetalladasConsolidado();
     const filas = [];
     const merges = [];
 
@@ -12523,6 +12549,32 @@ Disponible: ${formatearMoneda(
 
     filas.push(["TOTAL EGRESOS", resumen.egresos, "", ""]);
 
+    filas.push([]);
+    const filaRecargasTitulo = filas.length;
+    filas.push(["DETALLE DE RECARGAS REGISTRADAS", "", "", ""]);
+    merges.push({ s: { r: filaRecargasTitulo, c: 0 }, e: { r: filaRecargasTitulo, c: 3 } });
+    filas.push(["Fecha de pago", "Alumno", "Forma de pago", "Valor"]);
+
+    if (!recargas.length) {
+      filas.push(["Sin recargas registradas en el período", "", "", 0]);
+    } else {
+      recargas.forEach((r) => {
+        filas.push([
+          formatearSoloFecha(r.fecha),
+          r.alumno,
+          r.forma_pago,
+          r.valor,
+        ]);
+      });
+    }
+
+    filas.push([
+      "TOTAL RECARGAS",
+      resumen.subtotalRecargas,
+      "",
+      "",
+    ]);
+
     const hoja = XLSX.utils.aoa_to_sheet(filas);
     hoja["!merges"] = merges;
     hoja["!cols"] = [
@@ -12565,12 +12617,14 @@ Disponible: ${formatearMoneda(
       ? cierreConsolidado.puntos
       : [];
     const egresos = obtenerEgresosDetalladosConsolidado();
+    const recargas = obtenerRecargasDetalladasConsolidado();
 
     const altoBloqueCierre = 82;
     const altoEgresos = Math.max(18, egresos.length * 10 + 22);
+    const altoRecargas = Math.max(18, recargas.length * 8 + 22);
     const altoPagina = Math.max(
       297,
-      44 + cierres.length * altoBloqueCierre + 22 + altoEgresos + 18
+      44 + cierres.length * altoBloqueCierre + 22 + altoEgresos + altoRecargas + 28
     );
 
     const doc = new jsPDF({
@@ -12693,6 +12747,36 @@ Disponible: ${formatearMoneda(
     doc.rect(12, y, 186, 8);
     doc.text("TOTAL EGRESOS", 14, y + 5.2);
     doc.text(formatearMoneda(resumen.egresos), 195, y + 5.2, { align: "right" });
+    y += 14;
+
+    doc.setFontSize(10);
+    doc.text("DETALLE DE RECARGAS REGISTRADAS", 12, y);
+    y += 5;
+
+    doc.setFont(undefined, "normal");
+    doc.setFontSize(7.3);
+
+    if (!recargas.length) {
+      doc.rect(12, y, 186, 8);
+      doc.text("Sin recargas registradas en el período.", 14, y + 5);
+      y += 10;
+    } else {
+      recargas.forEach((r) => {
+        doc.rect(12, y, 186, 8);
+        doc.text(formatearSoloFecha(r.fecha), 14, y + 5);
+        doc.text(String(r.alumno || "Alumno"), 45, y + 5, { maxWidth: 82 });
+        doc.text(String(r.forma_pago || "-"), 132, y + 5, { maxWidth: 32 });
+        doc.setFont(undefined, "bold");
+        doc.text(formatearMoneda(r.valor), 195, y + 5, { align: "right" });
+        doc.setFont(undefined, "normal");
+        y += 8;
+      });
+    }
+
+    doc.setFont(undefined, "bold");
+    doc.rect(12, y, 186, 8);
+    doc.text("TOTAL RECARGAS", 14, y + 5.2);
+    doc.text(formatearMoneda(resumen.subtotalRecargas), 195, y + 5.2, { align: "right" });
 
     const inicio = normalizarFechaISO(cierreConsolidado.fecha_inicio || cierreConsolidado.fecha);
     const fin = normalizarFechaISO(cierreConsolidado.fecha_fin || cierreConsolidado.fecha);
@@ -16067,6 +16151,7 @@ if (!usuario) {
           {(()=>{
             const resumen = obtenerResumenCierreConsolidadoDetallado();
             const egresos = obtenerEgresosDetalladosConsolidado();
+            const recargas = obtenerRecargasDetalladasConsolidado();
             return (
               <>
                 <div style={{marginTop:18,border:"2px solid #1d4ed8",borderRadius:12,padding:14,display:"flex",justifyContent:"space-between",gap:12,fontSize:19,fontWeight:900}}>
@@ -16095,6 +16180,36 @@ if (!usuario) {
                   <div style={{display:"flex",justifyContent:"space-between",gap:12,padding:"10px",borderTop:"2px solid #94a3b8",fontWeight:900}}>
                     <span>TOTAL EGRESOS</span>
                     <span>{formatearMoneda(resumen.egresos)}</span>
+                  </div>
+                </div>
+
+                <h3 style={{margin:"22px 0 10px"}}>Detalle de recargas registradas</h3>
+                <div style={{border:"1px solid #cbd5e1",borderRadius:10,overflow:"hidden"}}>
+                  {!recargas.length ? (
+                    <div style={{padding:12}}>Sin recargas registradas en el período.</div>
+                  ) : recargas.map((r,idx)=>(
+                    <div
+                      key={`${r.alumno}-${r.fecha}-${idx}`}
+                      style={{
+                        display:"grid",
+                        gridTemplateColumns:"130px 1fr 150px auto",
+                        gap:10,
+                        padding:"9px 10px",
+                        borderTop:idx?"1px solid #e2e8f0":"none",
+                        alignItems:"center"
+                      }}
+                    >
+                      <div style={{fontSize:13,color:"#475569"}}>
+                        {formatearSoloFecha(r.fecha)}
+                      </div>
+                      <strong>{r.alumno}</strong>
+                      <div>{r.forma_pago}</div>
+                      <strong>{formatearMoneda(r.valor)}</strong>
+                    </div>
+                  ))}
+                  <div style={{display:"flex",justifyContent:"space-between",gap:12,padding:"10px",borderTop:"2px solid #94a3b8",fontWeight:900}}>
+                    <span>TOTAL RECARGAS</span>
+                    <span>{formatearMoneda(resumen.subtotalRecargas)}</span>
                   </div>
                 </div>
               </>
