@@ -12400,7 +12400,11 @@ Disponible: ${formatearMoneda(
     const filas = [];
 
     cierres.forEach((cierre) => {
-      const operador = cierre.usuario_nombre || cierre.usuario_correo || "-";
+      const nombreCierre = String(cierre.usuario_nombre || "").trim();
+      const operador =
+        nombreCierre && !nombreCierre.includes("@")
+          ? nombreCierre
+          : "Operador";
       const ubicacion = cierre.punto_nombre || "-";
       const detalle = Array.isArray(cierre.egresos_detalle)
         ? cierre.egresos_detalle
@@ -12410,8 +12414,11 @@ Disponible: ${formatearMoneda(
         detalle.forEach((egreso) => {
           filas.push({
             fecha: egreso.fecha || normalizarFechaISO(cierre.fecha) || "-",
-            operador:
-              egreso.usuario_nombre || egreso.usuario_correo || operador,
+            operador: (() => {
+              const nombreEgreso = String(egreso.usuario_nombre || "").trim();
+              if (nombreEgreso && !nombreEgreso.includes("@")) return nombreEgreso;
+              return operador;
+            })(),
             ubicacion: egreso.punto_nombre || ubicacion,
             concepto: egreso.nombre_egreso || egreso.tipo_egreso || "Egreso",
             descripcion: egreso.descripcion || "-",
