@@ -12353,9 +12353,15 @@ Disponible: ${formatearMoneda(
       ventasSaldo: sumar("ventasSaldo"),
       ventasCredito: sumar("ventasCredito"),
       subtotalVentas: sumar("subtotalVentas"),
-      recargasEfectivo: sumar("recargasEfectivo"),
-      recargasTransferencia: sumar("recargasTransferencia"),
-      subtotalRecargas: sumar("subtotalRecargas"),
+      recargasEfectivo: redondearValorCierre(
+        cierreConsolidado?.recargas_efectivo ?? sumar("recargasEfectivo")
+      ),
+      recargasTransferencia: redondearValorCierre(
+        cierreConsolidado?.recargas_transferencia ?? sumar("recargasTransferencia")
+      ),
+      subtotalRecargas: redondearValorCierre(
+        cierreConsolidado?.subtotal_recargas ?? sumar("subtotalRecargas")
+      ),
       egresos: sumar("egresos"),
       efectivoEsperado: sumar("efectivoEsperado"),
       efectivoContado: sumar("efectivoContado"),
@@ -12364,7 +12370,9 @@ Disponible: ${formatearMoneda(
       transferenciaContada: sumar("transferenciaContada"),
       diferenciaTransferencia: sumar("diferenciaTransferencia"),
       diferenciaGeneral: sumar("diferenciaGeneral"),
-      granTotal: sumar("granTotal"),
+      granTotal: redondearValorCierre(
+        cierreConsolidado?.gran_total ?? sumar("granTotal")
+      ),
     };
   };
 
@@ -12435,6 +12443,30 @@ Disponible: ${formatearMoneda(
   };
 
   const obtenerRecargasDetalladasConsolidado = () => {
+    /*
+     * Fuente principal para el reporte:
+     * todas las recargas reales de la institución dentro del período consultado.
+     * No depende de que una recarga histórica esté vinculada a un cierre.
+     */
+    const detalleRango = Array.isArray(cierreConsolidado?.recargas_detalle)
+      ? cierreConsolidado.recargas_detalle
+      : [];
+
+    if (detalleRango.length) {
+      return detalleRango.map((recarga) => ({
+        fecha:
+          recarga.fecha_pago ||
+          normalizarFechaISO(recarga.created_at) ||
+          "-",
+        alumno:
+          String(recarga.alumno_nombre || "").trim() || "Alumno",
+        valor: redondearValorCierre(recarga.monto),
+        forma_pago:
+          String(recarga.metodo_pago || "-").trim().toUpperCase(),
+      }));
+    }
+
+    // Compatibilidad con reportes generados por una versión anterior del backend.
     const cierres = Array.isArray(cierreConsolidado?.puntos)
       ? cierreConsolidado.puntos
       : [];
@@ -12446,12 +12478,16 @@ Disponible: ${formatearMoneda(
         : [];
 
       detalle.forEach((recarga) => {
-        const alumno = String(recarga.alumno_nombre || "").trim() || "Alumno";
         filas.push({
-          fecha: recarga.fecha_pago || normalizarFechaISO(cierre.fecha) || "-",
-          alumno,
+          fecha:
+            recarga.fecha_pago ||
+            normalizarFechaISO(cierre.fecha) ||
+            "-",
+          alumno:
+            String(recarga.alumno_nombre || "").trim() || "Alumno",
           valor: redondearValorCierre(recarga.monto),
-          forma_pago: String(recarga.metodo_pago || "-").trim().toUpperCase(),
+          forma_pago:
+            String(recarga.metodo_pago || "-").trim().toUpperCase(),
         });
       });
     });
