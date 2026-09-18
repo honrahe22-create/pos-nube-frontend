@@ -12469,7 +12469,6 @@ Disponible: ${formatearMoneda(
         ["SUBTOTAL RECARGAS", d.subtotalRecargas],
         ["Ventas efectivo", d.ventasEfectivo],
         ["Ventas transferencia", d.ventasTransferencia],
-        ["Ventas tarjeta", d.ventasTarjeta],
         ["Ventas saldo", d.ventasSaldo],
         ["Ventas crédito", d.ventasCredito],
         ["SUBTOTAL VENTAS", d.subtotalVentas],
@@ -12628,7 +12627,6 @@ Disponible: ${formatearMoneda(
         ["SUBTOTAL RECARGAS", formatearMoneda(d.subtotalRecargas), true],
         ["VENTAS EFECTIVO", formatearMoneda(d.ventasEfectivo)],
         ["VENTAS TRANSFERENCIA", formatearMoneda(d.ventasTransferencia)],
-        ["VENTAS TARJETA", formatearMoneda(d.ventasTarjeta)],
         ["VENTAS SALDO", formatearMoneda(d.ventasSaldo)],
         ["VENTAS CRÉDITO", formatearMoneda(d.ventasCredito)],
         ["SUBTOTAL VENTAS", formatearMoneda(d.subtotalVentas), true],
@@ -16038,7 +16036,6 @@ if (!usuario) {
                         {cuadro("VENTAS", [
                           ["Efectivo",d.ventasEfectivo],
                           ["Transferencia",d.ventasTransferencia],
-                          ["Tarjeta",d.ventasTarjeta],
                           ["Saldo",d.ventasSaldo],
                           ["Crédito",d.ventasCredito],
                           ["SUBTOTAL VENTAS",d.subtotalVentas,true],
