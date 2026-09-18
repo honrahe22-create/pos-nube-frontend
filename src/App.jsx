@@ -12619,61 +12619,91 @@ Disponible: ${formatearMoneda(
     const egresos = obtenerEgresosDetalladosConsolidado();
     const recargas = obtenerRecargasDetalladasConsolidado();
 
-    const altoBloqueCierre = 82;
-    const altoEgresos = Math.max(18, egresos.length * 10 + 22);
-    const altoRecargas = Math.max(18, recargas.length * 8 + 22);
-    const altoPagina = Math.max(
-      297,
-      44 + cierres.length * altoBloqueCierre + 22 + altoEgresos + altoRecargas + 28
-    );
-
+    /*
+     * PDF A4 REAL
+     * ------------------------------------------------------------
+     * Antes se creaba una sola página con altura dinámica. Al imprimir,
+     * el visor reducía todo el contenido para hacerlo caber y quedaba
+     * demasiado pequeño. Ahora usamos A4 estándar y agregamos páginas
+     * automáticamente cuando hace falta, conservando el mismo reporte.
+     */
     const doc = new jsPDF({
       orientation: "portrait",
       unit: "mm",
-      format: [210, altoPagina],
+      format: "a4",
     });
 
+    const margenIzq = 12;
+    const margenDer = 12;
+    const limiteInferior = 282;
     const xIzq = 12;
     const xDer = 106;
     const ancho = 92;
-    const altoFila = 6;
+    const altoFila = 7;
 
-    const caja = (x, y, etiqueta, valor, fuerte = false) => {
-      doc.rect(x, y, ancho, altoFila);
-      doc.line(x + 62, y, x + 62, y + altoFila);
+    const dibujarEncabezado = (mostrarResumen = false) => {
+      doc.setFont(undefined, "bold");
+      doc.setFontSize(15);
+      doc.text("REPORTE CONSOLIDADO DE CIERRES DE CAJA", margenIzq, 13);
+
+      doc.setFont(undefined, "normal");
+      doc.setFontSize(9.5);
+      doc.text(`Institución: ${institucion}`, margenIzq, 20);
+      doc.text(`Período: ${rango}`, margenIzq, 26);
+
+      if (mostrarResumen) {
+        doc.text(
+          `Cierres incluidos: ${resumen.cantidadCierres}`,
+          margenIzq,
+          32
+        );
+        return 39;
+      }
+
+      return 33;
+    };
+
+    let y = dibujarEncabezado(true);
+
+    const nuevaPagina = (tituloSeccion = "") => {
+      doc.addPage("a4", "portrait");
+      y = dibujarEncabezado(false);
+
+      if (tituloSeccion) {
+        doc.setFont(undefined, "bold");
+        doc.setFontSize(10.5);
+        doc.text(tituloSeccion, margenIzq, y);
+        y += 6;
+      }
+    };
+
+    const asegurarEspacio = (altoNecesario, tituloSeccion = "") => {
+      if (y + altoNecesario <= limiteInferior) return;
+      nuevaPagina(tituloSeccion);
+    };
+
+    const caja = (x, yFila, etiqueta, valor, fuerte = false) => {
+      doc.rect(x, yFila, ancho, altoFila);
+      doc.line(x + 62, yFila, x + 62, yFila + altoFila);
+
       doc.setFont(undefined, fuerte ? "bold" : "normal");
-      doc.setFontSize(7.4);
-      doc.text(String(etiqueta || ""), x + 2, y + 4.1, { maxWidth: 58 });
-      doc.text(String(valor || ""), x + ancho - 2, y + 4.1, {
+      doc.setFontSize(8.2);
+
+      doc.text(String(etiqueta || ""), x + 2, yFila + 4.8, {
+        maxWidth: 58,
+      });
+
+      doc.text(String(valor || ""), x + ancho - 2, yFila + 4.8, {
         align: "right",
         maxWidth: 27,
       });
     };
-
-    doc.setFont(undefined, "bold");
-    doc.setFontSize(15);
-    doc.text("REPORTE CONSOLIDADO DE CIERRES DE CAJA", 12, 13);
-    doc.setFont(undefined, "normal");
-    doc.setFontSize(9);
-    doc.text(`Institución: ${institucion}`, 12, 20);
-    doc.text(`Período: ${rango}`, 12, 26);
-    doc.text(`Cierres incluidos: ${resumen.cantidadCierres}`, 12, 32);
-
-    let y = 39;
 
     cierres.forEach((cierre) => {
       const d = calcularDetalleFinancieroCierre(cierre);
       const operador = cierre.usuario_nombre || cierre.usuario_correo || "-";
       const ubicacion = cierre.punto_nombre || "-";
       const fecha = formatearSoloFecha(cierre.fecha);
-
-      doc.setFont(undefined, "bold");
-      doc.setFontSize(9.2);
-      doc.text(`${fecha} · ${ubicacion} · ${operador}`, 12, y);
-      doc.setFont(undefined, "normal");
-      doc.setFontSize(7.5);
-      doc.text(obtenerCodigoCierre(cierre), 198, y, { align: "right" });
-      y += 4;
 
       const izquierda = [
         ["RECARGAS EFECTIVO", formatearMoneda(d.recargasEfectivo)],
@@ -12696,94 +12726,246 @@ Disponible: ${formatearMoneda(
         ["DIF. TRANSFERENCIA", formatearMoneda(d.diferenciaTransferencia), true],
       ];
 
+      const altoBloque =
+        5 +
+        Math.max(izquierda.length, derecha.length) * altoFila +
+        2 +
+        altoFila +
+        9;
+
+      asegurarEspacio(altoBloque);
+
+      doc.setFont(undefined, "bold");
+      doc.setFontSize(10);
+      doc.text(`${fecha} · ${ubicacion} · ${operador}`, margenIzq, y);
+
+      doc.setFont(undefined, "normal");
+      doc.setFontSize(8);
+      doc.text(obtenerCodigoCierre(cierre), 198, y, { align: "right" });
+
+      y += 5;
+
       const yCaja = y;
+
       izquierda.forEach((fila, i) =>
-        caja(xIzq, yCaja + i * altoFila, fila[0], fila[1], Boolean(fila[2]))
-      );
-      derecha.forEach((fila, i) =>
-        caja(xDer, yCaja + i * altoFila, fila[0], fila[1], Boolean(fila[2]))
+        caja(
+          xIzq,
+          yCaja + i * altoFila,
+          fila[0],
+          fila[1],
+          Boolean(fila[2])
+        )
       );
 
-      const yResultado = yCaja + Math.max(izquierda.length, derecha.length) * altoFila + 2;
-      caja(xIzq, yResultado, "DIFERENCIA GENERAL", formatearMoneda(d.diferenciaGeneral), true);
-      caja(xDer, yResultado, "GRAN TOTAL", formatearMoneda(d.granTotal), true);
-      y = yResultado + altoFila + 8;
+      derecha.forEach((fila, i) =>
+        caja(
+          xDer,
+          yCaja + i * altoFila,
+          fila[0],
+          fila[1],
+          Boolean(fila[2])
+        )
+      );
+
+      const yResultado =
+        yCaja +
+        Math.max(izquierda.length, derecha.length) * altoFila +
+        2;
+
+      caja(
+        xIzq,
+        yResultado,
+        "DIFERENCIA GENERAL",
+        formatearMoneda(d.diferenciaGeneral),
+        true
+      );
+
+      caja(
+        xDer,
+        yResultado,
+        "GRAN TOTAL",
+        formatearMoneda(d.granTotal),
+        true
+      );
+
+      y = yResultado + altoFila + 9;
     });
+
+    asegurarEspacio(15);
 
     doc.setFont(undefined, "bold");
     doc.setLineWidth(0.6);
-    doc.rect(12, y, 186, 9);
-    doc.setFontSize(11);
-    doc.text("GRAN TOTAL DEL LOCAL", 15, y + 6);
-    doc.text(formatearMoneda(resumen.granTotal), 195, y + 6, { align: "right" });
-    y += 15;
+    doc.rect(12, y, 186, 10);
+    doc.setFontSize(12);
+    doc.text("GRAN TOTAL DEL LOCAL", 15, y + 6.7);
+    doc.text(formatearMoneda(resumen.granTotal), 195, y + 6.7, {
+      align: "right",
+    });
+    y += 17;
 
-    doc.setFontSize(10);
+    asegurarEspacio(18, "DETALLE DE EGRESOS REGISTRADOS POR OPERARIO");
+
+    doc.setFont(undefined, "bold");
+    doc.setFontSize(10.5);
     doc.text("DETALLE DE EGRESOS REGISTRADOS POR OPERARIO", 12, y);
-    y += 5;
+    y += 6;
 
     doc.setFont(undefined, "normal");
-    doc.setFontSize(7.3);
+    doc.setFontSize(8.2);
 
     if (!egresos.length) {
-      doc.rect(12, y, 186, 8);
-      doc.text("Sin egresos registrados en el período.", 14, y + 5);
-      y += 10;
+      asegurarEspacio(10, "DETALLE DE EGRESOS REGISTRADOS POR OPERARIO");
+      doc.rect(12, y, 186, 9);
+      doc.text("Sin egresos registrados en el período.", 14, y + 5.7);
+      y += 11;
     } else {
       egresos.forEach((e) => {
-        const texto = `${formatearSoloFecha(e.fecha)} · ${e.operador} · ${e.ubicacion} · ${e.concepto}${e.descripcion && e.descripcion !== "-" ? ` · ${e.descripcion}` : ""}${e.factura && e.factura !== "-" ? ` · Factura: ${e.factura}` : ""}`;
-        const lineas = doc.splitTextToSize(texto, 155).slice(0, 2);
-        const alto = Math.max(8, lineas.length * 4 + 3);
+        const textoEgreso =
+          `${formatearSoloFecha(e.fecha)} · ${e.operador} · ${e.ubicacion} · ${e.concepto}` +
+          `${
+            e.descripcion && e.descripcion !== "-"
+              ? ` · ${e.descripcion}`
+              : ""
+          }` +
+          `${
+            e.factura && e.factura !== "-"
+              ? ` · Factura: ${e.factura}`
+              : ""
+          }`;
+
+        const lineas = doc.splitTextToSize(textoEgreso, 153);
+        const alto = Math.max(10, lineas.length * 4.2 + 4);
+
+        asegurarEspacio(
+          alto + 2,
+          "DETALLE DE EGRESOS REGISTRADOS POR OPERARIO"
+        );
+
         doc.rect(12, y, 186, alto);
-        doc.text(lineas, 14, y + 4.5);
+        doc.text(lineas, 14, y + 5);
+
         doc.setFont(undefined, "bold");
-        doc.text(formatearMoneda(e.total), 195, y + 4.5, { align: "right" });
+        doc.text(formatearMoneda(e.total), 195, y + 5, {
+          align: "right",
+        });
+
         doc.setFont(undefined, "normal");
         y += alto;
       });
     }
 
+    asegurarEspacio(10, "DETALLE DE EGRESOS REGISTRADOS POR OPERARIO");
+
     doc.setFont(undefined, "bold");
-    doc.rect(12, y, 186, 8);
-    doc.text("TOTAL EGRESOS", 14, y + 5.2);
-    doc.text(formatearMoneda(resumen.egresos), 195, y + 5.2, { align: "right" });
-    y += 14;
+    doc.rect(12, y, 186, 9);
+    doc.text("TOTAL EGRESOS", 14, y + 5.8);
+    doc.text(formatearMoneda(resumen.egresos), 195, y + 5.8, {
+      align: "right",
+    });
+    y += 16;
 
-    doc.setFontSize(10);
+    asegurarEspacio(18, "DETALLE DE RECARGAS REGISTRADAS");
+
+    doc.setFont(undefined, "bold");
+    doc.setFontSize(10.5);
     doc.text("DETALLE DE RECARGAS REGISTRADAS", 12, y);
-    y += 5;
+    y += 6;
 
-    doc.setFont(undefined, "normal");
-    doc.setFontSize(7.3);
+    const dibujarCabeceraRecargas = () => {
+      doc.setFont(undefined, "bold");
+      doc.setFontSize(8.2);
+      doc.rect(12, y, 186, 9);
+      doc.line(43, y, 43, y + 9);
+      doc.line(132, y, 132, y + 9);
+      doc.line(166, y, 166, y + 9);
+      doc.text("FECHA", 14, y + 5.8);
+      doc.text("ALUMNO", 45, y + 5.8);
+      doc.text("FORMA DE PAGO", 134, y + 5.8);
+      doc.text("VALOR", 195, y + 5.8, { align: "right" });
+      y += 9;
+      doc.setFont(undefined, "normal");
+    };
+
+    dibujarCabeceraRecargas();
 
     if (!recargas.length) {
-      doc.rect(12, y, 186, 8);
-      doc.text("Sin recargas registradas en el período.", 14, y + 5);
-      y += 10;
+      asegurarEspacio(10, "DETALLE DE RECARGAS REGISTRADAS");
+      doc.rect(12, y, 186, 9);
+      doc.text("Sin recargas registradas en el período.", 14, y + 5.8);
+      y += 11;
     } else {
       recargas.forEach((r) => {
-        doc.rect(12, y, 186, 8);
-        doc.text(formatearSoloFecha(r.fecha), 14, y + 5);
-        doc.text(String(r.alumno || "Alumno"), 45, y + 5, { maxWidth: 82 });
-        doc.text(String(r.forma_pago || "-"), 132, y + 5, { maxWidth: 32 });
-        doc.setFont(undefined, "bold");
-        doc.text(formatearMoneda(r.valor), 195, y + 5, { align: "right" });
+        if (y + 10 > limiteInferior) {
+          nuevaPagina("DETALLE DE RECARGAS REGISTRADAS");
+          dibujarCabeceraRecargas();
+        }
+
+        const nombreAlumno = String(r.alumno || "Alumno");
+        const lineasAlumno = doc.splitTextToSize(nombreAlumno, 84);
+        const alto = Math.max(9, lineasAlumno.length * 4.2 + 3);
+
+        if (y + alto > limiteInferior) {
+          nuevaPagina("DETALLE DE RECARGAS REGISTRADAS");
+          dibujarCabeceraRecargas();
+        }
+
+        doc.rect(12, y, 186, alto);
+        doc.line(43, y, 43, y + alto);
+        doc.line(132, y, 132, y + alto);
+        doc.line(166, y, 166, y + alto);
+
         doc.setFont(undefined, "normal");
-        y += 8;
+        doc.setFontSize(8.2);
+        doc.text(formatearSoloFecha(r.fecha), 14, y + 5.5);
+        doc.text(lineasAlumno, 45, y + 5.5);
+        doc.text(String(r.forma_pago || "-"), 134, y + 5.5, {
+          maxWidth: 30,
+        });
+
+        doc.setFont(undefined, "bold");
+        doc.text(formatearMoneda(r.valor), 195, y + 5.5, {
+          align: "right",
+        });
+
+        y += alto;
       });
     }
 
-    doc.setFont(undefined, "bold");
-    doc.rect(12, y, 186, 8);
-    doc.text("TOTAL RECARGAS", 14, y + 5.2);
-    doc.text(formatearMoneda(resumen.subtotalRecargas), 195, y + 5.2, { align: "right" });
+    asegurarEspacio(10, "DETALLE DE RECARGAS REGISTRADAS");
 
-    const inicio = normalizarFechaISO(cierreConsolidado.fecha_inicio || cierreConsolidado.fecha);
-    const fin = normalizarFechaISO(cierreConsolidado.fecha_fin || cierreConsolidado.fecha);
+    doc.setFont(undefined, "bold");
+    doc.rect(12, y, 186, 9);
+    doc.text("TOTAL RECARGAS", 14, y + 5.8);
+    doc.text(formatearMoneda(resumen.subtotalRecargas), 195, y + 5.8, {
+      align: "right",
+    });
+
+    // Pie de página en todas las hojas A4.
+    const paginas = doc.getNumberOfPages();
+    for (let pagina = 1; pagina <= paginas; pagina += 1) {
+      doc.setPage(pagina);
+      doc.setFont(undefined, "normal");
+      doc.setFontSize(7.5);
+      doc.text(
+        `POS NUBE · ${institucion} · ${rango} · Página ${pagina} de ${paginas}`,
+        12,
+        291
+      );
+    }
+
+    const inicio = normalizarFechaISO(
+      cierreConsolidado.fecha_inicio || cierreConsolidado.fecha
+    );
+    const fin = normalizarFechaISO(
+      cierreConsolidado.fecha_fin || cierreConsolidado.fecha
+    );
     const sufijo = inicio === fin ? fin : `${inicio}_${fin}`;
 
     doc.save(
-      `reporte_cierres_${String(institucion).replace(/[^a-z0-9]+/gi, "_")}_${sufijo}.pdf`
+      `reporte_cierres_${String(institucion).replace(
+        /[^a-z0-9]+/gi,
+        "_"
+      )}_${sufijo}.pdf`
     );
   };
 
