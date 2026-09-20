@@ -8029,11 +8029,25 @@ if (institucionIdLogin) {
     return lista;
   };
 
+  const formatearFormaPagoProducto = (valor) => {
+    const metodo = String(valor || "").trim().toUpperCase();
+
+    if (metodo === "CREDITO_PROFESOR") return "CUENTA POR PAGAR";
+    if (metodo === "CREDITO") return "CRÉDITO";
+    if (metodo === "TRANSFERENCIA") return "TRANSFERENCIA";
+    if (metodo === "EFECTIVO") return "EFECTIVO";
+    if (metodo === "SALDO") return "SALDO";
+    if (metodo === "TARJETA") return "TARJETA";
+
+    return metodo || "-";
+  };
+
   const construirResumenProductosVendidos = (listaVentas) => {
     const mapa = {};
 
     listaVentas.forEach((venta) => {
       const items = Array.isArray(venta.items) ? venta.items : [];
+      const formaPago = formatearFormaPagoProducto(venta.metodo_pago);
 
       items.forEach((item) => {
         const productoId =
@@ -8043,7 +8057,14 @@ if (institucionIdLogin) {
           item.nombre ||
           "producto";
 
-        const clave = String(productoId);
+        /*
+         * El mismo producto puede venderse con distintas formas de pago.
+         * Por eso la agrupación usa PRODUCTO + FORMA DE PAGO.
+         * Así no se mezclan, por ejemplo, hamburguesas pagadas en efectivo
+         * con hamburguesas pagadas por transferencia.
+         */
+        const clave = `${String(productoId)}__${formaPago}`;
+
         const nombre =
           item.producto_nombre ||
           item.nombre ||
@@ -8066,6 +8087,7 @@ if (institucionIdLogin) {
               item.producto_nombre ||
               item.nombre ||
               "-",
+            forma_pago: formaPago,
             cantidad: 0,
             total: 0,
           };
@@ -8114,6 +8136,7 @@ if (institucionIdLogin) {
           codigo: producto.codigo || producto.id || "-",
           categoria: producto.categoria || "-",
           descripcion: producto.descripcion || "-",
+          forma_pago: "-",
           cantidad: 0,
           total: 0,
         }));
@@ -8258,6 +8281,7 @@ if (institucionIdLogin) {
       "Código": producto.codigo || "",
       "Categoría": producto.categoria || "",
       "Descripción": producto.descripcion || "",
+      "Forma de pago": producto.forma_pago || "-",
       "Cantidad": Number(producto.cantidad || 0),
       "Total de ventas": Number(producto.total || 0),
     }));
@@ -8269,6 +8293,7 @@ if (institucionIdLogin) {
       { wch: 14 },
       { wch: 22 },
       { wch: 38 },
+      { wch: 20 },
       { wch: 12 },
       { wch: 18 },
     ];
@@ -8334,9 +8359,9 @@ if (institucionIdLogin) {
       `Generado: ${fechaReporte}`,
       filtrosUsados,
       `Total productos: ${productosVendidos.length}`,
-      "------------------------------------------------------------------------------------------------",
-      "Nombre                    Codigo       Categoria            Cantidad      Total",
-      "------------------------------------------------------------------------------------------------",
+      "----------------------------------------------------------------------------------------------------------------",
+      "Nombre                 Codigo       Categoria          Forma pago          Cantidad        Total",
+      "----------------------------------------------------------------------------------------------------------------",
     ];
 
     let totalCantidad = 0;
@@ -8351,9 +8376,10 @@ if (institucionIdLogin) {
 
       lineas.push(
         [
-          cortar(producto.nombre || "-", 25).padEnd(25, " "),
+          cortar(producto.nombre || "-", 21).padEnd(21, " "),
           cortar(producto.codigo || "-", 12).padEnd(12, " "),
-          cortar(producto.categoria || "-", 20).padEnd(20, " "),
+          cortar(producto.categoria || "-", 18).padEnd(18, " "),
+          cortar(producto.forma_pago || "-", 18).padEnd(18, " "),
           String(cantidad).padStart(8, " "),
           `$${total.toFixed(2)}`.padStart(12, " "),
         ].join(" ")
@@ -8367,7 +8393,7 @@ if (institucionIdLogin) {
     });
 
     lineas.push(
-      "------------------------------------------------------------------------------------------------"
+      "----------------------------------------------------------------------------------------------------------------"
     );
     lineas.push(
       `TOTAL CANTIDAD: ${totalCantidad}     TOTAL VENTAS: $${totalVentas.toFixed(2)}`
@@ -16764,6 +16790,7 @@ if (!usuario) {
         <span>Código</span>
         <span>Categoría</span>
         <span>Descripción</span>
+        <span>Forma de pago</span>
         <span>Cantidad</span>
         <span>Total de Ventas</span>
       </div>
@@ -16781,7 +16808,8 @@ if (!usuario) {
               String(p.nombre || "").toLowerCase().includes(texto) ||
               String(p.codigo || "").toLowerCase().includes(texto) ||
               String(p.categoria || "").toLowerCase().includes(texto) ||
-              String(p.descripcion || "").toLowerCase().includes(texto)
+              String(p.descripcion || "").toLowerCase().includes(texto) ||
+              String(p.forma_pago || "").toLowerCase().includes(texto)
             );
           })
           .map((p, index) => (
@@ -16790,6 +16818,7 @@ if (!usuario) {
               <span>{p.codigo || "-"}</span>
               <span>{p.categoria || "-"}</span>
               <span>{p.descripcion || "-"}</span>
+              <span>{p.forma_pago || "-"}</span>
               <span>{p.cantidad || 0}</span>
               <span>${Number(p.total || 0).toFixed(2)}</span>
             </div>
@@ -25519,7 +25548,7 @@ emptyState: {
 },
 tableHeaderProductos: {
   display: "grid",
-  gridTemplateColumns: "2fr 1fr 1.2fr 2fr 1fr 1.2fr",
+  gridTemplateColumns: "1.8fr 0.9fr 1.1fr 1.7fr 1.2fr 0.8fr 1.1fr",
   gap: 12,
   padding: "12px 14px",
   background: "#dbe7ff",
@@ -25530,7 +25559,7 @@ tableHeaderProductos: {
 },
 rowTablaProductos: {
   display: "grid",
-  gridTemplateColumns: "2fr 1fr 1.2fr 2fr 1fr 1.2fr",
+  gridTemplateColumns: "1.8fr 0.9fr 1.1fr 1.7fr 1.2fr 0.8fr 1.1fr",
   gap: 12,
   padding: "12px 14px",
   borderBottom: "1px solid #e2e8f0",
