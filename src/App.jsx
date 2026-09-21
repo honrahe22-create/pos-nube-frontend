@@ -13774,11 +13774,76 @@ const verCierreConsolidado = async () => {
         }
 
         if (!respuesta.ok) {
-          throw new Error(
+          const mensajeError =
             data.message ||
             data.error ||
-            `No se pudo eliminar ${clave} (HTTP ${respuesta.status}).`
-          );
+            `No se pudo eliminar ${clave} (HTTP ${respuesta.status}).`;
+
+          const saldoUtilizado =
+            prefijo === "A" &&
+            respuesta.status === 409 &&
+            /saldo.*utilizado|utilizada en compras|ya fue utilizado/i.test(
+              String(mensajeError)
+            );
+
+          if (saldoUtilizado) {
+            const corregir = window.confirm(
+              `${mensajeError}\n\n` +
+              "Esta recarga fue registrada al alumno equivocado y parte del saldo ya se consumió.\n\n" +
+              "¿Deseas CORREGIR LA RECARGA?\n\n" +
+              "El sistema NO borrará las ventas. Retirará el saldo que todavía esté disponible, " +
+              "anulará la recarga y convertirá únicamente el valor ya consumido en cuenta por pagar " +
+              "del alumno para conservar la contabilidad."
+            );
+
+            if (!corregir) {
+              throw new Error(mensajeError);
+            }
+
+            const correccion = await fetch(
+              `${API_URL}/api/recargas/corregir/alumno/${id}`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                  institucion_id: Number(institucionId),
+                  motivo: "RECARGA REGISTRADA AL ALUMNO EQUIVOCADO",
+                }),
+              }
+            );
+
+            const dataCorreccion = await correccion
+              .json()
+              .catch(() => ({}));
+
+            if (!correccion.ok) {
+              throw new Error(
+                dataCorreccion.message ||
+                dataCorreccion.error ||
+                "No se pudo corregir la recarga errónea."
+              );
+            }
+
+            alert(
+              `${dataCorreccion.message || "Recarga corregida."}\n\n` +
+              `Saldo retirado: $${Number(
+                dataCorreccion.saldo_retirado || 0
+              ).toFixed(2)}\n` +
+              `Saldo ya consumido: $${Number(
+                dataCorreccion.saldo_ya_consumido || 0
+              ).toFixed(2)}\n` +
+              `Cuenta por pagar generada: $${Number(
+                dataCorreccion.cuenta_por_pagar_generada || 0
+              ).toFixed(2)}`
+            );
+
+            continue;
+          }
+
+          throw new Error(mensajeError);
         }
       }
 
