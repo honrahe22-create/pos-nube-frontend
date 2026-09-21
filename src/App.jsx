@@ -12621,9 +12621,10 @@ const verCierreConsolidado = async () => {
         );
       }
 
-      setCierreConsolidado(
-        reconciliarRecargasConsolidadoFrontend(data)
-      );
+      // El backend es la única fuente de verdad del consolidado.
+      // Ya entrega las recargas asignadas a cierres reales de los operadores.
+      // No volver a reconciliar aquí para evitar crear filas/cierres REC-* artificiales.
+      setCierreConsolidado(data);
     } catch (error) {
       console.error("Error cargando cierre total:", error);
       alert(error.message || "No se pudo calcular el cierre total.");
