@@ -1219,6 +1219,7 @@ const [productosFiltros, setProductosFiltros] = useState({
   fecha_fin: "",
   operador: "",
   ubicacion: "",
+  metodo_pago: "",
   comprado: "",
   texto: "",
 });
@@ -7506,8 +7507,26 @@ if (institucionIdLogin) {
   };
 
   const anularCreditoProfesor = async (movimiento) => {
+    const tipo = String(movimiento?.tipo || "").trim().toUpperCase();
+    const ventaId = Number(movimiento?.venta_id || 0);
+
+    /*
+     * Un movimiento CONSUMO de profesor proviene de una venta real.
+     * Para anular la orden usamos la ruta oficial de eliminación de ventas,
+     * porque esa ruta ya revierte stock, saldo a favor y cuenta por pagar
+     * dentro de una sola transacción. Así evitamos dejar movimientos huérfanos.
+     */
+    if (tipo !== "CONSUMO" || !ventaId) {
+      alert(
+        "Este movimiento no corresponde a una orden de venta identificable. " +
+        "Para proteger los saldos históricos no se eliminará desde esta pantalla."
+      );
+      return;
+    }
+
     const confirmado = window.confirm(
-      "¿Deseas anular este movimiento de crédito?"
+      `¿Eliminar la orden #${ventaId} de este profesor?\n\n` +
+      "El sistema revertirá el stock y corregirá automáticamente el saldo/cuenta por pagar relacionados."
     );
 
     if (!confirmado) return;
@@ -7517,42 +7536,53 @@ if (institucionIdLogin) {
       const institucionId = obtenerInstitucionActivaId();
 
       const res = await fetch(
-        `${API_URL}/api/profesores/creditos/${movimiento.id}/anular`,
+        `${API_URL}/api/ventas/eliminar-seleccionadas`,
         {
-          method: "PATCH",
+          method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            institucion_id: institucionId,
+            institucion_id: Number(institucionId),
+            ids: [ventaId],
           }),
         }
       );
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         throw new Error(
-          data.message || data.error || "No se pudo anular"
+          data.message ||
+          data.error ||
+          "No se pudo eliminar la orden del profesor."
         );
       }
 
-      await cargarProfesores();
+      await Promise.all([
+        cargarVentas(),
+        cargarProductos(),
+        cargarProfesores(),
+      ]);
+
       await cargarCreditosProfesores(profesorDetalle?.id || "");
-      setProfesorDetalle((prev) =>
-        prev
-          ? {
-              ...prev,
-              saldo: data.saldo,
-            }
-          : prev
+
+      const profesorActualizado = profesores.find(
+        (p) => Number(p.id) === Number(profesorDetalle?.id)
       );
 
-      alert("Movimiento anulado correctamente.");
+      if (profesorActualizado) {
+        setProfesorDetalle(profesorActualizado);
+      }
+
+      alert(`Orden #${ventaId} eliminada correctamente.`);
     } catch (error) {
-      console.error("Error anulando crédito:", error);
-      alert(error.message || "No se pudo anular el movimiento.");
+      console.error("Error eliminando orden del profesor:", error);
+      alert(
+        error.message ||
+        "No se pudo eliminar la orden del profesor."
+      );
     }
   };
 
@@ -8026,6 +8056,19 @@ if (institucionIdLogin) {
       });
     }
 
+    if (filtros.metodo_pago) {
+      const metodoFiltro = String(filtros.metodo_pago || "")
+        .trim()
+        .toUpperCase();
+
+      lista = lista.filter(
+        (venta) =>
+          String(venta.metodo_pago || "")
+            .trim()
+            .toUpperCase() === metodoFiltro
+      );
+    }
+
     return lista;
   };
 
@@ -8346,6 +8389,9 @@ if (institucionIdLogin) {
       productosFiltros.ubicacion
         ? `Ubicacion: ${productosFiltros.ubicacion}`
         : "Ubicacion: Todas",
+      productosFiltros.metodo_pago
+        ? `Forma pago: ${formatearFormaPagoProducto(productosFiltros.metodo_pago)}`
+        : "Forma pago: Todas",
       productosFiltros.comprado
         ? `Comprado: ${productosFiltros.comprado}`
         : "Comprado: Todos",
@@ -16690,6 +16736,27 @@ if (!usuario) {
       </div>
 
       <div style={styles.filterGroup}>
+        <label style={styles.label}>Forma de pago</label>
+        <select
+          value={productosFiltros.metodo_pago || ""}
+          onChange={(e) =>
+            setProductosFiltros({
+              ...productosFiltros,
+              metodo_pago: e.target.value,
+            })
+          }
+          style={styles.input}
+        >
+          <option value="">Todas</option>
+          <option value="EFECTIVO">Efectivo</option>
+          <option value="TRANSFERENCIA">Transferencia</option>
+          <option value="SALDO">Saldo</option>
+          <option value="CREDITO">Crédito</option>
+          <option value="CREDITO_PROFESOR">Cuenta por pagar</option>
+        </select>
+      </div>
+
+      <div style={styles.filterGroup}>
         <label style={styles.label}>Comprado</label>
         <select
           value={productosFiltros.comprado || ""}
@@ -16736,6 +16803,7 @@ if (!usuario) {
             fecha_fin: "",
             operador: "",
             ubicacion: "",
+            metodo_pago: "",
             comprado: "",
             texto: "",
           })
@@ -20032,7 +20100,9 @@ onClick={guardarEgreso}
                                   {movimiento.estado || "ACTIVO"}
                                 </td>
                                 <td style={styles.td}>
-                                  {movimiento.estado !== "ANULADO" ? (
+                                  {movimiento.estado !== "ANULADO" &&
+                                  String(movimiento.tipo || "").trim().toUpperCase() === "CONSUMO" &&
+                                  Number(movimiento.venta_id || 0) > 0 ? (
                                     <button
                                       type="button"
                                       style={styles.smallDangerButton}
@@ -24548,6 +24618,9 @@ onClick={guardarEgreso}
                         <option value="EFECTIVO">Efectivo</option>
                         <option value="TRANSFERENCIA">Transferencia</option>
                         <option value="RECARGA">Recarga</option>
+                        <option value="SALDO">Saldo</option>
+                        <option value="CREDITO">Crédito</option>
+                        <option value="CREDITO_PROFESOR">Cuenta por pagar</option>
                       </select>
                     </div>
                   </div>
