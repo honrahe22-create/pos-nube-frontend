@@ -12278,7 +12278,311 @@ Disponible: ${formatearMoneda(
     }
   };
 
-  const verCierreConsolidado = async () => {
+  const reconciliarRecargasConsolidadoFrontend = (data) => {
+    if (!data || typeof data !== "object") return data;
+
+    const puntos = Array.isArray(data.puntos)
+      ? data.puntos.map((cierre) => ({
+          ...cierre,
+          recargas_detalle: Array.isArray(cierre.recargas_detalle)
+            ? [...cierre.recargas_detalle]
+            : [],
+        }))
+      : [];
+
+    const recargas = Array.isArray(data.recargas_detalle)
+      ? data.recargas_detalle
+      : [];
+
+    if (!recargas.length || !puntos.length) {
+      return data;
+    }
+
+    const normalizarIdentidad = (valor) =>
+      String(valor || "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+
+    const fechaCierre = (cierre) =>
+      normalizarFechaISO(
+        cierre?.fecha ||
+          cierre?.periodo_hasta ||
+          cierre?.created_at
+      );
+
+    const fechaRecarga = (recarga) =>
+      normalizarFechaISO(
+        recarga?.fecha_pago ||
+          recarga?.fecha_transferencia ||
+          recarga?.created_at
+      );
+
+    const puntoCompatible = (cierre, recarga) => {
+      const cierrePuntoId = Number(cierre?.punto_id || 0);
+      const recargaPuntoId = Number(recarga?.punto_id || 0);
+
+      if (cierrePuntoId > 0 && recargaPuntoId > 0) {
+        return cierrePuntoId === recargaPuntoId;
+      }
+
+      const cierrePunto = normalizarUbicacionFrontend(
+        cierre?.punto_nombre || "",
+        Number(data.institucion_id || 0)
+      );
+
+      const recargaPunto = recarga?.punto_nombre
+        ? normalizarUbicacionFrontend(
+            recarga.punto_nombre,
+            Number(data.institucion_id || 0)
+          )
+        : "";
+
+      return !recargaPunto || !cierrePunto || recargaPunto === cierrePunto;
+    };
+
+    const identidadCompatible = (cierre, recarga) => {
+      const cierreId = Number(cierre?.usuario_id || 0);
+      const recargaId = Number(recarga?.usuario_id || 0);
+
+      if (cierreId > 0 && recargaId > 0 && cierreId === recargaId) {
+        return true;
+      }
+
+      const correoCierre = normalizarIdentidad(cierre?.usuario_correo);
+      const correoRecarga = normalizarIdentidad(recarga?.usuario_correo);
+
+      if (
+        correoCierre &&
+        correoRecarga &&
+        correoCierre === correoRecarga
+      ) {
+        return true;
+      }
+
+      const nombreCierre = normalizarIdentidad(cierre?.usuario_nombre);
+      const nombreRecarga = normalizarIdentidad(recarga?.usuario_nombre);
+
+      return Boolean(
+        nombreCierre &&
+        nombreRecarga &&
+        nombreCierre === nombreRecarga
+      );
+    };
+
+    const idsYaAsignados = new Set();
+
+    puntos.forEach((cierre) => {
+      (cierre.recargas_detalle || []).forEach((recarga) => {
+        const id = Number(recarga?.id || 0);
+        if (id > 0) idsYaAsignados.add(id);
+      });
+    });
+
+    const sinAsignar = [];
+
+    recargas.forEach((recarga) => {
+      const recargaId = Number(recarga?.id || 0);
+      if (recargaId > 0 && idsYaAsignados.has(recargaId)) return;
+
+      const candidatosIdentidad = puntos.filter(
+        (cierre) =>
+          fechaCierre(cierre) === fechaRecarga(recarga) &&
+          puntoCompatible(cierre, recarga) &&
+          identidadCompatible(cierre, recarga)
+      );
+
+      let destino = null;
+
+      if (candidatosIdentidad.length === 1) {
+        destino = candidatosIdentidad[0];
+      } else if (candidatosIdentidad.length > 1) {
+        // Si hay varios cierres del mismo operador en el día,
+        // usamos el período exacto para no duplicar.
+        const creado = recarga?.created_at
+          ? new Date(recarga.created_at).getTime()
+          : NaN;
+
+        destino =
+          candidatosIdentidad.find((cierre) => {
+            const desde = cierre?.periodo_desde
+              ? new Date(cierre.periodo_desde).getTime()
+              : NaN;
+            const hasta = cierre?.periodo_hasta
+              ? new Date(cierre.periodo_hasta).getTime()
+              : NaN;
+
+            return (
+              Number.isFinite(creado) &&
+              Number.isFinite(desde) &&
+              Number.isFinite(hasta) &&
+              creado > desde &&
+              creado <= hasta
+            );
+          }) || null;
+      }
+
+      if (!destino) {
+        const candidatosFechaPunto = puntos.filter(
+          (cierre) =>
+            fechaCierre(cierre) === fechaRecarga(recarga) &&
+            puntoCompatible(cierre, recarga)
+        );
+
+        // Solo asignamos por fecha/punto cuando hay UN único cierre posible.
+        if (candidatosFechaPunto.length === 1) {
+          destino = candidatosFechaPunto[0];
+        }
+      }
+
+      if (destino) {
+        destino.recargas_detalle.push(recarga);
+        if (recargaId > 0) idsYaAsignados.add(recargaId);
+      } else {
+        sinAsignar.push(recarga);
+      }
+    });
+
+    const recalcularRecargasCierre = (cierre) => {
+      const detalle = Array.isArray(cierre.recargas_detalle)
+        ? cierre.recargas_detalle
+        : [];
+
+      const efectivo = detalle
+        .filter(
+          (r) =>
+            String(r?.metodo_pago || "").trim().toUpperCase() ===
+            "EFECTIVO"
+        )
+        .reduce((total, r) => total + Number(r?.monto || 0), 0);
+
+      const transferencia = detalle
+        .filter(
+          (r) =>
+            String(r?.metodo_pago || "").trim().toUpperCase() ===
+            "TRANSFERENCIA"
+        )
+        .reduce((total, r) => total + Number(r?.monto || 0), 0);
+
+      const subtotalVentas =
+        Number(cierre?.ventas_efectivo || 0) +
+        Number(cierre?.ventas_transferencia || 0) +
+        Number(cierre?.ventas_tarjeta || 0) +
+        Number(cierre?.ventas_saldo || 0) +
+        Number(cierre?.ventas_credito || 0);
+
+      return {
+        ...cierre,
+        recargas_efectivo: efectivo,
+        recargas_transferencia: transferencia,
+        subtotal_recargas: efectivo + transferencia,
+        subtotal_ventas: subtotalVentas,
+        efectivo_esperado:
+          Number(cierre?.ventas_efectivo || 0) +
+          efectivo -
+          Number(cierre?.egresos_total || 0),
+        gran_total: subtotalVentas + efectivo + transferencia,
+      };
+    };
+
+    let puntosFinales = puntos.map(recalcularRecargasCierre);
+
+    /*
+     * Si una recarga histórica no tiene datos suficientes para saber
+     * qué operador cerró esa caja, NO la atribuimos a una persona equivocada.
+     * Creamos un bloque separado para que el reporte siga cuadrando con el detalle.
+     */
+    const grupos = new Map();
+
+    sinAsignar.forEach((recarga) => {
+      const fecha = fechaRecarga(recarga) || data.fecha || "";
+      const usuarioClave =
+        Number(recarga?.usuario_id || 0) > 0
+          ? `ID:${Number(recarga.usuario_id)}`
+          : normalizarIdentidad(recarga?.usuario_correo)
+          ? `MAIL:${normalizarIdentidad(recarga.usuario_correo)}`
+          : normalizarIdentidad(recarga?.usuario_nombre)
+          ? `NOMBRE:${normalizarIdentidad(recarga.usuario_nombre)}`
+          : "SIN_OPERADOR";
+
+      const puntoClave =
+        Number(recarga?.punto_id || 0) > 0
+          ? `P:${Number(recarga.punto_id)}`
+          : `PN:${normalizarIdentidad(recarga?.punto_nombre || "SIN_PUNTO")}`;
+
+      const clave = `${fecha}|${usuarioClave}|${puntoClave}`;
+
+      if (!grupos.has(clave)) grupos.set(clave, []);
+      grupos.get(clave).push(recarga);
+    });
+
+    grupos.forEach((grupo) => {
+      const primera = grupo[0];
+      const sintetico = recalcularRecargasCierre({
+        id: `RECARGAS-${primera?.id || Date.now()}`,
+        institucion_id: data.institucion_id,
+        fecha: fechaRecarga(primera) || data.fecha,
+        usuario_id: primera?.usuario_id || null,
+        usuario_nombre:
+          primera?.usuario_nombre ||
+          primera?.usuario_correo ||
+          "RECARGAS DEL DÍA",
+        usuario_correo: primera?.usuario_correo || "",
+        punto_id: primera?.punto_id || null,
+        punto_nombre:
+          primera?.punto_nombre ||
+          (Number(data.institucion_id) === 1 ? "BAR" : "RECARGAS"),
+        tipo_cierre: "RECARGAS_SIN_CIERRE_HISTORICO",
+        codigo_cierre: `REC-${String(
+          fechaRecarga(primera) || data.fecha || ""
+        ).replace(/-/g, "")}-${primera?.id || 0}`,
+        ventas_efectivo: 0,
+        ventas_transferencia: 0,
+        ventas_tarjeta: 0,
+        ventas_saldo: 0,
+        ventas_credito: 0,
+        egresos_total: 0,
+        efectivo_contado: 0,
+        tarjeta_manual: 0,
+        transferencia_manual: 0,
+        diferencia_efectivo: 0,
+        diferencia_tarjeta: 0,
+        diferencia_transferencia: 0,
+        diferencia_general: 0,
+        recargas_detalle: grupo,
+        egresos_detalle: [],
+      });
+
+      puntosFinales.push(sintetico);
+    });
+
+    const sumar = (campo) =>
+      puntosFinales.reduce(
+        (total, cierre) => total + Number(cierre?.[campo] || 0),
+        0
+      );
+
+    return {
+      ...data,
+      puntos: puntosFinales,
+      // Conservamos la cantidad de cierres reales; los bloques REC-* son informativos.
+      cantidad_cierres:
+        Number(data.cantidad_cierres || 0) ||
+        puntos.filter(
+          (cierre) =>
+            String(cierre?.tipo_cierre || "") !==
+            "RECARGAS_SIN_CIERRE_HISTORICO"
+        ).length,
+      recargas_efectivo: sumar("recargas_efectivo"),
+      recargas_transferencia: sumar("recargas_transferencia"),
+      subtotal_recargas: sumar("subtotal_recargas"),
+      subtotal_ventas: sumar("subtotal_ventas"),
+      gran_total: sumar("gran_total"),
+    };
+  };
+
+const verCierreConsolidado = async () => {
     try {
       setCargandoConsolidado(true);
       const token = localStorage.getItem("token");
@@ -12319,7 +12623,9 @@ Disponible: ${formatearMoneda(
         );
       }
 
-      setCierreConsolidado(data);
+      setCierreConsolidado(
+        reconciliarRecargasConsolidadoFrontend(data)
+      );
     } catch (error) {
       console.error("Error cargando cierre total:", error);
       alert(error.message || "No se pudo calcular el cierre total.");
