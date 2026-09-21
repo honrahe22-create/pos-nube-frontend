@@ -12710,6 +12710,38 @@ const verCierreConsolidado = async () => {
     };
   };
 
+  const obtenerResumenRecargasLocalConsolidado = () => {
+    const detalle = Array.isArray(cierreConsolidado?.recargas_detalle)
+      ? cierreConsolidado.recargas_detalle
+      : [];
+
+    const efectivo = redondearValorCierre(
+      detalle
+        .filter(
+          (r) =>
+            String(r?.metodo_pago || "").trim().toUpperCase() ===
+            "EFECTIVO"
+        )
+        .reduce((total, r) => total + Number(r?.monto || 0), 0)
+    );
+
+    const transferencia = redondearValorCierre(
+      detalle
+        .filter(
+          (r) =>
+            String(r?.metodo_pago || "").trim().toUpperCase() ===
+            "TRANSFERENCIA"
+        )
+        .reduce((total, r) => total + Number(r?.monto || 0), 0)
+    );
+
+    return {
+      efectivo,
+      transferencia,
+      subtotal: redondearValorCierre(efectivo + transferencia),
+    };
+  };
+
   const obtenerResumenCierreConsolidadoDetallado = () => {
     const cierres = Array.isArray(cierreConsolidado?.puntos)
       ? cierreConsolidado.puntos
@@ -12723,23 +12755,20 @@ const verCierreConsolidado = async () => {
         )
       );
 
+    const recargasLocal = obtenerResumenRecargasLocalConsolidado();
+    const subtotalVentas = sumar("subtotalVentas");
+
     return {
-      cantidadCierres: cierres.length,
+      cantidadCierres: Number(cierreConsolidado?.cantidad_cierres || cierres.length),
       ventasEfectivo: sumar("ventasEfectivo"),
       ventasTransferencia: sumar("ventasTransferencia"),
       ventasTarjeta: sumar("ventasTarjeta"),
       ventasSaldo: sumar("ventasSaldo"),
       ventasCredito: sumar("ventasCredito"),
-      subtotalVentas: sumar("subtotalVentas"),
-      recargasEfectivo: redondearValorCierre(
-        cierreConsolidado?.recargas_efectivo ?? sumar("recargasEfectivo")
-      ),
-      recargasTransferencia: redondearValorCierre(
-        cierreConsolidado?.recargas_transferencia ?? sumar("recargasTransferencia")
-      ),
-      subtotalRecargas: redondearValorCierre(
-        cierreConsolidado?.subtotal_recargas ?? sumar("subtotalRecargas")
-      ),
+      subtotalVentas,
+      recargasEfectivo: recargasLocal.efectivo,
+      recargasTransferencia: recargasLocal.transferencia,
+      subtotalRecargas: recargasLocal.subtotal,
       egresos: sumar("egresos"),
       efectivoEsperado: sumar("efectivoEsperado"),
       efectivoContado: sumar("efectivoContado"),
@@ -12749,7 +12778,7 @@ const verCierreConsolidado = async () => {
       diferenciaTransferencia: sumar("diferenciaTransferencia"),
       diferenciaGeneral: sumar("diferenciaGeneral"),
       granTotal: redondearValorCierre(
-        cierreConsolidado?.gran_total ?? sumar("granTotal")
+        subtotalVentas + recargasLocal.subtotal
       ),
     };
   };
@@ -12904,9 +12933,6 @@ const verCierreConsolidado = async () => {
       merges.push({ s: { r: filaTitulo, c: 0 }, e: { r: filaTitulo, c: 3 } });
 
       const izquierda = [
-        ["Recargas efectivo", d.recargasEfectivo],
-        ["Recargas transferencia", d.recargasTransferencia],
-        ["SUBTOTAL RECARGAS", d.subtotalRecargas],
         ["Ventas efectivo", d.ventasEfectivo],
         ["Ventas transferencia", d.ventasTransferencia],
         ["Ventas saldo", d.ventasSaldo],
@@ -12937,6 +12963,13 @@ const verCierreConsolidado = async () => {
       filas.push(["DIFERENCIA GENERAL", d.diferenciaGeneral, "GRAN TOTAL", d.granTotal]);
       if (indice < cierres.length - 1) filas.push([]);
     });
+
+    filas.push([]);
+    const filaRecargasLocal = filas.length;
+    filas.push(["RECARGAS DEL LOCAL", "", "", ""]);
+    merges.push({ s: { r: filaRecargasLocal, c: 0 }, e: { r: filaRecargasLocal, c: 3 } });
+    filas.push(["Efectivo", resumen.recargasEfectivo, "Transferencia", resumen.recargasTransferencia]);
+    filas.push(["SUBTOTAL RECARGAS", resumen.subtotalRecargas, "", ""]);
 
     filas.push([]);
     const filaGranTotal = filas.length;
@@ -13120,9 +13153,6 @@ const verCierreConsolidado = async () => {
       const fecha = formatearSoloFecha(cierre.fecha);
 
       const izquierda = [
-        ["RECARGAS EFECTIVO", formatearMoneda(d.recargasEfectivo)],
-        ["RECARGAS TRANSFERENCIA", formatearMoneda(d.recargasTransferencia)],
-        ["SUBTOTAL RECARGAS", formatearMoneda(d.subtotalRecargas), true],
         ["VENTAS EFECTIVO", formatearMoneda(d.ventasEfectivo)],
         ["VENTAS TRANSFERENCIA", formatearMoneda(d.ventasTransferencia)],
         ["VENTAS SALDO", formatearMoneda(d.ventasSaldo)],
@@ -13205,7 +13235,34 @@ const verCierreConsolidado = async () => {
       y = yResultado + altoFila + 9;
     });
 
-    asegurarEspacio(15);
+    asegurarEspacio(34);
+
+    doc.setFont(undefined, "bold");
+    doc.setFontSize(10.5);
+    doc.text("RECARGAS DEL LOCAL", 12, y);
+    y += 5;
+
+    caja(
+      xIzq,
+      y,
+      "EFECTIVO",
+      formatearMoneda(resumen.recargasEfectivo)
+    );
+    caja(
+      xDer,
+      y,
+      "TRANSFERENCIA",
+      formatearMoneda(resumen.recargasTransferencia)
+    );
+    y += altoFila;
+
+    doc.setFont(undefined, "bold");
+    doc.rect(12, y, 186, 8);
+    doc.text("SUBTOTAL RECARGAS", 14, y + 5.2);
+    doc.text(formatearMoneda(resumen.subtotalRecargas), 195, y + 5.2, {
+      align: "right",
+    });
+    y += 14;
 
     doc.setFont(undefined, "bold");
     doc.setLineWidth(0.6);
@@ -16708,11 +16765,6 @@ if (!usuario) {
 
                     <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:12}}>
                       <div style={{display:"grid",gap:12}}>
-                        {cuadro("RECARGAS", [
-                          ["Efectivo",d.recargasEfectivo],
-                          ["Transferencia",d.recargasTransferencia],
-                          ["SUBTOTAL RECARGAS",d.subtotalRecargas,true],
-                        ])}
                         {cuadro("VENTAS", [
                           ["Efectivo",d.ventasEfectivo],
                           ["Transferencia",d.ventasTransferencia],
@@ -16750,6 +16802,24 @@ if (!usuario) {
             const recargas = obtenerRecargasDetalladasConsolidado();
             return (
               <>
+                <div style={{marginTop:18,border:"1px solid #cbd5e1",borderRadius:12,overflow:"hidden"}}>
+                  <div style={{fontWeight:900,padding:"10px 12px",background:"#f8fafc",fontSize:17}}>
+                    RECARGAS DEL LOCAL
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:10,padding:"9px 12px",borderTop:"1px solid #e2e8f0"}}>
+                    <span>Efectivo</span>
+                    <strong>{formatearMoneda(resumen.recargasEfectivo)}</strong>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:10,padding:"9px 12px",borderTop:"1px solid #e2e8f0"}}>
+                    <span>Transferencia</span>
+                    <strong>{formatearMoneda(resumen.recargasTransferencia)}</strong>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:10,padding:"10px 12px",borderTop:"2px solid #94a3b8",fontWeight:900}}>
+                    <span>SUBTOTAL RECARGAS</span>
+                    <span>{formatearMoneda(resumen.subtotalRecargas)}</span>
+                  </div>
+                </div>
+
                 <div style={{marginTop:18,border:"2px solid #1d4ed8",borderRadius:12,padding:14,display:"flex",justifyContent:"space-between",gap:12,fontSize:19,fontWeight:900}}>
                   <span>GRAN TOTAL DEL LOCAL</span>
                   <span>{formatearMoneda(resumen.granTotal)}</span>
