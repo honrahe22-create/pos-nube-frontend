@@ -767,7 +767,7 @@ useEffect(() => {
 
     registros.clear();
   };
-}, [vista, vistaVentasInterna, esPantallaCompacta]);
+}, []);
 
 
 // PWA POS NUBE / PORTAL DE PADRES
