@@ -534,6 +534,242 @@ useEffect(() => {
 }, []);
 
 
+
+/*
+ * BARRA HORIZONTAL SUPERIOR GLOBAL PARA TABLAS ANCHAS
+ * ----------------------------------------------------
+ * Se aplica automáticamente a cualquier tabla del sistema que necesite
+ * desplazamiento horizontal, incluso dentro de módulos/componentes importados.
+ *
+ * - Conserva la barra horizontal inferior existente.
+ * - Agrega una barra superior sincronizada.
+ * - La barra superior queda visible/sticky mientras se navega por la tabla.
+ * - No cambia datos, filtros, ventas, cierres ni lógica de negocio.
+ */
+useEffect(() => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return undefined;
+  }
+
+  const registros = new Map();
+  let rafId = 0;
+
+  const esTablaAjustadaSinScroll = (tabla) => {
+    const estilo = window.getComputedStyle(tabla);
+    return (
+      String(estilo.tableLayout || "").toLowerCase() === "fixed" &&
+      tabla.scrollWidth <= tabla.clientWidth + 4
+    );
+  };
+
+  const encontrarContenedorHorizontal = (tabla) => {
+    let nodo = tabla.parentElement;
+    let profundidad = 0;
+
+    while (nodo && nodo !== document.body && profundidad < 6) {
+      const estilo = window.getComputedStyle(nodo);
+      const overflowX = String(estilo.overflowX || "").toLowerCase();
+      const desborda =
+        Math.max(nodo.scrollWidth, tabla.scrollWidth) > nodo.clientWidth + 4;
+
+      if (
+        desborda &&
+        (overflowX === "auto" || overflowX === "scroll")
+      ) {
+        return nodo;
+      }
+
+      nodo = nodo.parentElement;
+      profundidad += 1;
+    }
+
+    const padre = tabla.parentElement;
+
+    if (
+      padre &&
+      !esTablaAjustadaSinScroll(tabla) &&
+      tabla.scrollWidth > padre.clientWidth + 4
+    ) {
+      // Algunas tablas antiguas no tenían wrapper horizontal explícito.
+      // Solo habilitamos el scroll en su contenedor inmediato.
+      padre.style.overflowX = "auto";
+      padre.style.maxWidth = padre.style.maxWidth || "100%";
+      padre.style.WebkitOverflowScrolling = "touch";
+      return padre;
+    }
+
+    return null;
+  };
+
+  const actualizarBarra = (contenedor, registro) => {
+    if (!contenedor?.isConnected || !registro?.barra?.isConnected) return;
+
+    const anchoReal = Math.max(
+      Number(contenedor.scrollWidth || 0),
+      Number(contenedor.clientWidth || 0)
+    );
+    const necesitaScroll = anchoReal > Number(contenedor.clientWidth || 0) + 4;
+
+    registro.interior.style.width = `${Math.max(anchoReal, 1)}px`;
+    registro.barra.style.display = necesitaScroll ? "block" : "none";
+    registro.barra.style.top =
+      window.innerWidth <= 820 ? "58px" : "68px";
+
+    if (necesitaScroll) {
+      registro.barra.scrollLeft = contenedor.scrollLeft;
+    }
+  };
+
+  const crearBarra = (contenedor) => {
+    if (!contenedor || registros.has(contenedor)) return;
+
+    const barra = document.createElement("div");
+    const interior = document.createElement("div");
+
+    barra.setAttribute("data-pos-scroll-horizontal-superior", "true");
+    barra.setAttribute("role", "region");
+    barra.setAttribute(
+      "aria-label",
+      "Desplazamiento horizontal superior de la tabla"
+    );
+
+    barra.style.width = "100%";
+    barra.style.maxWidth = "100%";
+    barra.style.height = "18px";
+    barra.style.overflowX = "auto";
+    barra.style.overflowY = "hidden";
+    barra.style.margin = "0 0 6px 0";
+    barra.style.position = "sticky";
+    barra.style.zIndex = "35";
+    barra.style.background = "#ffffff";
+    barra.style.borderBottom = "1px solid #e5e7eb";
+    barra.style.boxSizing = "border-box";
+    barra.style.scrollbarGutter = "stable";
+    barra.style.WebkitOverflowScrolling = "touch";
+
+    interior.style.height = "1px";
+    interior.style.minHeight = "1px";
+    interior.style.pointerEvents = "none";
+
+    barra.appendChild(interior);
+
+    const padre = contenedor.parentElement;
+    if (!padre) return;
+
+    padre.insertBefore(barra, contenedor);
+
+    let sincronizando = false;
+
+    const desdeBarra = () => {
+      if (sincronizando) return;
+      sincronizando = true;
+      contenedor.scrollLeft = barra.scrollLeft;
+      window.requestAnimationFrame(() => {
+        sincronizando = false;
+      });
+    };
+
+    const desdeTabla = () => {
+      if (sincronizando) return;
+      sincronizando = true;
+      barra.scrollLeft = contenedor.scrollLeft;
+      window.requestAnimationFrame(() => {
+        sincronizando = false;
+      });
+    };
+
+    barra.addEventListener("scroll", desdeBarra, { passive: true });
+    contenedor.addEventListener("scroll", desdeTabla, { passive: true });
+
+    const registro = {
+      barra,
+      interior,
+      desdeBarra,
+      desdeTabla,
+    };
+
+    registros.set(contenedor, registro);
+    actualizarBarra(contenedor, registro);
+  };
+
+  const limpiarDesconectados = () => {
+    for (const [contenedor, registro] of registros.entries()) {
+      if (!contenedor.isConnected || !registro.barra.isConnected) {
+        registro.barra.removeEventListener("scroll", registro.desdeBarra);
+        contenedor.removeEventListener("scroll", registro.desdeTabla);
+
+        if (registro.barra.isConnected) {
+          registro.barra.remove();
+        }
+
+        registros.delete(contenedor);
+      }
+    }
+  };
+
+  const revisarTablas = () => {
+    rafId = 0;
+    limpiarDesconectados();
+
+    const tablas = Array.from(document.querySelectorAll("table"));
+
+    tablas.forEach((tabla) => {
+      const contenedor = encontrarContenedorHorizontal(tabla);
+      if (!contenedor) return;
+
+      crearBarra(contenedor);
+
+      const registro = registros.get(contenedor);
+      if (registro) {
+        actualizarBarra(contenedor, registro);
+      }
+    });
+  };
+
+  const programarRevision = () => {
+    if (rafId) window.cancelAnimationFrame(rafId);
+    rafId = window.requestAnimationFrame(revisarTablas);
+  };
+
+  const observadorMutaciones = new MutationObserver(programarRevision);
+  observadorMutaciones.observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
+
+  const alRedimensionar = () => {
+    for (const [contenedor, registro] of registros.entries()) {
+      actualizarBarra(contenedor, registro);
+    }
+    programarRevision();
+  };
+
+  window.addEventListener("resize", alRedimensionar);
+  window.addEventListener("orientationchange", alRedimensionar);
+
+  programarRevision();
+
+  return () => {
+    if (rafId) window.cancelAnimationFrame(rafId);
+
+    observadorMutaciones.disconnect();
+    window.removeEventListener("resize", alRedimensionar);
+    window.removeEventListener("orientationchange", alRedimensionar);
+
+    for (const [contenedor, registro] of registros.entries()) {
+      registro.barra.removeEventListener("scroll", registro.desdeBarra);
+      contenedor.removeEventListener("scroll", registro.desdeTabla);
+
+      if (registro.barra.isConnected) {
+        registro.barra.remove();
+      }
+    }
+
+    registros.clear();
+  };
+}, [vista, vistaVentasInterna, esPantallaCompacta]);
+
+
 // PWA POS NUBE / PORTAL DE PADRES
 useEffect(() => {
   if (typeof document === "undefined" || typeof window === "undefined") return;
