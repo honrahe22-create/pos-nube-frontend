@@ -1010,6 +1010,9 @@ const [cargandoCrearCuenta, setCargandoCrearCuenta] = useState(false);
   const [galeriaBusqueda, setGaleriaBusqueda] = useState("");
   const [galeriaCategoria, setGaleriaCategoria] = useState("TODAS");
   const [cargandoGaleria, setCargandoGaleria] = useState(false);
+  const [fotoGaleriaAsignar, setFotoGaleriaAsignar] = useState(null);
+  const [productoGaleriaSeleccionadoId, setProductoGaleriaSeleccionadoId] = useState("");
+  const [asignandoImagenGaleria, setAsignandoImagenGaleria] = useState(false);
   const inputGaleriaFotoRef = useRef(null);
 
   const [alumnos, setAlumnos] = useState([]);
@@ -9080,6 +9083,105 @@ if (institucionIdLogin) {
       } catch(error){console.error(error);alert("No se pudo guardar la foto");}
     };
     lector.readAsDataURL(archivo);
+  };
+
+
+  const asignarImagenGaleriaAProducto = async (foto, productoIdForzado = null) => {
+    if (!["ADMIN", "SUPER_ADMIN"].includes(rolActual) || !foto?.imagen) return;
+
+    const normalizarNombreGaleria = (valor) =>
+      String(valor || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, " ");
+
+    let productoId = Number(productoIdForzado || 0);
+
+    // Si el nombre de la foto coincide exactamente con UN producto existente,
+    // se asigna directamente sin volver a pedir nombre, código, precio, stock, etc.
+    if (!productoId) {
+      const coincidencias = (Array.isArray(productos) ? productos : []).filter(
+        (producto) =>
+          producto?.activo !== false &&
+          normalizarNombreGaleria(producto?.nombre) ===
+            normalizarNombreGaleria(foto?.nombre)
+      );
+
+      if (coincidencias.length === 1) {
+        productoId = Number(coincidencias[0].id);
+      }
+    }
+
+    // Si no hay coincidencia única, se abre un selector de productos ya creados.
+    if (!productoId) {
+      setFotoGaleriaAsignar(foto);
+      setProductoGaleriaSeleccionadoId("");
+      return;
+    }
+
+    try {
+      setAsignandoImagenGaleria(true);
+
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      if (!token || !institucionId) {
+        throw new Error("Sesión o institución no válida.");
+      }
+
+      const res = await fetch(
+        `${API_URL}/api/productos/galeria/asignar/${productoId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            institucion_id: Number(institucionId),
+            imagen: foto.imagen,
+          }),
+        }
+      );
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(
+          data.message || data.error || "No se pudo asignar la imagen."
+        );
+      }
+
+      // Actualización inmediata local para que Nueva Orden muestre la miniatura
+      // sin esperar una recarga completa de la página.
+      setProductos((actuales) =>
+        (Array.isArray(actuales) ? actuales : []).map((producto) =>
+          Number(producto.id) === productoId
+            ? {
+                ...producto,
+                imagen: data?.producto?.imagen || foto.imagen,
+              }
+            : producto
+        )
+      );
+
+      setFotoGaleriaAsignar(null);
+      setProductoGaleriaSeleccionadoId("");
+
+      const nombreProducto =
+        data?.producto?.nombre ||
+        productos.find((producto) => Number(producto.id) === productoId)?.nombre ||
+        "Producto";
+
+      alert(`Imagen asignada a ${nombreProducto}.`);
+    } catch (error) {
+      console.error("Error asignando imagen al producto:", error);
+      alert(error.message || "No se pudo asignar la imagen al producto.");
+    } finally {
+      setAsignandoImagenGaleria(false);
+    }
   };
 
   const eliminarFotoGaleria = async (foto) => {
@@ -25617,7 +25719,7 @@ onClick={guardarEgreso}
         {vista === "galeria_productos" && ["ADMIN","SUPER_ADMIN"].includes(rolActual) && (
           <div>
             <div style={styles.pageHeader}>
-              <div><h1 style={styles.dashboardTitle}>Galería de Productos</h1><p style={{margin:"6px 0 0",color:"#64748b"}}>Selecciona una imagen para el producto que estás creando o editando. Solo ADMIN puede administrar esta galería.</p></div>
+              <div><h1 style={styles.dashboardTitle}>Galería de Productos</h1><p style={{margin:"6px 0 0",color:"#64748b"}}>Selecciona una imagen y asígnala directamente a un producto ya creado. No necesitas volver a escribir nombre, código, precio, stock ni categoría.</p></div>
               <div style={styles.headerActions}>
                 <input ref={inputGaleriaFotoRef} type="file" accept="image/jpeg,image/png,image/webp" style={{display:"none"}} onChange={(e)=>{const f=e.target.files?.[0];if(f)subirFotoGaleria(f);e.target.value="";}} />
                 <button type="button" style={styles.secondaryButton} onClick={()=>inputGaleriaFotoRef.current?.click()}>＋ Agregar foto</button>
@@ -25633,6 +25735,94 @@ onClick={guardarEgreso}
               </div>
               <div style={{marginTop:8,fontSize:12,color:"#64748b"}}>{GALERIA_PRODUCTOS_BASE.length} imágenes base organizadas por categoría. Fotos propias: JPG, JPEG, PNG o WEBP · máximo 2 MB · recomendado 600 × 600 px (1:1).</div>
             </div>
+            {fotoGaleriaAsignar && (
+              <div
+                style={{
+                  ...styles.box,
+                  marginBottom: 16,
+                  border: "2px solid #2563eb",
+                  background: "#eff6ff",
+                }}
+              >
+                <div style={{fontWeight:900,fontSize:18,marginBottom:10}}>
+                  Asignar imagen a producto existente
+                </div>
+
+                <div
+                  style={{
+                    display:"grid",
+                    gridTemplateColumns:esPantallaCompacta
+                      ?"1fr"
+                      :"96px minmax(0,1fr) auto auto",
+                    gap:10,
+                    alignItems:"center",
+                  }}
+                >
+                  <img
+                    src={fotoGaleriaAsignar.imagen}
+                    alt={fotoGaleriaAsignar.nombre || "Imagen"}
+                    style={{
+                      width:88,
+                      height:70,
+                      objectFit:"cover",
+                      borderRadius:10,
+                      background:"#ffffff",
+                    }}
+                  />
+
+                  <select
+                    value={productoGaleriaSeleccionadoId}
+                    onChange={(e)=>setProductoGaleriaSeleccionadoId(e.target.value)}
+                    style={styles.input}
+                  >
+                    <option value="">Selecciona el producto ya creado...</option>
+                    {(Array.isArray(productos)?productos:[])
+                      .filter((producto)=>producto?.activo!==false)
+                      .slice()
+                      .sort((a,b)=>String(a.nombre||"").localeCompare(String(b.nombre||"")))
+                      .map((producto)=>(
+                        <option key={producto.id} value={producto.id}>
+                          {producto.nombre}
+                          {producto.codigo ? ` · ${producto.codigo}` : ""}
+                          {Number.isFinite(Number(producto.precio))
+                            ? ` · $${Number(producto.precio).toFixed(2)}`
+                            : ""}
+                        </option>
+                      ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    style={styles.button}
+                    disabled={!productoGaleriaSeleccionadoId || asignandoImagenGaleria}
+                    onClick={()=>asignarImagenGaleriaAProducto(
+                      fotoGaleriaAsignar,
+                      productoGaleriaSeleccionadoId
+                    )}
+                  >
+                    {asignandoImagenGaleria ? "Guardando..." : "Asignar imagen"}
+                  </button>
+
+                  <button
+                    type="button"
+                    style={styles.outlineButton}
+                    disabled={asignandoImagenGaleria}
+                    onClick={()=>{
+                      setFotoGaleriaAsignar(null);
+                      setProductoGaleriaSeleccionadoId("");
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+
+                <div style={{marginTop:8,fontSize:12,color:"#475569"}}>
+                  Solo se actualizará la imagen del producto. Nombre, código, precio,
+                  categoría, stock e inventario permanecen sin cambios.
+                </div>
+              </div>
+            )}
+
             <div style={{display:"grid",gridTemplateColumns:esPantallaCompacta?"repeat(2,minmax(0,1fr))":"repeat(5,minmax(0,1fr))",gap:12}}>
               {[...GALERIA_PRODUCTOS_BASE,...galeriaProductos]
                 .filter((f)=>galeriaCategoria==="TODAS"||String(f.categoria||"PERSONALIZADAS")===galeriaCategoria)
@@ -25641,7 +25831,14 @@ onClick={guardarEgreso}
                 <div key={`${foto.base?"b":"p"}-${foto.id}`} style={{background:"#fff",border:"1px solid #e5e7eb",borderRadius:14,padding:10,boxShadow:"0 6px 16px rgba(15,23,42,.06)"}}>
                   <img src={foto.imagen} alt={foto.nombre} style={{width:"100%",aspectRatio:"1 / 1",objectFit:"cover",borderRadius:10,background:"#f8fafc"}}/>
                   <div style={{fontWeight:900,fontSize:13,marginTop:8,textAlign:"center"}}>{foto.nombre}</div><div style={{fontSize:11,color:"#64748b",textAlign:"center",marginTop:2}}>{foto.categoria || "Personalizadas"}</div>
-                  <button type="button" style={{...styles.button,width:"100%",marginTop:8,padding:"8px 6px"}} onClick={()=>{setProductoForm((prev)=>({...prev,imagen:foto.imagen}));setVista("productos");setMostrarFormularioProducto(true);}}>Usar imagen</button>
+                  <button
+                    type="button"
+                    style={{...styles.button,width:"100%",marginTop:8,padding:"8px 6px"}}
+                    disabled={asignandoImagenGaleria}
+                    onClick={()=>asignarImagenGaleriaAProducto(foto)}
+                  >
+                    {asignandoImagenGaleria ? "Asignando..." : "Asignar a producto"}
+                  </button>
                   {!foto.base && <button type="button" title="Eliminar foto de la galería" onClick={()=>eliminarFotoGaleria(foto)} style={{...styles.deleteIconButton,width:"100%",marginTop:6}}>🗑️</button>}
                 </div>
               ))}
