@@ -12539,31 +12539,31 @@ Disponible: ${formatearMoneda(
           );
         }
 
-        const esAdminCierre = ["ADMIN", "SUPER_ADMIN"].includes(rolActual);
+        // AJUSTE FIJO: la novedad NO se confirma antes de cerrar.
+        // El backend registra la diferencia y el cierre continúa normalmente.
+        // El detalle se muestra una sola vez DESPUÉS de guardar el cierre.
+        mensajeNovedadCierre = lineas.join("\n");
+        ({ respuesta, data } = await enviarCierre(true));
 
-        if (esAdminCierre) {
-          // ADMIN/SUPER_ADMIN: no se obliga a corregir ni cuadrar valores.
-          // Se cierra de todas formas y el backend registra la diferencia
-          // automáticamente en observación/observación_automatica.
-          mensajeNovedadCierre = lineas.join("\n");
-          ({ respuesta, data } = await enviarCierre(true));
-        } else {
-          lineas[0] = "⚠️ SE DETECTÓ UNA NOVEDAD EN EL CIERRE";
-          lineas.push(
-            "La diferencia quedará registrada como novedad para revisión administrativa.",
-            "",
-            "Aceptar = cerrar de todas formas",
-            "Cancelar = volver y revisar los valores"
-          );
 
-          const cerrarConNovedad = window.confirm(lineas.join("\n"));
 
-          if (!cerrarConNovedad) {
-            return;
-          }
 
-          ({ respuesta, data } = await enviarCierre(true));
-        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       }
 
       if (!respuesta.ok) {
@@ -17007,7 +17007,7 @@ if (!usuario) {
                   cierre hasta este momento.
                 </small>
               </div>
-              {resumenCierreServidor.control_stock && (
+              {["ADMIN", "SUPER_ADMIN"].includes(rolActual) && resumenCierreServidor.control_stock && (
                 <div style={{marginTop:18}}>
                   <h3 style={{margin:"0 0 10px"}}>Control de stock del punto</h3>
 
@@ -17491,7 +17491,7 @@ if (!usuario) {
               </div>
             ))}
           </div>
-          {cierreDetalle.control_stock && (
+          {["ADMIN", "SUPER_ADMIN"].includes(rolActual) && cierreDetalle.control_stock && (
             <div style={{marginTop:24}}>
               <h3>Control de stock guardado con este cierre</h3>
 
