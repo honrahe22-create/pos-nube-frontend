@@ -6541,9 +6541,10 @@ if (institucionIdLogin) {
     }
 
     const res = await fetch(
-      `${API_URL}/api/productos?institucion_id=${institucionId}`,
+      `${API_URL}/api/productos?institucion_id=${institucionId}&t=${Date.now()}`,
       {
         headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
       }
     );
 
@@ -9089,35 +9090,14 @@ if (institucionIdLogin) {
   const asignarImagenGaleriaAProducto = async (foto, productoIdForzado = null) => {
     if (!["ADMIN", "SUPER_ADMIN"].includes(rolActual) || !foto?.imagen) return;
 
-    const normalizarNombreGaleria = (valor) =>
-      String(valor || "")
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .trim()
-        .toUpperCase()
-        .replace(/\s+/g, " ");
+    const productoId = Number(
+      productoIdForzado || productoGaleriaSeleccionadoId || 0
+    );
 
-    let productoId = Number(productoIdForzado || 0);
-
-    // Si el nombre de la foto coincide exactamente con UN producto existente,
-    // se asigna directamente sin volver a pedir nombre, código, precio, stock, etc.
     if (!productoId) {
-      const coincidencias = (Array.isArray(productos) ? productos : []).filter(
-        (producto) =>
-          producto?.activo !== false &&
-          normalizarNombreGaleria(producto?.nombre) ===
-            normalizarNombreGaleria(foto?.nombre)
+      alert(
+        "Primero selecciona el producto real de la base al que quieres asignar esta imagen."
       );
-
-      if (coincidencias.length === 1) {
-        productoId = Number(coincidencias[0].id);
-      }
-    }
-
-    // Si no hay coincidencia única, se abre un selector de productos ya creados.
-    if (!productoId) {
-      setFotoGaleriaAsignar(foto);
-      setProductoGaleriaSeleccionadoId("");
       return;
     }
 
@@ -9167,8 +9147,10 @@ if (institucionIdLogin) {
         )
       );
 
+      // Confirmar contra la base real inmediatamente.
+      await cargarProductos();
+
       setFotoGaleriaAsignar(null);
-      setProductoGaleriaSeleccionadoId("");
 
       const nombreProducto =
         data?.producto?.nombre ||
@@ -15698,7 +15680,15 @@ if (!usuario) {
       texto: "Galería de Productos",
       activo: vista === "galeria_productos",
       visible: ["ADMIN","SUPER_ADMIN"].includes(rolActual),
-      accion: () => { setVista("galeria_productos"); cargarGaleriaProductos(); },
+      accion: () => {
+        setVista("galeria_productos");
+        Promise.all([
+          cargarGaleriaProductos(),
+          cargarProductos(),
+        ]).catch((error) =>
+          console.error("Error cargando Galería de Productos:", error)
+        );
+      },
     },
     {
       id: "configuracion",
@@ -18661,7 +18651,21 @@ onClick={guardarEgreso}
               <label style={styles.label}>Imagen del producto</label>
               <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
                 {productoForm.imagen ? <img src={productoForm.imagen} alt="Seleccionada" style={{width:72,height:72,objectFit:"cover",borderRadius:12,border:"1px solid #d1d5db"}} /> : null}
-                <button type="button" style={styles.outlineButton} onClick={()=>{setVista("galeria_productos");cargarGaleriaProductos();}}>Elegir de la galería</button>
+                <button
+                  type="button"
+                  style={styles.outlineButton}
+                  onClick={()=>{
+                    setVista("galeria_productos");
+                    Promise.all([
+                      cargarGaleriaProductos(),
+                      cargarProductos(),
+                    ]).catch((error)=>
+                      console.error("Error cargando Galería de Productos:",error)
+                    );
+                  }}
+                >
+                  Elegir de la galería
+                </button>
                 {productoForm.imagen && <button type="button" style={styles.outlineButton} onClick={()=>setProductoForm({...productoForm,imagen:""})}>Sin imagen</button>}
               </div>
               <small style={{color:"#64748b"}}>La galería usa imágenes cuadradas. Las fotos cargadas admiten JPG, JPEG, PNG o WEBP, máximo 2 MB; recomendado 600 × 600 px.</small>
@@ -24387,16 +24391,17 @@ onClick={guardarEgreso}
                   >
                     <div
                       style={{
-                        display: "grid",
-                        gridTemplateColumns: producto.imagen ? "64px 1fr" : "1fr",
-                        gap: 9,
-                        alignItems: "center",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 7,
+                        alignItems: "stretch",
                       }}
                     >
                       {producto.imagen && (
                         <div
                           style={{
-                            height: 58,
+                            width: "100%",
+                            height: 78,
                             borderRadius: 9,
                             overflow: "hidden",
                             background: "#eef2ff",
@@ -24409,6 +24414,7 @@ onClick={guardarEgreso}
                               width: "100%",
                               height: "100%",
                               objectFit: "cover",
+                              display: "block",
                             }}
                           />
                         </div>
@@ -25719,12 +25725,113 @@ onClick={guardarEgreso}
         {vista === "galeria_productos" && ["ADMIN","SUPER_ADMIN"].includes(rolActual) && (
           <div>
             <div style={styles.pageHeader}>
-              <div><h1 style={styles.dashboardTitle}>Galería de Productos</h1><p style={{margin:"6px 0 0",color:"#64748b"}}>Selecciona una imagen y asígnala directamente a un producto ya creado. No necesitas volver a escribir nombre, código, precio, stock ni categoría.</p></div>
+              <div><h1 style={styles.dashboardTitle}>Galería de Productos</h1><p style={{margin:"6px 0 0",color:"#64748b"}}>Las imágenes se enlazan directamente con los productos reales que ya están cargados para la venta en Nueva Orden. No necesitas volver a escribir nombre, código, precio, stock ni categoría.</p></div>
               <div style={styles.headerActions}>
                 <input ref={inputGaleriaFotoRef} type="file" accept="image/jpeg,image/png,image/webp" style={{display:"none"}} onChange={(e)=>{const f=e.target.files?.[0];if(f)subirFotoGaleria(f);e.target.value="";}} />
                 <button type="button" style={styles.secondaryButton} onClick={()=>inputGaleriaFotoRef.current?.click()}>＋ Agregar foto</button>
               </div>
             </div>
+            <div
+              style={{
+                ...styles.box,
+                marginBottom:16,
+                border:"2px solid #2563eb",
+                background:"#eff6ff",
+              }}
+            >
+              <div style={{fontWeight:900,fontSize:17,marginBottom:8}}>
+                Producto de la base al que vas a poner la imagen
+              </div>
+
+              <select
+                value={productoGaleriaSeleccionadoId}
+                onChange={(e)=>setProductoGaleriaSeleccionadoId(e.target.value)}
+                style={styles.input}
+              >
+                <option value="">
+                  Selecciona un producto existente ({productosActivos.length} cargados)...
+                </option>
+                {productosActivos
+                  .slice()
+                  .sort((a,b)=>String(a.nombre||"").localeCompare(String(b.nombre||"")))
+                  .map((producto)=>(
+                    <option key={producto.id} value={producto.id}>
+                      {producto.nombre}
+                      {producto.codigo ? ` · ${producto.codigo}` : ""}
+                      {Number.isFinite(Number(producto.precio))
+                        ? ` · $${Number(producto.precio).toFixed(2)}`
+                        : ""}
+                    </option>
+                  ))}
+              </select>
+
+              <div style={{marginTop:7,fontSize:12,color:"#475569"}}>
+                Esta lista sale directamente de la misma base de productos que usa
+                Nueva Orden. Selecciona el producto real y luego pulsa
+                “Asignar a producto” debajo de la foto.
+              </div>
+
+              {productoGaleriaSeleccionadoId && (() => {
+                const productoSeleccionado = productosActivos.find(
+                  (producto) =>
+                    Number(producto.id) === Number(productoGaleriaSeleccionadoId)
+                );
+
+                return productoSeleccionado ? (
+                  <div
+                    style={{
+                      marginTop:10,
+                      display:"flex",
+                      gap:10,
+                      alignItems:"center",
+                      background:"#fff",
+                      borderRadius:10,
+                      padding:8,
+                    }}
+                  >
+                    {productoSeleccionado.imagen ? (
+                      <img
+                        src={productoSeleccionado.imagen}
+                        alt={productoSeleccionado.nombre}
+                        style={{
+                          width:54,
+                          height:54,
+                          objectFit:"cover",
+                          borderRadius:8,
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width:54,
+                          height:54,
+                          borderRadius:8,
+                          background:"#e2e8f0",
+                          display:"grid",
+                          placeItems:"center",
+                          fontSize:10,
+                          textAlign:"center",
+                          color:"#64748b",
+                        }}
+                      >
+                        Sin imagen
+                      </div>
+                    )}
+                    <div>
+                      <div style={{fontWeight:900}}>
+                        {productoSeleccionado.nombre}
+                      </div>
+                      <div style={{fontSize:12,color:"#64748b"}}>
+                        {productoSeleccionado.imagen
+                          ? "Ya tiene imagen. Puedes reemplazarla."
+                          : "Todavía no tiene imagen."}
+                      </div>
+                    </div>
+                  </div>
+                ) : null;
+              })()}
+            </div>
+
             <div style={{...styles.box,marginBottom:16}}>
               <div style={{display:"grid",gridTemplateColumns:esPantallaCompacta?"1fr":"minmax(0,1fr) 240px",gap:10}}>
                 <input value={galeriaBusqueda} onChange={(e)=>setGaleriaBusqueda(e.target.value)} placeholder="Buscar imagen: hamburguesa, bolón, jugo..." style={styles.input}/>
@@ -25834,10 +25941,17 @@ onClick={guardarEgreso}
                   <button
                     type="button"
                     style={{...styles.button,width:"100%",marginTop:8,padding:"8px 6px"}}
-                    disabled={asignandoImagenGaleria}
-                    onClick={()=>asignarImagenGaleriaAProducto(foto)}
+                    disabled={!productoGaleriaSeleccionadoId || asignandoImagenGaleria}
+                    onClick={()=>asignarImagenGaleriaAProducto(
+                      foto,
+                      productoGaleriaSeleccionadoId
+                    )}
                   >
-                    {asignandoImagenGaleria ? "Asignando..." : "Asignar a producto"}
+                    {asignandoImagenGaleria
+                      ? "Asignando..."
+                      : productoGaleriaSeleccionadoId
+                      ? "Asignar al producto seleccionado"
+                      : "Selecciona un producto arriba"}
                   </button>
                   {!foto.base && <button type="button" title="Eliminar foto de la galería" onClick={()=>eliminarFotoGaleria(foto)} style={{...styles.deleteIconButton,width:"100%",marginTop:6}}>🗑️</button>}
                 </div>
