@@ -11687,6 +11687,11 @@ Disponible: ${formatearMoneda(
       const cumpleTexto =
         !texto ||
         String(egreso.negocio || "").toLowerCase().includes(texto) ||
+        String(
+          egreso.usuario_nombre ||
+          egreso.usuario ||
+          ""
+        ).toLowerCase().includes(texto) ||
         String(egreso.nombre_egreso || "").toLowerCase().includes(texto) ||
         String(egreso.descripcion || "").toLowerCase().includes(texto) ||
         String(egreso.numero_factura || "").toLowerCase().includes(texto) ||
@@ -11709,6 +11714,10 @@ Disponible: ${formatearMoneda(
       // Cada dato sale en su propia columna.
       const datos = filas.map((egreso) => ({
         LOCAL: egreso.negocio || "",
+        OPERADOR:
+          egreso.usuario_nombre ||
+          egreso.usuario ||
+          "",
         FECHA: formatearSoloFecha(egreso.fecha),
         PROVEEDOR: egreso.nombre_egreso || "",
         TOTAL: Number(egreso.total || 0),
@@ -11725,6 +11734,7 @@ Disponible: ${formatearMoneda(
 
       worksheet["!cols"] = [
         { wch: 16 }, // LOCAL
+        { wch: 24 }, // OPERADOR
         { wch: 13 }, // FECHA
         { wch: 30 }, // PROVEEDOR
         { wch: 12 }, // TOTAL
@@ -11777,6 +11787,11 @@ Disponible: ${formatearMoneda(
           (egreso) => `
             <tr>
               <td>${escapar(egreso.negocio || "")}</td>
+              <td>${escapar(
+                egreso.usuario_nombre ||
+                egreso.usuario ||
+                ""
+              )}</td>
               <td>${escapar(formatearSoloFecha(egreso.fecha))}</td>
               <td>${escapar(egreso.nombre_egreso || "")}</td>
               <td class="num">$${Number(egreso.total || 0).toFixed(2)}</td>
@@ -11857,6 +11872,7 @@ Disponible: ${formatearMoneda(
               <thead>
                 <tr>
                   <th>Local</th>
+                  <th>Operador</th>
                   <th>Fecha</th>
                   <th>Proveedor</th>
                   <th>Total</th>
@@ -17902,6 +17918,7 @@ onClick={guardarEgreso}
           <tr>
             {esAdminEgresos && <th style={styles.th}>Sel.</th>}
             <th style={styles.th}>Local</th>
+            <th style={styles.th}>Operador</th>
             <th style={styles.th}>Fecha</th>
             <th style={styles.th}>Nombre del proveedor</th>
             <th style={styles.th}>Total</th>
@@ -17950,6 +17967,11 @@ onClick={guardarEgreso}
                   </td>
                 )}
                 <td style={styles.td}>{egreso.negocio}</td>
+                <td style={styles.td}>
+                  {egreso.usuario_nombre ||
+                    egreso.usuario ||
+                    "-"}
+                </td>
                 <td style={styles.td}>{formatearSoloFecha(egreso.fecha)}</td>
                 <td style={styles.td}>{egreso.nombre_egreso}</td>
                 <td style={styles.td}>${Number(egreso.total || 0).toFixed(2)}</td>
