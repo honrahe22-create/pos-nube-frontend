@@ -12539,14 +12539,31 @@ Disponible: ${formatearMoneda(
           );
         }
 
-        // TODOS LOS ROLES:
-        // si el backend detecta una diferencia, NO mostramos una confirmación
-        // antes de cerrar. La caja se cierra de todas formas y la novedad queda
-        // registrada en observación/observación_automatica para revisión.
-        // El detalle se muestra UNA SOLA VEZ, únicamente después de que el cierre
-        // haya sido guardado correctamente.
-        mensajeNovedadCierre = lineas.join("\n");
-        ({ respuesta, data } = await enviarCierre(true));
+        const esAdminCierre = ["ADMIN", "SUPER_ADMIN"].includes(rolActual);
+
+        if (esAdminCierre) {
+          // ADMIN/SUPER_ADMIN: no se obliga a corregir ni cuadrar valores.
+          // Se cierra de todas formas y el backend registra la diferencia
+          // automáticamente en observación/observación_automatica.
+          mensajeNovedadCierre = lineas.join("\n");
+          ({ respuesta, data } = await enviarCierre(true));
+        } else {
+          lineas[0] = "⚠️ SE DETECTÓ UNA NOVEDAD EN EL CIERRE";
+          lineas.push(
+            "La diferencia quedará registrada como novedad para revisión administrativa.",
+            "",
+            "Aceptar = cerrar de todas formas",
+            "Cancelar = volver y revisar los valores"
+          );
+
+          const cerrarConNovedad = window.confirm(lineas.join("\n"));
+
+          if (!cerrarConNovedad) {
+            return;
+          }
+
+          ({ respuesta, data } = await enviarCierre(true));
+        }
       }
 
       if (!respuesta.ok) {
@@ -16990,6 +17007,113 @@ if (!usuario) {
                   cierre hasta este momento.
                 </small>
               </div>
+              {resumenCierreServidor.control_stock && (
+                <div style={{marginTop:18}}>
+                  <h3 style={{margin:"0 0 10px"}}>Control de stock del punto</h3>
+
+                  <div
+                    style={{
+                      display:"grid",
+                      gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",
+                      gap:10,
+                      marginBottom:12,
+                    }}
+                  >
+                    <div style={{padding:10,border:"1px solid #bfdbfe",borderRadius:10,background:"#eff6ff"}}>
+                      <strong>Stock disponible valorizado</strong>
+                      <div style={{fontSize:20,fontWeight:900,marginTop:4}}>
+                        {formatearMoneda(resumenCierreServidor.control_stock.valor_disponible)}
+                      </div>
+                    </div>
+
+                    <div style={{padding:10,border:"1px solid #bbf7d0",borderRadius:10,background:"#f0fdf4"}}>
+                      <strong>Vendido según stock</strong>
+                      <div style={{fontSize:20,fontWeight:900,marginTop:4}}>
+                        {formatearMoneda(resumenCierreServidor.control_stock.valor_vendido)}
+                      </div>
+                    </div>
+
+                    <div style={{padding:10,border:"1px solid #fed7aa",borderRadius:10,background:"#fff7ed"}}>
+                      <strong>Salidas no venta</strong>
+                      <div style={{fontSize:20,fontWeight:900,marginTop:4}}>
+                        {formatearMoneda(resumenCierreServidor.control_stock.valor_salidas_no_venta)}
+                      </div>
+                    </div>
+
+                    <div style={{padding:10,border:"2px solid #f59e0b",borderRadius:10,background:"#fffbeb"}}>
+                      <strong>Stock no vendido esperado</strong>
+                      <div style={{fontSize:20,fontWeight:900,marginTop:4}}>
+                        {formatearMoneda(resumenCierreServidor.control_stock.valor_final_esperado)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      padding:"10px 12px",
+                      background:"#fff7ed",
+                      border:"1px solid #fdba74",
+                      borderRadius:10,
+                      marginBottom:12,
+                      fontSize:13,
+                    }}
+                  >
+                    Este valor es lo que debe quedar físicamente en el punto según
+                    entradas, transferencias, ventas, bajas y cortesías registradas.
+                    Si físicamente hay menos producto que lo indicado aquí, existe
+                    un faltante de inventario que no está respaldado por una venta
+                    o movimiento registrado.
+                  </div>
+
+                  <div style={{...styles.tableWrap,maxHeight:300,overflowY:"auto"}}>
+                    <table style={{...styles.table,minWidth:980}}>
+                      <thead>
+                        <tr>
+                          <th style={styles.th}>Producto</th>
+                          <th style={styles.th}>Inicio</th>
+                          <th style={styles.th}>Ingresos</th>
+                          <th style={styles.th}>Recibido</th>
+                          <th style={styles.th}>Vendido</th>
+                          <th style={styles.th}>Devuelto / transferido</th>
+                          <th style={styles.th}>Baja</th>
+                          <th style={styles.th}>Cortesía</th>
+                          <th style={styles.th}>Stock esperado</th>
+                          <th style={styles.th}>Valor esperado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(resumenCierreServidor.control_stock.detalle || []).length === 0 ? (
+                          <tr>
+                            <td colSpan={10} style={styles.td}>
+                              No hay stock ni movimientos de inventario para este punto.
+                            </td>
+                          </tr>
+                        ) : (
+                          (resumenCierreServidor.control_stock.detalle || []).map((fila)=>(
+                            <tr key={`stock-cierre-${fila.producto_id}`}>
+                              <td style={styles.td}><strong>{fila.producto}</strong></td>
+                              <td style={styles.td}>{Number(fila.stock_inicial || 0)}</td>
+                              <td style={styles.td}>{Number(fila.ingresos || 0)}</td>
+                              <td style={styles.td}>{Number(fila.transferencias_entrada || 0)}</td>
+                              <td style={styles.td}>{Number(fila.vendidos || 0)}</td>
+                              <td style={styles.td}>{Number(fila.transferencias_salida || 0)}</td>
+                              <td style={styles.td}>{Number(fila.bajas || 0)}</td>
+                              <td style={styles.td}>{Number(fila.cortesias || 0)}</td>
+                              <td style={{...styles.td,fontWeight:900}}>
+                                {Number(fila.stock_final_esperado || 0)}
+                              </td>
+                              <td style={{...styles.td,fontWeight:900}}>
+                                {formatearMoneda(fila.valor_final_esperado)}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {/* El resumen previo se deja intencionalmente compacto. */}
               {/* Los valores económicos se muestran después de guardar el cierre. */}
               {/* Ubicación y operador permanecen visibles arriba. */}
@@ -17367,6 +17491,77 @@ if (!usuario) {
               </div>
             ))}
           </div>
+          {cierreDetalle.control_stock && (
+            <div style={{marginTop:24}}>
+              <h3>Control de stock guardado con este cierre</h3>
+
+              <div
+                style={{
+                  display:"grid",
+                  gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",
+                  gap:10,
+                  marginBottom:12,
+                }}
+              >
+                <div style={{padding:10,border:"1px solid #dbeafe",borderRadius:10}}>
+                  <div style={{color:"#64748b",fontSize:13}}>Stock disponible</div>
+                  <strong>{formatearMoneda(cierreDetalle.control_stock.valor_disponible)}</strong>
+                </div>
+                <div style={{padding:10,border:"1px solid #bbf7d0",borderRadius:10}}>
+                  <div style={{color:"#64748b",fontSize:13}}>Vendido según stock</div>
+                  <strong>{formatearMoneda(cierreDetalle.control_stock.valor_vendido)}</strong>
+                </div>
+                <div style={{padding:10,border:"1px solid #fed7aa",borderRadius:10}}>
+                  <div style={{color:"#64748b",fontSize:13}}>Salidas no venta</div>
+                  <strong>{formatearMoneda(cierreDetalle.control_stock.valor_salidas_no_venta)}</strong>
+                </div>
+                <div style={{padding:10,border:"2px solid #f59e0b",borderRadius:10,background:"#fffbeb"}}>
+                  <div style={{color:"#92400e",fontSize:13}}>Stock no vendido esperado</div>
+                  <strong>{formatearMoneda(cierreDetalle.control_stock.valor_final_esperado)}</strong>
+                </div>
+              </div>
+
+              <div style={{...styles.tableWrap,maxHeight:320,overflowY:"auto"}}>
+                <table style={{...styles.table,minWidth:920}}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Producto</th>
+                      <th style={styles.th}>Inicio</th>
+                      <th style={styles.th}>Entradas</th>
+                      <th style={styles.th}>Recibido</th>
+                      <th style={styles.th}>Vendido</th>
+                      <th style={styles.th}>Transferido</th>
+                      <th style={styles.th}>Baja/Cortesía</th>
+                      <th style={styles.th}>Final esperado</th>
+                      <th style={styles.th}>Valor final</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(cierreDetalle.control_stock.detalle || []).map((fila)=>(
+                      <tr key={`detalle-stock-${fila.producto_id}`}>
+                        <td style={styles.td}><strong>{fila.producto}</strong></td>
+                        <td style={styles.td}>{Number(fila.stock_inicial || 0)}</td>
+                        <td style={styles.td}>{Number(fila.ingresos || 0)}</td>
+                        <td style={styles.td}>{Number(fila.transferencias_entrada || 0)}</td>
+                        <td style={styles.td}>{Number(fila.vendidos || 0)}</td>
+                        <td style={styles.td}>{Number(fila.transferencias_salida || 0)}</td>
+                        <td style={styles.td}>
+                          {Number(fila.bajas || 0) + Number(fila.cortesias || 0)}
+                        </td>
+                        <td style={{...styles.td,fontWeight:900}}>
+                          {Number(fila.stock_final_esperado || 0)}
+                        </td>
+                        <td style={{...styles.td,fontWeight:900}}>
+                          {formatearMoneda(fila.valor_final_esperado)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           <h3 style={{marginTop:24}}>Conteo de billetes y monedas</h3>
           <div style={styles.tableWrap}><table style={styles.table}><thead><tr><th style={styles.th}>Denominación</th><th style={styles.th}>Tipo</th><th style={styles.th}>Cantidad</th><th style={styles.th}>Total</th></tr></thead><tbody>{(cierreDetalle.denominaciones||[]).map((d,i)=><tr key={i}><td style={styles.td}>{Number(d.denominacion).toFixed(2)}</td><td style={styles.td}>{d.tipo}</td><td style={styles.td}>{d.cantidad}</td><td style={styles.td}>{formatearMoneda(d.total)}</td></tr>)}</tbody></table></div>
           <h3 style={{marginTop:24}}>Egresos incluidos en este cierre</h3>
