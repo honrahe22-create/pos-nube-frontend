@@ -12539,31 +12539,14 @@ Disponible: ${formatearMoneda(
           );
         }
 
-        const esAdminCierre = ["ADMIN", "SUPER_ADMIN"].includes(rolActual);
-
-        if (esAdminCierre) {
-          // ADMIN/SUPER_ADMIN: no se obliga a corregir ni cuadrar valores.
-          // Se cierra de todas formas y el backend registra la diferencia
-          // automáticamente en observación/observación_automatica.
-          mensajeNovedadCierre = lineas.join("\n");
-          ({ respuesta, data } = await enviarCierre(true));
-        } else {
-          lineas[0] = "⚠️ SE DETECTÓ UNA NOVEDAD EN EL CIERRE";
-          lineas.push(
-            "La diferencia quedará registrada como novedad para revisión administrativa.",
-            "",
-            "Aceptar = cerrar de todas formas",
-            "Cancelar = volver y revisar los valores"
-          );
-
-          const cerrarConNovedad = window.confirm(lineas.join("\n"));
-
-          if (!cerrarConNovedad) {
-            return;
-          }
-
-          ({ respuesta, data } = await enviarCierre(true));
-        }
+        // TODOS LOS ROLES:
+        // si el backend detecta una diferencia, NO mostramos una confirmación
+        // antes de cerrar. La caja se cierra de todas formas y la novedad queda
+        // registrada en observación/observación_automatica para revisión.
+        // El detalle se muestra UNA SOLA VEZ, únicamente después de que el cierre
+        // haya sido guardado correctamente.
+        mensajeNovedadCierre = lineas.join("\n");
+        ({ respuesta, data } = await enviarCierre(true));
       }
 
       if (!respuesta.ok) {
