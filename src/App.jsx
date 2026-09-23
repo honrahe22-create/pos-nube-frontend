@@ -1010,7 +1010,7 @@ const [cargandoCrearCuenta, setCargandoCrearCuenta] = useState(false);
   const [galeriaBusqueda, setGaleriaBusqueda] = useState("");
   const [galeriaCategoria, setGaleriaCategoria] = useState("TODAS");
   const [cargandoGaleria, setCargandoGaleria] = useState(false);
-  const [fotoGaleriaAsignar, setFotoGaleriaAsignar] = useState(null);
+  const [imagenGaleriaSeleccionada, setImagenGaleriaSeleccionada] = useState(null);
   const [productoGaleriaSeleccionadoId, setProductoGaleriaSeleccionadoId] = useState("");
   const [asignandoImagenGaleria, setAsignandoImagenGaleria] = useState(false);
   const inputGaleriaFotoRef = useRef(null);
@@ -9087,17 +9087,19 @@ if (institucionIdLogin) {
   };
 
 
-  const asignarImagenGaleriaAProducto = async (foto, productoIdForzado = null) => {
-    if (!["ADMIN", "SUPER_ADMIN"].includes(rolActual) || !foto?.imagen) return;
+  const asignarImagenGaleriaAProducto = async () => {
+    if (!["ADMIN", "SUPER_ADMIN"].includes(rolActual)) return;
 
-    const productoId = Number(
-      productoIdForzado || productoGaleriaSeleccionadoId || 0
-    );
+    const productoId = Number(productoGaleriaSeleccionadoId || 0);
+    const foto = imagenGaleriaSeleccionada;
 
     if (!productoId) {
-      alert(
-        "Primero selecciona el producto real de la base al que quieres asignar esta imagen."
-      );
+      alert("Primero selecciona el producto de la base.");
+      return;
+    }
+
+    if (!foto?.imagen) {
+      alert("Ahora selecciona una imagen de la galería.");
       return;
     }
 
@@ -9134,8 +9136,6 @@ if (institucionIdLogin) {
         );
       }
 
-      // Actualización inmediata local para que Nueva Orden muestre la miniatura
-      // sin esperar una recarga completa de la página.
       setProductos((actuales) =>
         (Array.isArray(actuales) ? actuales : []).map((producto) =>
           Number(producto.id) === productoId
@@ -9147,15 +9147,15 @@ if (institucionIdLogin) {
         )
       );
 
-      // Confirmar contra la base real inmediatamente.
+      // Confirmar contra la base real para que Nueva Orden reciba la imagen guardada.
       await cargarProductos();
-
-      setFotoGaleriaAsignar(null);
 
       const nombreProducto =
         data?.producto?.nombre ||
         productos.find((producto) => Number(producto.id) === productoId)?.nombre ||
         "Producto";
+
+      setImagenGaleriaSeleccionada(null);
 
       alert(`Imagen asignada a ${nombreProducto}.`);
     } catch (error) {
@@ -25725,7 +25725,7 @@ onClick={guardarEgreso}
         {vista === "galeria_productos" && ["ADMIN","SUPER_ADMIN"].includes(rolActual) && (
           <div>
             <div style={styles.pageHeader}>
-              <div><h1 style={styles.dashboardTitle}>Galería de Productos</h1><p style={{margin:"6px 0 0",color:"#64748b"}}>Las imágenes se enlazan directamente con los productos reales que ya están cargados para la venta en Nueva Orden. No necesitas volver a escribir nombre, código, precio, stock ni categoría.</p></div>
+              <div><h1 style={styles.dashboardTitle}>Galería de Productos</h1><p style={{margin:"6px 0 0",color:"#64748b"}}>1. Escoge el producto cargado para la venta. 2. Escoge una imagen. 3. Presiona Guardar imagen.</p></div>
               <div style={styles.headerActions}>
                 <input ref={inputGaleriaFotoRef} type="file" accept="image/jpeg,image/png,image/webp" style={{display:"none"}} onChange={(e)=>{const f=e.target.files?.[0];if(f)subirFotoGaleria(f);e.target.value="";}} />
                 <button type="button" style={styles.secondaryButton} onClick={()=>inputGaleriaFotoRef.current?.click()}>＋ Agregar foto</button>
@@ -25745,7 +25745,10 @@ onClick={guardarEgreso}
 
               <select
                 value={productoGaleriaSeleccionadoId}
-                onChange={(e)=>setProductoGaleriaSeleccionadoId(e.target.value)}
+                onChange={(e)=>{
+                  setProductoGaleriaSeleccionadoId(e.target.value);
+                  setImagenGaleriaSeleccionada(null);
+                }}
                 style={styles.input}
               >
                 <option value="">
@@ -25766,9 +25769,8 @@ onClick={guardarEgreso}
               </select>
 
               <div style={{marginTop:7,fontSize:12,color:"#475569"}}>
-                Esta lista sale directamente de la misma base de productos que usa
-                Nueva Orden. Selecciona el producto real y luego pulsa
-                “Asignar a producto” debajo de la foto.
+                Aquí aparecen los mismos productos activos que usa Nueva Orden.
+                Selecciona uno y después elige una foto abajo.
               </div>
 
               {productoGaleriaSeleccionadoId && (() => {
@@ -25842,90 +25844,79 @@ onClick={guardarEgreso}
               </div>
               <div style={{marginTop:8,fontSize:12,color:"#64748b"}}>{GALERIA_PRODUCTOS_BASE.length} imágenes base organizadas por categoría. Fotos propias: JPG, JPEG, PNG o WEBP · máximo 2 MB · recomendado 600 × 600 px (1:1).</div>
             </div>
-            {fotoGaleriaAsignar && (
+
+
+
+            {(productoGaleriaSeleccionadoId || imagenGaleriaSeleccionada) && (
               <div
                 style={{
                   ...styles.box,
-                  marginBottom: 16,
-                  border: "2px solid #2563eb",
-                  background: "#eff6ff",
+                  marginBottom:16,
+                  border:"2px solid #16a34a",
+                  background:"#f0fdf4",
                 }}
               >
-                <div style={{fontWeight:900,fontSize:18,marginBottom:10}}>
-                  Asignar imagen a producto existente
-                </div>
-
                 <div
                   style={{
                     display:"grid",
                     gridTemplateColumns:esPantallaCompacta
                       ?"1fr"
-                      :"96px minmax(0,1fr) auto auto",
-                    gap:10,
+                      :"minmax(0,1fr) minmax(0,1fr) auto",
+                    gap:12,
                     alignItems:"center",
                   }}
                 >
-                  <img
-                    src={fotoGaleriaAsignar.imagen}
-                    alt={fotoGaleriaAsignar.nombre || "Imagen"}
+                  <div>
+                    <div style={{fontSize:12,color:"#64748b",marginBottom:4}}>
+                      Producto seleccionado
+                    </div>
+                    <div style={{fontWeight:900}}>
+                      {productosActivos.find(
+                        (producto)=>Number(producto.id)===Number(productoGaleriaSeleccionadoId)
+                      )?.nombre || "Ninguno"}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{fontSize:12,color:"#64748b",marginBottom:4}}>
+                      Imagen seleccionada
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      {imagenGaleriaSeleccionada?.imagen && (
+                        <img
+                          src={imagenGaleriaSeleccionada.imagen}
+                          alt={imagenGaleriaSeleccionada.nombre || "Imagen seleccionada"}
+                          style={{
+                            width:54,
+                            height:54,
+                            objectFit:"cover",
+                            borderRadius:8,
+                            background:"#fff",
+                          }}
+                        />
+                      )}
+                      <strong>
+                        {imagenGaleriaSeleccionada?.nombre || "Ninguna"}
+                      </strong>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
                     style={{
-                      width:88,
-                      height:70,
-                      objectFit:"cover",
-                      borderRadius:10,
-                      background:"#ffffff",
+                      ...styles.button,
+                      minWidth:170,
+                      padding:"12px 18px",
                     }}
-                  />
-
-                  <select
-                    value={productoGaleriaSeleccionadoId}
-                    onChange={(e)=>setProductoGaleriaSeleccionadoId(e.target.value)}
-                    style={styles.input}
+                    disabled={
+                      !productoGaleriaSeleccionadoId ||
+                      !imagenGaleriaSeleccionada?.imagen ||
+                      asignandoImagenGaleria
+                    }
+                    onClick={asignarImagenGaleriaAProducto}
                   >
-                    <option value="">Selecciona el producto ya creado...</option>
-                    {(Array.isArray(productos)?productos:[])
-                      .filter((producto)=>producto?.activo!==false)
-                      .slice()
-                      .sort((a,b)=>String(a.nombre||"").localeCompare(String(b.nombre||"")))
-                      .map((producto)=>(
-                        <option key={producto.id} value={producto.id}>
-                          {producto.nombre}
-                          {producto.codigo ? ` · ${producto.codigo}` : ""}
-                          {Number.isFinite(Number(producto.precio))
-                            ? ` · $${Number(producto.precio).toFixed(2)}`
-                            : ""}
-                        </option>
-                      ))}
-                  </select>
-
-                  <button
-                    type="button"
-                    style={styles.button}
-                    disabled={!productoGaleriaSeleccionadoId || asignandoImagenGaleria}
-                    onClick={()=>asignarImagenGaleriaAProducto(
-                      fotoGaleriaAsignar,
-                      productoGaleriaSeleccionadoId
-                    )}
-                  >
-                    {asignandoImagenGaleria ? "Guardando..." : "Asignar imagen"}
+                    {asignandoImagenGaleria ? "Guardando..." : "Guardar imagen"}
                   </button>
-
-                  <button
-                    type="button"
-                    style={styles.outlineButton}
-                    disabled={asignandoImagenGaleria}
-                    onClick={()=>{
-                      setFotoGaleriaAsignar(null);
-                      setProductoGaleriaSeleccionadoId("");
-                    }}
-                  >
-                    Cancelar
-                  </button>
-                </div>
-
-                <div style={{marginTop:8,fontSize:12,color:"#475569"}}>
-                  Solo se actualizará la imagen del producto. Nombre, código, precio,
-                  categoría, stock e inventario permanecen sin cambios.
                 </div>
               </div>
             )}
@@ -25935,25 +25926,75 @@ onClick={guardarEgreso}
                 .filter((f)=>galeriaCategoria==="TODAS"||String(f.categoria||"PERSONALIZADAS")===galeriaCategoria)
                 .filter((f)=>!galeriaBusqueda.trim()||String(f.nombre||"").toLowerCase().includes(galeriaBusqueda.trim().toLowerCase()))
                 .map((foto)=>(
-                <div key={`${foto.base?"b":"p"}-${foto.id}`} style={{background:"#fff",border:"1px solid #e5e7eb",borderRadius:14,padding:10,boxShadow:"0 6px 16px rgba(15,23,42,.06)"}}>
-                  <img src={foto.imagen} alt={foto.nombre} style={{width:"100%",aspectRatio:"1 / 1",objectFit:"cover",borderRadius:10,background:"#f8fafc"}}/>
-                  <div style={{fontWeight:900,fontSize:13,marginTop:8,textAlign:"center"}}>{foto.nombre}</div><div style={{fontSize:11,color:"#64748b",textAlign:"center",marginTop:2}}>{foto.categoria || "Personalizadas"}</div>
-                  <button
-                    type="button"
-                    style={{...styles.button,width:"100%",marginTop:8,padding:"8px 6px"}}
-                    disabled={!productoGaleriaSeleccionadoId || asignandoImagenGaleria}
-                    onClick={()=>asignarImagenGaleriaAProducto(
-                      foto,
-                      productoGaleriaSeleccionadoId
-                    )}
-                  >
-                    {asignandoImagenGaleria
-                      ? "Asignando..."
-                      : productoGaleriaSeleccionadoId
-                      ? "Asignar al producto seleccionado"
-                      : "Selecciona un producto arriba"}
-                  </button>
-                  {!foto.base && <button type="button" title="Eliminar foto de la galería" onClick={()=>eliminarFotoGaleria(foto)} style={{...styles.deleteIconButton,width:"100%",marginTop:6}}>🗑️</button>}
+                <div
+                  key={`${foto.base?"b":"p"}-${foto.id}`}
+                  onClick={()=>setImagenGaleriaSeleccionada(foto)}
+                  style={{
+                    background:"#fff",
+                    border:
+                      imagenGaleriaSeleccionada?.id===foto.id &&
+                      Boolean(imagenGaleriaSeleccionada?.base)===Boolean(foto.base)
+                        ?"3px solid #2563eb"
+                        :"1px solid #e5e7eb",
+                    borderRadius:14,
+                    padding:10,
+                    boxShadow:"0 6px 16px rgba(15,23,42,.06)",
+                    cursor:"pointer",
+                    position:"relative",
+                  }}
+                >
+                  {imagenGaleriaSeleccionada?.id===foto.id &&
+                    Boolean(imagenGaleriaSeleccionada?.base)===Boolean(foto.base) && (
+                    <div
+                      style={{
+                        position:"absolute",
+                        top:8,
+                        right:8,
+                        zIndex:2,
+                        background:"#2563eb",
+                        color:"#fff",
+                        borderRadius:999,
+                        padding:"4px 8px",
+                        fontSize:11,
+                        fontWeight:900,
+                      }}
+                    >
+                      ✓ Seleccionada
+                    </div>
+                  )}
+
+                  <img
+                    src={foto.imagen}
+                    alt={foto.nombre}
+                    style={{
+                      width:"100%",
+                      aspectRatio:"1 / 1",
+                      objectFit:"cover",
+                      borderRadius:10,
+                      background:"#f8fafc",
+                    }}
+                  />
+
+                  <div style={{fontWeight:900,fontSize:13,marginTop:8,textAlign:"center"}}>
+                    {foto.nombre}
+                  </div>
+                  <div style={{fontSize:11,color:"#64748b",textAlign:"center",marginTop:2}}>
+                    {foto.categoria || "Personalizadas"}
+                  </div>
+
+                  {!foto.base && (
+                    <button
+                      type="button"
+                      title="Eliminar foto de la galería"
+                      onClick={(e)=>{
+                        e.stopPropagation();
+                        eliminarFotoGaleria(foto);
+                      }}
+                      style={{...styles.deleteIconButton,width:"100%",marginTop:6}}
+                    >
+                      🗑️
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
