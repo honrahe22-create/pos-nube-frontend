@@ -24996,6 +24996,29 @@ onClick={guardarEgreso}
                       setModoNuevaOrden("identificar");
                       setTipoUsuarioNuevaOrden("ESTUDIANTE");
                       setBusquedaUsuarioNuevaOrden("");
+                      return;
+                    }
+
+                    if (nuevoMetodo === "RECARGA") {
+                      const saldoDisponible = Number(
+                        alumnoVentaSeleccionado.saldo || 0
+                      );
+                      const totalActual = Number(totalVentaCalculado || 0);
+
+                      if (saldoDisponible <= 0) {
+                        alert(
+                          "SALDO INSUFICIENTE. Este estudiante tiene $0.00 disponible. La venta con saldo queda bloqueada."
+                        );
+                      } else if (
+                        totalActual > 0 &&
+                        totalActual > saldoDisponible
+                      ) {
+                        alert(
+                          `SALDO INSUFICIENTE.\nDisponible: ${formatearMoneda(
+                            saldoDisponible
+                          )}\nTotal de la orden: ${formatearMoneda(totalActual)}`
+                        );
+                      }
                     }
                     return;
                   }
@@ -25151,21 +25174,58 @@ onClick={guardarEgreso}
 
               {ventaForm.metodo_pago === "RECARGA" &&
                 alumnoVentaSeleccionado && (
-                  <div
-                    style={{
-                      marginTop: 12,
-                      borderRadius: 8,
-                      background: "#dcfce7",
-                      color: "#166534",
-                      padding: 10,
-                      fontWeight: 800,
-                    }}
-                  >
-                    Saldo disponible:{" "}
-                    {formatearMoneda(
-                      alumnoVentaSeleccionado.saldo || 0
+                  <>
+                    <div
+                      style={{
+                        marginTop: 12,
+                        borderRadius: 8,
+                        background:
+                          Number(alumnoVentaSeleccionado.saldo || 0) <= 0 ||
+                          Number(totalVentaCalculado || 0) >
+                            Number(alumnoVentaSeleccionado.saldo || 0)
+                            ? "#fef2f2"
+                            : "#dcfce7",
+                        border:
+                          Number(alumnoVentaSeleccionado.saldo || 0) <= 0 ||
+                          Number(totalVentaCalculado || 0) >
+                            Number(alumnoVentaSeleccionado.saldo || 0)
+                            ? "2px solid #dc2626"
+                            : "1px solid #86efac",
+                        color:
+                          Number(alumnoVentaSeleccionado.saldo || 0) <= 0 ||
+                          Number(totalVentaCalculado || 0) >
+                            Number(alumnoVentaSeleccionado.saldo || 0)
+                            ? "#991b1b"
+                            : "#166534",
+                        padding: 10,
+                        fontWeight: 800,
+                      }}
+                    >
+                      Saldo disponible:{" "}
+                      {formatearMoneda(
+                        alumnoVentaSeleccionado.saldo || 0
+                      )}
+                    </div>
+
+                    {(Number(alumnoVentaSeleccionado.saldo || 0) <= 0 ||
+                      Number(totalVentaCalculado || 0) >
+                        Number(alumnoVentaSeleccionado.saldo || 0)) && (
+                      <div
+                        role="alert"
+                        style={{
+                          marginTop: 8,
+                          borderRadius: 8,
+                          background: "#dc2626",
+                          color: "#ffffff",
+                          padding: 10,
+                          fontWeight: 900,
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        VENTA BLOQUEADA POR SALDO INSUFICIENTE
+                      </div>
                     )}
-                  </div>
+                  </>
                 )}
 
               {ventaForm.metodo_pago === "CREDITO" &&
@@ -25345,6 +25405,15 @@ onClick={guardarEgreso}
                     (item) =>
                       !Number.isFinite(Number(item.cantidad)) ||
                       Number(item.cantidad) <= 0
+                  ) ||
+                  (
+                    ventaForm.metodo_pago === "RECARGA" &&
+                    alumnoVentaSeleccionado &&
+                    (
+                      Number(alumnoVentaSeleccionado.saldo || 0) <= 0 ||
+                      Number(totalVentaCalculado || 0) >
+                        Number(alumnoVentaSeleccionado.saldo || 0)
+                    )
                   )
                 }
                 style={{
