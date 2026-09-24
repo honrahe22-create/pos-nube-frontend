@@ -532,9 +532,6 @@ export default function PadresModulo({
             <h1 style={s.title}>Información Personal del padre</h1>
             <p style={s.subtitle}>{institucionNombre}</p>
           </div>
-          <button style={s.primary} onClick={() => abrirEditar(padreDetalle)}>
-            Editar padre
-          </button>
         </div>
 
         <div style={s.card}>
@@ -562,15 +559,6 @@ export default function PadresModulo({
               Alumnos vinculados a este padre o representante.
             </p>
           </div>
-          <button
-            style={s.primary}
-            onClick={async () => {
-              if (typeof cargarAlumnos === "function") await cargarAlumnos();
-              setMostrarAgregarHijo(true);
-            }}
-          >
-            + Agregar hijo
-          </button>
         </div>
 
         {(padreDetalle.hijos || []).length === 0 ? (
@@ -594,80 +582,13 @@ export default function PadresModulo({
                     Código: {hijo.codigo || hijo.cedula || "-"}
                   </div>
                 </div>
-                <button
-                  style={s.dangerOutline}
-                  onClick={() => desvincularHijo(hijo)}
-                >
-                  Desvincular
-                </button>
               </div>
             ))}
           </div>
         )}
 
-        {mostrarAgregarHijo && (
-          <div style={s.overlay} onMouseDown={() => setMostrarAgregarHijo(false)}>
-            <div style={s.modal} onMouseDown={(e) => e.stopPropagation()}>
-              <div style={s.modalHeader}>
-                <div>
-                  <h2 style={{ margin: 0 }}>Agregar hijo</h2>
-                  <p style={s.subtitle}>
-                    Busca un alumno existente y vincúlalo al padre.
-                  </p>
-                </div>
-                <button style={s.close} onClick={() => setMostrarAgregarHijo(false)}>
-                  ×
-                </button>
-              </div>
 
-              <input
-                style={s.input}
-                value={busquedaHijo}
-                onChange={(e) => setBusquedaHijo(e.target.value)}
-                placeholder="Buscar por nombre, apellido, código, curso..."
-                autoFocus
-              />
 
-              <div style={s.studentList}>
-                {alumnosDisponibles.length === 0 ? (
-                  <div style={s.emptySmall}>
-                    No hay alumnos disponibles con esa búsqueda.
-                  </div>
-                ) : (
-                  alumnosDisponibles.map((a) => (
-                    <button
-                      key={a.id}
-                      type="button"
-                      style={s.studentRow}
-                      onClick={() => vincularHijo(a)}
-                    >
-                      <span>
-                        <strong>{nombreCompleto(a)}</strong>
-                        <small style={s.studentMeta}>
-                          {a.curso || "Sin curso"}
-                          {a.paralelo ? ` · ${a.paralelo}` : ""} ·{" "}
-                          {a.codigo || a.cedula || `#${a.id}`}
-                        </small>
-                      </span>
-                      <span style={s.addBadge}>Vincular</span>
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-      {mostrarForm && (
-          <FormularioPadre
-            form={form}
-            setForm={setForm}
-            editando={Boolean(editandoId)}
-            guardando={guardando}
-            onSubmit={guardarPadre}
-            onClose={() => setMostrarForm(false)}
-          />
-        )}
       </section>
     );
   }
@@ -678,30 +599,21 @@ export default function PadresModulo({
         <div>
           <h1 style={s.title}>Padres</h1>
           <p style={s.subtitle}>
-            Administra padres y representantes de {institucionNombre}.
+            Consulta padres y representantes de {institucionNombre}. Las cuentas
+            se crean únicamente desde el Portal de Padres.
           </p>
         </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <input
-            ref={inputImportarPadresRef}
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            style={{ display: "none" }}
-            onChange={(e) => importarMatrizPadres(e.target.files?.[0])}
-          />
-
-          <button
-            type="button"
-            style={s.secondary}
-            disabled={importandoPadres}
-            onClick={() => inputImportarPadresRef.current?.click()}
-          >
-            {importandoPadres ? "Importando..." : "Importar matriz de padres"}
-          </button>
-
-          <button style={s.primary} onClick={abrirNuevo}>
-            + Agregar padre
-          </button>
+        <div
+          style={{
+            padding: "9px 12px",
+            borderRadius: 10,
+            background: "#f8fafc",
+            border: "1px solid #cbd5e1",
+            color: "#475569",
+            fontWeight: 700,
+          }}
+        >
+          Solo consulta
         </div>
       </div>
 
@@ -842,7 +754,7 @@ export default function PadresModulo({
         <div style={s.empty}>Cargando padres...</div>
       ) : padresFiltrados.length === 0 ? (
         <div style={s.empty}>
-          No hay padres registrados. Usa “Agregar padre” para crear el primero.
+          No hay padres registrados todavía. Los representantes crean su cuenta directamente desde el Portal de Padres.
         </div>
       ) : (
         <div style={s.tableWrap}>
@@ -875,26 +787,12 @@ export default function PadresModulo({
                     <span style={s.badge}>{Number(p.total_hijos || 0)}</span>
                   </td>
                   <td style={s.td}>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button
-                        style={s.smallButton}
-                        onClick={() => cargarPadreDetalle(p.id)}
-                      >
-                        Ver
-                      </button>
-                      <button
-                        style={s.smallButton}
-                        onClick={() => abrirEditar(p)}
-                      >
-                        Editar
-                      </button>
-                      <button
-                        style={s.dangerOutline}
-                        onClick={() => eliminarPadre(p)}
-                      >
-                        Eliminar
-                      </button>
-                    </div>
+                    <button
+                      style={s.smallButton}
+                      onClick={() => cargarPadreDetalle(p.id)}
+                    >
+                      Ver
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -903,16 +801,6 @@ export default function PadresModulo({
         </div>
       )}
 
-      {mostrarForm && (
-        <FormularioPadre
-          form={form}
-          setForm={setForm}
-          editando={Boolean(editandoId)}
-          guardando={guardando}
-          onSubmit={guardarPadre}
-          onClose={() => setMostrarForm(false)}
-        />
-      )}
     </section>
   );
 }
