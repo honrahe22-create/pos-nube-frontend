@@ -491,6 +491,16 @@ const [registroPadrePortal, setRegistroPadrePortal] = useState({
 });
 const [mensajeRegistroPadre, setMensajeRegistroPadre] = useState("");
 const [cargandoRegistroPadre, setCargandoRegistroPadre] = useState(false);
+const [mostrarRecuperarAccesoPadre, setMostrarRecuperarAccesoPadre] = useState(false);
+const [recuperarAccesoPadre, setRecuperarAccesoPadre] = useState({
+  cedula: "",
+  correo_verificacion: "",
+  nuevo_correo: "",
+  nueva_password: "",
+  confirmar_password: "",
+});
+const [mensajeRecuperarAccesoPadre, setMensajeRecuperarAccesoPadre] = useState("");
+const [cargandoRecuperarAccesoPadre, setCargandoRecuperarAccesoPadre] = useState(false);
 const [eventoInstalacionPadres, setEventoInstalacionPadres] = useState(null);
 const [appPadresInstalada, setAppPadresInstalada] = useState(() => {
   if (typeof window === "undefined") return false;
@@ -6283,6 +6293,109 @@ const exportarVentasExcel = () => {
       );
     } finally {
       setCargandoRegistroPadre(false);
+    }
+  };
+
+  const handleRecuperarAccesoPortalPadres = async (e) => {
+    e.preventDefault();
+    setMensajeRecuperarAccesoPadre("");
+
+    const cedula = String(recuperarAccesoPadre.cedula || "").trim();
+    const correoVerificacion = String(
+      recuperarAccesoPadre.correo_verificacion || ""
+    )
+      .trim()
+      .toLowerCase();
+    const nuevoCorreo = String(
+      recuperarAccesoPadre.nuevo_correo || ""
+    )
+      .trim()
+      .toLowerCase();
+    const nuevaPassword = String(
+      recuperarAccesoPadre.nueva_password || ""
+    );
+    const confirmarPassword = String(
+      recuperarAccesoPadre.confirmar_password || ""
+    );
+
+    if (!loginInstitucionId) {
+      setMensajeRecuperarAccesoPadre("Debes seleccionar la institución.");
+      return;
+    }
+
+    if (
+      !cedula ||
+      !correoVerificacion ||
+      !nuevaPassword ||
+      !confirmarPassword
+    ) {
+      setMensajeRecuperarAccesoPadre(
+        "Completa cédula, correo registrado y la nueva contraseña."
+      );
+      return;
+    }
+
+    if (nuevaPassword.length < 8) {
+      setMensajeRecuperarAccesoPadre(
+        "La nueva contraseña debe tener al menos 8 caracteres."
+      );
+      return;
+    }
+
+    if (nuevaPassword !== confirmarPassword) {
+      setMensajeRecuperarAccesoPadre(
+        "La confirmación de contraseña no coincide."
+      );
+      return;
+    }
+
+    try {
+      setCargandoRecuperarAccesoPadre(true);
+
+      const res = await fetch(
+        `${API_URL}/api/portal/recuperar-acceso-padre`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            institucion_id: Number(loginInstitucionId),
+            cedula,
+            correo_verificacion: correoVerificacion,
+            nuevo_correo: nuevoCorreo || null,
+            nueva_password: nuevaPassword,
+            confirmar_password: confirmarPassword,
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.message || "No se pudo recuperar el acceso."
+        );
+      }
+
+      setCorreo(cedula);
+      setPassword("");
+      setRecuperarAccesoPadre({
+        cedula: "",
+        correo_verificacion: "",
+        nuevo_correo: "",
+        nueva_password: "",
+        confirmar_password: "",
+      });
+      setMostrarRecuperarAccesoPadre(false);
+      setMensaje(
+        data.message ||
+          "Acceso actualizado. Ya puedes ingresar con tu cédula."
+      );
+    } catch (error) {
+      setMensajeRecuperarAccesoPadre(
+        error.message || "No se pudo recuperar el acceso."
+      );
+    } finally {
+      setCargandoRecuperarAccesoPadre(false);
     }
   };
 
@@ -14481,13 +14594,166 @@ if (esPortalPadresPublico && !esRolPortal) {
                 style={styles.linkButton}
                 onClick={() => {
                   setMostrarRegistroPadrePortal(true);
+                  setMostrarRecuperarAccesoPadre(false);
                   setMensaje("");
                   setMensajeRegistroPadre("");
+                  setMensajeRecuperarAccesoPadre("");
                 }}
               >
                 Crear mi cuenta
               </button>
+
+              <div style={{ marginTop: 10 }}>
+                <button
+                  type="button"
+                  style={styles.linkButton}
+                  onClick={() => {
+                    setMostrarRecuperarAccesoPadre((actual) => !actual);
+                    setMensaje("");
+                    setMensajeRecuperarAccesoPadre("");
+                  }}
+                >
+                  {mostrarRecuperarAccesoPadre
+                    ? "Cancelar recuperación"
+                    : "¿Olvidaste tu contraseña o correo de acceso?"}
+                </button>
+              </div>
+
+              <p
+                style={{
+                  margin: "10px 0 0",
+                  color: "#64748b",
+                  fontSize: 12,
+                  lineHeight: 1.45,
+                }}
+              >
+                Tu cédula también funciona como usuario para ingresar.
+              </p>
             </div>
+
+            {mostrarRecuperarAccesoPadre && (
+              <form
+                onSubmit={handleRecuperarAccesoPortalPadres}
+                style={{
+                  ...styles.form,
+                  marginTop: 18,
+                  padding: 16,
+                  border: "1px solid #cbd5e1",
+                  borderRadius: 12,
+                  background: "#f8fafc",
+                }}
+              >
+                <h3 style={{ margin: "0 0 6px", color: "#0f172a" }}>
+                  Recuperar o cambiar acceso
+                </h3>
+
+                <p
+                  style={{
+                    margin: "0 0 14px",
+                    color: "#64748b",
+                    fontSize: 12,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  Confirma tu cédula y el correo registrado. Puedes cambiar la
+                  contraseña y, si deseas, también el correo de acceso.
+                </p>
+
+                <label style={styles.label}>Cédula del representante</label>
+                <input
+                  type="text"
+                  value={recuperarAccesoPadre.cedula}
+                  onChange={(e) =>
+                    setRecuperarAccesoPadre((prev) => ({
+                      ...prev,
+                      cedula: e.target.value,
+                    }))
+                  }
+                  style={styles.input}
+                  placeholder="Número de cédula"
+                  required
+                />
+
+                <label style={styles.label}>Correo actualmente registrado</label>
+                <input
+                  type="email"
+                  value={recuperarAccesoPadre.correo_verificacion}
+                  onChange={(e) =>
+                    setRecuperarAccesoPadre((prev) => ({
+                      ...prev,
+                      correo_verificacion: e.target.value,
+                    }))
+                  }
+                  style={styles.input}
+                  placeholder="Correo usado en la cuenta"
+                  required
+                />
+
+                <label style={styles.label}>
+                  Nuevo correo de acceso (opcional)
+                </label>
+                <input
+                  type="email"
+                  value={recuperarAccesoPadre.nuevo_correo}
+                  onChange={(e) =>
+                    setRecuperarAccesoPadre((prev) => ({
+                      ...prev,
+                      nuevo_correo: e.target.value,
+                    }))
+                  }
+                  style={styles.input}
+                  placeholder="Déjalo vacío si conservarás el mismo correo"
+                />
+
+                <label style={styles.label}>Nueva contraseña</label>
+                <input
+                  type="password"
+                  value={recuperarAccesoPadre.nueva_password}
+                  onChange={(e) =>
+                    setRecuperarAccesoPadre((prev) => ({
+                      ...prev,
+                      nueva_password: e.target.value,
+                    }))
+                  }
+                  style={styles.input}
+                  placeholder="Mínimo 8 caracteres"
+                  minLength={8}
+                  required
+                />
+
+                <label style={styles.label}>Confirmar nueva contraseña</label>
+                <input
+                  type="password"
+                  value={recuperarAccesoPadre.confirmar_password}
+                  onChange={(e) =>
+                    setRecuperarAccesoPadre((prev) => ({
+                      ...prev,
+                      confirmar_password: e.target.value,
+                    }))
+                  }
+                  style={styles.input}
+                  placeholder="Repite la nueva contraseña"
+                  minLength={8}
+                  required
+                />
+
+                <button
+                  type="submit"
+                  style={{ ...styles.button, marginTop: 10 }}
+                  disabled={cargandoRecuperarAccesoPadre}
+                >
+                  {cargandoRecuperarAccesoPadre
+                    ? "Actualizando..."
+                    : "Actualizar acceso"}
+                </button>
+
+                {mensajeRecuperarAccesoPadre && (
+                  <div style={{ ...styles.message, marginTop: 12 }}>
+                    {mensajeRecuperarAccesoPadre}
+                  </div>
+                )}
+              </form>
+            )}
 
             {mensaje && (
               <div
