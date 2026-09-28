@@ -1078,6 +1078,7 @@ const [cuentasBancarias, setCuentasBancarias] = useState([]);
 const [ventasSeleccionadasBorrar, setVentasSeleccionadasBorrar] = useState([]);
 const [recargasSeleccionadasBorrar, setRecargasSeleccionadasBorrar] = useState([]);
 const [anulandoRecargas, setAnulandoRecargas] = useState(false);
+const [corrigiendoMontoRecarga, setCorrigiendoMontoRecarga] = useState(false);
 const [cierresSeleccionadosBorrar, setCierresSeleccionadosBorrar] = useState([]);
 const [jornadasSeleccionadasBorrar, setJornadasSeleccionadasBorrar] = useState([]);
 const [productosMenuSeleccionadosBorrar, setProductosMenuSeleccionadosBorrar] = useState([]);
@@ -14313,6 +14314,143 @@ const verCierreConsolidado = async () => {
     }
   };
 
+  const corregirMontoRecargaSeleccionada = async () => {
+    if (!["SUPER_ADMIN", "ADMIN"].includes(rolActual)) {
+      alert("Esta acción está disponible únicamente para administradores.");
+      return;
+    }
+
+    const ids = [...new Set(
+      (recargasSeleccionadasBorrar || [])
+        .map((id) => String(id || "").trim())
+        .filter(Boolean)
+    )];
+
+    if (ids.length !== 1) {
+      alert("Selecciona únicamente una recarga de alumno para corregir su monto.");
+      return;
+    }
+
+    const clave = ids[0];
+    const partes = clave.split("-");
+    const prefijo = String(partes[0] || "").toUpperCase();
+    const id = Number(partes[1]);
+
+    if (prefijo !== "A" || !id) {
+      alert("La corrección de monto está disponible únicamente para recargas de alumnos.");
+      return;
+    }
+
+    const recargaSeleccionada = (recargas || []).find(
+      (item) => String(item?.id || "") === clave
+    );
+
+    const montoActual = Number(
+      recargaSeleccionada?.dinero_entregado ??
+      recargaSeleccionada?.monto ??
+      recargaSeleccionada?.dinero_recargado ??
+      0
+    );
+
+    if (!Number.isFinite(montoActual) || montoActual <= 0) {
+      alert("No se pudo determinar el monto actual de la recarga seleccionada.");
+      return;
+    }
+
+    const entrada = window.prompt(
+      `Recarga #${clave}\nMonto actual: $${montoActual.toFixed(2)}\n\nIngresa el monto correcto:`,
+      montoActual.toFixed(2)
+    );
+
+    if (entrada === null) return;
+
+    const nuevoMonto = Number(String(entrada).replace(",", ".").trim());
+
+    if (!Number.isFinite(nuevoMonto) || nuevoMonto <= 0) {
+      alert("Ingresa un monto correcto mayor a $0.00.");
+      return;
+    }
+
+    if (nuevoMonto >= montoActual - 0.000001) {
+      alert(
+        `El monto corregido debe ser menor al actual ($${montoActual.toFixed(2)}).`
+      );
+      return;
+    }
+
+    const diferencia = montoActual - nuevoMonto;
+
+    if (
+      !window.confirm(
+        `¿Confirmas la corrección de la recarga #${clave}?\n\n` +
+        `Monto registrado: $${montoActual.toFixed(2)}\n` +
+        `Monto correcto: $${nuevoMonto.toFixed(2)}\n` +
+        `Diferencia a corregir: $${diferencia.toFixed(2)}\n\n` +
+        "No se borrarán ventas ni el comprobante histórico. El sistema ajustará únicamente la diferencia."
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setCorrigiendoMontoRecarga(true);
+
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      if (!token || !institucionId) {
+        throw new Error("Sesión o institución no válida.");
+      }
+
+      const respuesta = await fetch(
+        `${API_URL}/api/recargas/corregir-monto/alumno/${id}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            institucion_id: Number(institucionId),
+            nuevo_monto: nuevoMonto,
+            motivo: "CORRECCIÓN DE MONTO POR ADMIN",
+          }),
+        }
+      );
+
+      const data = await respuesta.json().catch(() => ({}));
+
+      if (!respuesta.ok) {
+        throw new Error(
+          data.message || data.error || "No se pudo corregir el monto de la recarga."
+        );
+      }
+
+      setRecargasSeleccionadasBorrar([]);
+
+      await Promise.all([
+        cargarRecargas(),
+        cargarAlumnos(),
+        cargarProfesores(),
+      ]);
+
+      alert(
+        `${data.message || "Monto de recarga corregido correctamente."}\n\n` +
+        `Recarga: #A-${id}\n` +
+        `Monto anterior: $${Number(data.monto_anterior || montoActual).toFixed(2)}\n` +
+        `Monto correcto: $${Number(data.monto_nuevo || nuevoMonto).toFixed(2)}\n` +
+        `Diferencia corregida: $${Number(data.diferencia_corregida || diferencia).toFixed(2)}\n` +
+        `Saldo retirado: $${Number(data.saldo_retirado || 0).toFixed(2)}\n` +
+        `Cuenta por pagar generada: $${Number(data.cuenta_por_pagar_generada || 0).toFixed(2)}`
+      );
+    } catch (error) {
+      console.error("Error corrigiendo monto de recarga:", error);
+      alert(error.message || "No se pudo corregir el monto de la recarga.");
+    } finally {
+      setCorrigiendoMontoRecarga(false);
+    }
+  };
+
   const eliminarCierresSeleccionados = async () => {
     if (!cierresSeleccionadosBorrar.length) return alert("Selecciona al menos un cierre.");
     if (!window.confirm(`¿Eliminar ${cierresSeleccionadosBorrar.length} cierre(s) seleccionado(s)? No se eliminarán automáticamente ventas, recargas ni egresos.`)) return;
@@ -24083,6 +24221,19 @@ onClick={guardarEgreso}
                 {anulandoRecargas
                   ? "..."
                   : `🗑️ ${recargasSeleccionadasBorrar.length}`}
+              </button>
+              <button
+                type="button"
+                style={styles.outlineButton}
+                disabled={
+                  corrigiendoMontoRecarga ||
+                  recargasSeleccionadasBorrar.length !== 1 ||
+                  !String(recargasSeleccionadasBorrar[0] || "").startsWith("A-")
+                }
+                onClick={() => corregirMontoRecargaSeleccionada()}
+                title="Corregir únicamente el monto de una recarga de alumno"
+              >
+                {corrigiendoMontoRecarga ? "Corrigiendo..." : "Corregir monto"}
               </button>
             </>
           )}
