@@ -11627,15 +11627,20 @@ Disponible: ${formatearMoneda(
     // La impresión se intenta siempre después de que el backend confirmó la venta.
     imprimirTicketVenta(ticketVenta);
 
-    // Actualizar datos
-    await Promise.all([
+    // BOOSTER DE VENTAS:
+    // La venta YA fue confirmada por el backend. No bloqueamos la caja esperando
+    // recargas completas de ventas/productos/stock/alumnos/profesores/resumen.
+    // Las refrescamos en segundo plano para dejar Nueva Orden disponible de inmediato.
+    void Promise.allSettled([
       cargarVentas(),
       cargarProductos(),
       cargarExistenciasInventario(),
       cargarAlumnos(),
       cargarProfesores(),
       cargarResumen(),
-    ]);
+    ]).catch((errorRefresco) => {
+      console.error("Venta guardada; error refrescando datos en segundo plano:", errorRefresco);
+    });
 
     // Si la venta fue iniciada desde la ficha del alumno,
     // NO regresamos a la ficha. Dejamos al mismo alumno seleccionado
