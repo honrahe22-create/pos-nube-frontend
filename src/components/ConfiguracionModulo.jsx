@@ -22,6 +22,8 @@ export default function ConfiguracionModulo({
   const [descargando, setDescargando] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [cuentasBancarias, setCuentasBancarias] = useState([]);
+  const [restriccionesConsumo, setRestriccionesConsumo] = useState([]);
+  const [cargandoRestricciones, setCargandoRestricciones] = useState(false);
   const [cuentaForm, setCuentaForm] = useState({
     banco: "",
   });
@@ -617,6 +619,43 @@ export default function ConfiguracionModulo({
     }
   };
 
+  const cargarRestriccionesConsumo = async () => {
+    if (!institucionId || !esAdministrador) return;
+
+    try {
+      setCargandoRestricciones(true);
+      const token = localStorage.getItem("token");
+
+      const respuesta = await fetch(
+        `${API_URL}/api/configuracion/restricciones-consumo?institucion_id=${institucionId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await respuesta.json();
+
+      if (!respuesta.ok) {
+        throw new Error(
+          data.message || "No se pudieron cargar las restricciones de consumo"
+        );
+      }
+
+      setRestriccionesConsumo(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Error cargando restricciones de consumo:", error);
+      setRestriccionesConsumo([]);
+      setMensaje(
+        error.message || "No se pudieron cargar las restricciones de consumo."
+      );
+    } finally {
+      setCargandoRestricciones(false);
+    }
+  };
+
+
   const cargarDatos = async () => {
     if (!institucionId) return;
 
@@ -665,6 +704,7 @@ export default function ConfiguracionModulo({
       await cargarCuentasBancarias();
       await cargarRespaldos();
       await cargarUsuariosSistema();
+      await cargarRestriccionesConsumo();
     } catch (error) {
       console.error("Error cargando configuración:", error);
       setMensaje(error.message);
@@ -860,6 +900,7 @@ export default function ConfiguracionModulo({
           ["usuarios", "Usuarios y roles"],
           ["respaldos", "Copias de seguridad"],
           ["auditoria", "Auditoría"],
+          ["restricciones", "Restricciones de consumo"],
           ["impresoras", "Impresoras"],
           ["bancos", "Bancos"],
         ].map(([id, texto]) => (
@@ -1587,6 +1628,128 @@ export default function ConfiguracionModulo({
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+
+      {vistaInterna === "restricciones" && (
+        <div style={ui.card}>
+          <div style={ui.header}>
+            <div>
+              <h3 style={ui.sectionTitle}>Restricciones de consumo</h3>
+              <p style={ui.subtitle}>
+                Consulta administrativa de los límites diarios definidos por padres o representantes.
+                Esta vista es solo de lectura.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              style={ui.refreshButton}
+              onClick={cargarRestriccionesConsumo}
+              disabled={cargandoRestricciones}
+            >
+              {cargandoRestricciones ? "Actualizando..." : "Actualizar"}
+            </button>
+          </div>
+
+          <div style={{ height: 14 }} />
+
+          <div style={ui.warning}>
+            El límite se aplica al alumno en todas sus ventas, sin importar el punto o local
+            donde se registre el consumo. Si existen varios representantes con límite,
+            el sistema aplica el menor valor configurado.
+          </div>
+
+          <div style={{ height: 14 }} />
+
+          <div style={ui.metrics}>
+            <div style={ui.metric}>
+              <span style={ui.metricLabel}>Institución</span>
+              <strong style={ui.metricText}>{nombreInstitucion}</strong>
+            </div>
+
+            <div style={ui.metric}>
+              <span style={ui.metricLabel}>Alumnos con restricción</span>
+              <strong style={ui.metricText}>
+                {restriccionesConsumo.length}
+              </strong>
+            </div>
+
+            <div style={ui.metric}>
+              <span style={ui.metricLabel}>Bloqueados en $0</span>
+              <strong style={ui.metricText}>
+                {
+                  restriccionesConsumo.filter(
+                    (item) => Number(item.limite_consumo_diario || 0) === 0
+                  ).length
+                }
+              </strong>
+            </div>
+          </div>
+
+          <div style={{ height: 14 }} />
+
+          <div style={ui.tableWrap}>
+            <table style={ui.table}>
+              <thead>
+                <tr>
+                  <th style={ui.th}>Alumno</th>
+                  <th style={ui.th}>Cédula / código</th>
+                  <th style={ui.th}>Curso</th>
+                  <th style={ui.th}>Paralelo</th>
+                  <th style={ui.th}>Límite diario</th>
+                  <th style={ui.th}>Estado</th>
+                  <th style={ui.th}>Representante</th>
+                  <th style={ui.th}>Correo</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {!restriccionesConsumo.length ? (
+                  <tr>
+                    <td colSpan="8" style={ui.empty}>
+                      {cargandoRestricciones
+                        ? "Cargando restricciones..."
+                        : "No existen alumnos con límite diario configurado en esta institución."}
+                    </td>
+                  </tr>
+                ) : (
+                  restriccionesConsumo.map((item) => {
+                    const limite = Number(item.limite_consumo_diario || 0);
+
+                    return (
+                      <tr key={item.alumno_id}>
+                        <td style={ui.td}>
+                          {`${item.nombres || ""} ${item.apellidos || ""}`.trim() || "-"}
+                        </td>
+                        <td style={ui.td}>{item.cedula_codigo || "-"}</td>
+                        <td style={ui.td}>{item.curso || "-"}</td>
+                        <td style={ui.td}>{item.paralelo || "-"}</td>
+                        <td style={ui.td}>
+                          <strong>
+                            ${limite.toFixed(2)}
+                          </strong>
+                        </td>
+                        <td style={ui.td}>
+                          <span
+                            style={
+                              limite === 0
+                                ? ui.badgeDanger
+                                : ui.badgeWarning
+                            }
+                          >
+                            {limite === 0 ? "No puede consumir" : "Límite diario"}
+                          </span>
+                        </td>
+                        <td style={ui.td}>{item.representantes || "-"}</td>
+                        <td style={ui.td}>{item.correos_representantes || "-"}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
