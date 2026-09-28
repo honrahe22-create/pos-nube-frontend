@@ -711,6 +711,98 @@ export default function AlumnosModulo({
     URL.revokeObjectURL(url);
   };
 
+  const exportarConsumosAlumnoExcel = () => {
+    if (!alumnoDetalle?.id) {
+      alert("Selecciona un alumno válido.");
+      return;
+    }
+
+    if (!Array.isArray(historialConsumoAlumno) || historialConsumoAlumno.length === 0) {
+      alert("No hay consumos para exportar.");
+      return;
+    }
+
+    const institucionId = Number(obtenerInstitucionActivaId() || alumnoDetalle.institucion_id || 0);
+    const nombresInstituciones = {
+      1: "Colegio Marista",
+      2: "Colegio Pensionado Universitario",
+      3: "FEUE",
+      4: "Club Los Cipreses",
+    };
+
+    const nombreAlumno = `${alumnoDetalle.nombres || ""} ${alumnoDetalle.apellidos || ""}`.trim();
+    const cedulaAlumno = obtenerCedulaAlumno(alumnoDetalle) || "";
+    const totalConsumido = historialConsumoAlumno.reduce(
+      (acumulado, consumo) => acumulado + Number(consumo?.total || 0),
+      0
+    );
+
+    const filas = [
+      ["POS NUBE - CONSUMOS DEL ALUMNO"],
+      [],
+      ["Alumno", nombreAlumno || "Alumno"],
+      ["Cédula", cedulaAlumno],
+      ["Institución", nombresInstituciones[institucionId] || `Institución ${institucionId || "-"}`],
+      ["Curso", alumnoDetalle.curso || "-"],
+      ["Paralelo", alumnoDetalle.paralelo || "-"],
+      ["Generado", new Date().toLocaleString("es-EC")],
+      [],
+      ["Fecha y hora", "Orden", "Producto", "Cantidad", "Precio unitario", "Total", "Forma de pago"],
+      ...historialConsumoAlumno.map((consumo) => [
+        consumo.created_at ? new Date(consumo.created_at).toLocaleString("es-EC") : "-",
+        consumo.venta_id ? `#${consumo.venta_id}` : "-",
+        consumo.producto_nombre || "-",
+        Number(consumo.cantidad || 0),
+        Number(consumo.precio_unitario || 0),
+        Number(consumo.total || 0),
+        consumo.metodo_pago || "-",
+      ]),
+      [],
+      ["TOTAL CONSUMIDO", "", "", "", "", totalConsumido, ""],
+    ];
+
+    const hoja = XLSX.utils.aoa_to_sheet(filas);
+
+    hoja["!cols"] = [
+      { wch: 22 },
+      { wch: 12 },
+      { wch: 34 },
+      { wch: 12 },
+      { wch: 16 },
+      { wch: 14 },
+      { wch: 18 },
+    ];
+
+    const inicioDetalle = 11;
+    const finDetalle = inicioDetalle + historialConsumoAlumno.length - 1;
+
+    for (let fila = inicioDetalle; fila <= finDetalle; fila += 1) {
+      const celdaPrecio = hoja[`E${fila}`];
+      const celdaTotal = hoja[`F${fila}`];
+
+      if (celdaPrecio) celdaPrecio.z = '$0.00';
+      if (celdaTotal) celdaTotal.z = '$0.00';
+    }
+
+    const filaTotal = 12 + historialConsumoAlumno.length;
+    if (hoja[`F${filaTotal}`]) {
+      hoja[`F${filaTotal}`].z = '$0.00';
+    }
+
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Consumos");
+
+    const nombreSeguro =
+      (nombreAlumno || `alumno_${alumnoDetalle.id}`)
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9_-]+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 60) || `alumno_${alumnoDetalle.id}`;
+
+    XLSX.writeFile(libro, `consumos_${nombreSeguro}.xlsx`);
+  };
+
 
   const exportarListadoAlumnosExcel = () => {
     if (!alumnosFiltradosBusqueda.length) {
@@ -1895,7 +1987,40 @@ export default function AlumnosModulo({
           )}
 
           {vistaAlumnoDetalle === "recargas" && <HistorialSimple titulo="Historial de recargas" columnas={["Fecha", "Monto", "Método"]} filas={historialRecargasAlumno.map((r) => [r.created_at ? new Date(r.created_at).toLocaleString() : "-", formatearMoneda(r.monto), r.metodo_pago || "-"])} />}
-          {vistaAlumnoDetalle === "consumo" && <HistorialSimple titulo="Consumo detallado" columnas={["Fecha", "Orden", "Producto", "Cantidad", "Precio", "Total"]} filas={historialConsumoAlumno.map((c) => [c.created_at ? new Date(c.created_at).toLocaleString() : "-", `#${c.venta_id}`, c.producto_nombre || "-", c.cantidad || 0, formatearMoneda(c.precio_unitario), formatearMoneda(c.total)])} />}
+          {vistaAlumnoDetalle === "consumo" && (
+            <div>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  alignItems: "center",
+                  marginBottom: 12,
+                }}
+              >
+                <button
+                  type="button"
+                  style={paymon.exportButton}
+                  onClick={exportarConsumosAlumnoExcel}
+                  disabled={!Array.isArray(historialConsumoAlumno) || historialConsumoAlumno.length === 0}
+                >
+                  EXPORTAR CONSUMOS ⤓
+                </button>
+              </div>
+
+              <HistorialSimple
+                titulo="Consumo detallado"
+                columnas={["Fecha", "Orden", "Producto", "Cantidad", "Precio", "Total"]}
+                filas={historialConsumoAlumno.map((c) => [
+                  c.created_at ? new Date(c.created_at).toLocaleString() : "-",
+                  `#${c.venta_id}`,
+                  c.producto_nombre || "-",
+                  c.cantidad || 0,
+                  formatearMoneda(c.precio_unitario),
+                  formatearMoneda(c.total),
+                ])}
+              />
+            </div>
+          )}
           {vistaAlumnoDetalle === "creditos" && (
             <div style={paymon.historyPanel}>
               <div
