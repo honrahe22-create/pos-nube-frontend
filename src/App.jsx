@@ -24101,7 +24101,6 @@ onClick={guardarEgreso}
           />
         </div>
 
-        {false && (
         <div style={styles.filterField}>
           <label style={styles.filterLabelTop}>Forma de pago</label>
           <select
@@ -24119,7 +24118,6 @@ onClick={guardarEgreso}
             <option value="TRANSFERENCIA">Transferencia</option>
           </select>
         </div>
-        )}
 
       </div>
 
