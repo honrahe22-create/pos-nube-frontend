@@ -1413,6 +1413,9 @@ const [profesorForm, setProfesorForm] = useState({
 const [editandoProfesorId, setEditandoProfesorId] = useState(null);
 const [profesorDetalle, setProfesorDetalle] = useState(null);
 const [vistaProfesorDetalle, setVistaProfesorDetalle] = useState("ordenes");
+const [historialAnteriorProfesor, setHistorialAnteriorProfesor] = useState([]);
+const [cargandoHistorialAnteriorProfesor, setCargandoHistorialAnteriorProfesor] = useState(false);
+const [mensajeHistorialAnteriorProfesor, setMensajeHistorialAnteriorProfesor] = useState("");
 const [mostrarFormularioProfesor, setMostrarFormularioProfesor] = useState(false);
 
 const [creditosProfesores, setCreditosProfesores] = useState([]);
@@ -8054,6 +8057,62 @@ if (institucionIdLogin) {
     } catch (error) {
       console.error("Error cargando profesores:", error);
       setProfesores([]);
+    }
+  };
+
+  const cargarHistorialAnteriorProfesor = async (profesor = profesorDetalle) => {
+    try {
+      const profesorId = Number(profesor?.id || 0);
+      const institucionId = obtenerInstitucionActivaId();
+      const token = localStorage.getItem("token");
+
+      if (!profesorId || !institucionId || !token) {
+        setHistorialAnteriorProfesor([]);
+        setMensajeHistorialAnteriorProfesor(
+          "No se pudo identificar al profesor o la institución."
+        );
+        return;
+      }
+
+      setCargandoHistorialAnteriorProfesor(true);
+      setMensajeHistorialAnteriorProfesor("");
+
+      const respuesta = await fetch(
+        `${API_URL}/api/ventas/historial-anterior-profesor/${profesorId}?institucion_id=${Number(institucionId)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await respuesta.json().catch(() => ({}));
+
+      if (!respuesta.ok) {
+        throw new Error(
+          data.message ||
+            data.error ||
+            "No se pudo consultar el historial anterior como alumno."
+        );
+      }
+
+      const lista = Array.isArray(data.ventas) ? data.ventas : [];
+      setHistorialAnteriorProfesor(lista);
+
+      if (lista.length === 0) {
+        setMensajeHistorialAnteriorProfesor(
+          data.message ||
+            "No se encontraron consumos anteriores registrados como alumno con la misma cédula/código."
+        );
+      }
+    } catch (error) {
+      console.error("Error consultando historial anterior del profesor:", error);
+      setHistorialAnteriorProfesor([]);
+      setMensajeHistorialAnteriorProfesor(
+        error.message || "No se pudo consultar el historial anterior."
+      );
+    } finally {
+      setCargandoHistorialAnteriorProfesor(false);
     }
   };
 
@@ -20292,6 +20351,8 @@ onClick={guardarEgreso}
                                 onClick={() => {
                                   setProfesorDetalle(p);
                                   setVistaProfesorDetalle("ordenes");
+                                  setHistorialAnteriorProfesor([]);
+                                  setMensajeHistorialAnteriorProfesor("");
                                 }}
                                 title="Ver"
                               >
@@ -20787,6 +20848,7 @@ onClick={guardarEgreso}
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {[
                 ["ordenes", "Órdenes"],
+                ["historial_anterior", "Historial anterior"],
                 ["recargas", "Recargas"],
                 ["dispositivos", "Dispositivos"],
                 ["creditos", "Cuentas por pagar"],
@@ -20805,6 +20867,13 @@ onClick={guardarEgreso}
                       await cargarCreditosProfesores(
                         profesorDetalle.id
                       );
+                    }
+
+                    if (
+                      clave === "historial_anterior" &&
+                      profesorDetalle?.id
+                    ) {
+                      await cargarHistorialAnteriorProfesor(profesorDetalle);
                     }
                   }}
                   style={{
@@ -20956,6 +21025,187 @@ onClick={guardarEgreso}
                     </table>
                   </div>
                 </>
+              )}
+
+              {vistaProfesorDetalle === "historial_anterior" && (
+                <div>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 16,
+                      flexWrap: "wrap",
+                      marginBottom: 20,
+                    }}
+                  >
+                    <div>
+                      <h3 style={{ margin: 0 }}>
+                        Historial anterior como alumno
+                      </h3>
+                      <p style={{ margin: "6px 0 0", color: "#64748b" }}>
+                        Consulta de solo lectura. Busca ventas antiguas asociadas
+                        a un alumno con la misma cédula/código dentro de esta institución.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      style={styles.secondaryButton}
+                      onClick={() =>
+                        cargarHistorialAnteriorProfesor(profesorDetalle)
+                      }
+                      disabled={cargandoHistorialAnteriorProfesor}
+                    >
+                      {cargandoHistorialAnteriorProfesor
+                        ? "Consultando..."
+                        : "Actualizar"}
+                    </button>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+                      gap: 14,
+                      marginBottom: 20,
+                    }}
+                  >
+                    <div
+                      style={{
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 12,
+                        padding: "16px 20px",
+                      }}
+                    >
+                      <div style={{ color: "#64748b", fontSize: 13 }}>
+                        Registros anteriores
+                      </div>
+                      <strong style={{ fontSize: 28 }}>
+                        {historialAnteriorProfesor.length}
+                      </strong>
+                    </div>
+
+                    <div
+                      style={{
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 12,
+                        padding: "16px 20px",
+                      }}
+                    >
+                      <div style={{ color: "#64748b", fontSize: 13 }}>
+                        Total histórico
+                      </div>
+                      <strong style={{ fontSize: 28 }}>
+                        {formatearMoneda(
+                          historialAnteriorProfesor.reduce(
+                            (total, venta) => total + Number(venta.total || 0),
+                            0
+                          )
+                        )}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {mensajeHistorialAnteriorProfesor && (
+                    <div
+                      style={{
+                        marginBottom: 18,
+                        padding: 14,
+                        borderRadius: 10,
+                        background: "#f8fafc",
+                        color: "#475569",
+                        border: "1px solid #e2e8f0",
+                      }}
+                    >
+                      {mensajeHistorialAnteriorProfesor}
+                    </div>
+                  )}
+
+                  <div style={styles.tableWrap}>
+                    <table style={styles.table}>
+                      <thead>
+                        <tr>
+                          <th style={styles.th}>Orden</th>
+                          <th style={styles.th}>Fecha</th>
+                          <th style={styles.th}>Registrado como</th>
+                          <th style={styles.th}>Detalles</th>
+                          <th style={styles.th}>Total</th>
+                          <th style={styles.th}>Forma de pago</th>
+                          <th style={styles.th}>Punto</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cargandoHistorialAnteriorProfesor ? (
+                          <tr>
+                            <td style={styles.td} colSpan={7}>
+                              Consultando historial anterior...
+                            </td>
+                          </tr>
+                        ) : historialAnteriorProfesor.length === 0 ? (
+                          <tr>
+                            <td style={styles.td} colSpan={7}>
+                              No hay consumos anteriores encontrados.
+                            </td>
+                          </tr>
+                        ) : (
+                          historialAnteriorProfesor.map((venta) => (
+                            <tr key={`hist-alumno-${venta.id}`}>
+                              <td style={styles.td}>#{venta.id}</td>
+                              <td style={styles.td}>
+                                {venta.created_at
+                                  ? new Date(venta.created_at).toLocaleString(
+                                      "es-EC",
+                                      { timeZone: "America/Guayaquil" }
+                                    )
+                                  : "-"}
+                              </td>
+                              <td style={styles.td}>
+                                {`${venta.alumno_nombres || ""} ${
+                                  venta.alumno_apellidos || ""
+                                }`.trim() || "Alumno anterior"}
+                                {venta.alumno_id
+                                  ? ` (ID ${venta.alumno_id})`
+                                  : ""}
+                              </td>
+                              <td style={styles.td}>
+                                {Array.isArray(venta.items) &&
+                                venta.items.length > 0
+                                  ? venta.items
+                                      .map((item) => {
+                                        const nombre =
+                                          item.producto_nombre ||
+                                          item.nombre ||
+                                          item.descripcion ||
+                                          (item.producto_id
+                                            ? `Producto #${item.producto_id}`
+                                            : "Producto");
+                                        const cantidad = Number(
+                                          item.cantidad || 1
+                                        );
+                                        return `${cantidad} x ${nombre}`;
+                                      })
+                                      .join(", ")
+                                  : "Sin detalle"}
+                              </td>
+                              <td style={styles.td}>
+                                {formatearMoneda(venta.total || 0)}
+                              </td>
+                              <td style={styles.td}>
+                                {venta.metodo_pago || "-"}
+                              </td>
+                              <td style={styles.td}>
+                                {venta.ubicacion_visual ||
+                                  venta.ubicacion ||
+                                  "-"}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               )}
 
               {vistaProfesorDetalle === "recargas" && (
