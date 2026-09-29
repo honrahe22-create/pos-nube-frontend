@@ -8116,6 +8116,196 @@ if (institucionIdLogin) {
     }
   };
 
+  const exportarHistorialAnteriorProfesorExcel = () => {
+    if (!Array.isArray(historialAnteriorProfesor) || historialAnteriorProfesor.length === 0) {
+      alert("No hay historial anterior para exportar.");
+      return;
+    }
+
+    const nombreProfesor =
+      `${profesorDetalle?.nombres || ""} ${profesorDetalle?.apellidos || ""}`.trim() ||
+      "Profesor";
+
+    const filas = historialAnteriorProfesor.map((venta) => ({
+      Orden: venta.id || "",
+      Fecha: venta.created_at
+        ? new Date(venta.created_at).toLocaleString("es-EC", {
+            timeZone: "America/Guayaquil",
+          })
+        : "",
+      "Registrado como":
+        `${venta.alumno_nombres || ""} ${venta.alumno_apellidos || ""}`.trim() ||
+        "Alumno anterior",
+      "ID alumno anterior": venta.alumno_id || "",
+      Detalles:
+        Array.isArray(venta.items) && venta.items.length > 0
+          ? venta.items
+              .map((item) => {
+                const nombre =
+                  item.producto_nombre ||
+                  item.nombre ||
+                  item.descripcion ||
+                  (item.producto_id ? `Producto #${item.producto_id}` : "Producto");
+                return `${Number(item.cantidad || 1)} x ${nombre}`;
+              })
+              .join(", ")
+          : "Sin detalle",
+      Total: Number(venta.total || 0),
+      "Forma de pago": venta.metodo_pago || "",
+      Punto: venta.ubicacion_visual || venta.ubicacion || "",
+    }));
+
+    filas.push({
+      Orden: "",
+      Fecha: "",
+      "Registrado como": "",
+      "ID alumno anterior": "",
+      Detalles: "TOTAL HISTÓRICO",
+      Total: historialAnteriorProfesor.reduce(
+        (total, venta) => total + Number(venta.total || 0),
+        0
+      ),
+      "Forma de pago": "",
+      Punto: "",
+    });
+
+    const ws = XLSX.utils.json_to_sheet(filas);
+    ws["!cols"] = [
+      { wch: 10 },
+      { wch: 22 },
+      { wch: 30 },
+      { wch: 18 },
+      { wch: 48 },
+      { wch: 14 },
+      { wch: 18 },
+      { wch: 18 },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Historial anterior");
+
+    const nombreArchivo = nombreProfesor
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Za-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+
+    XLSX.writeFile(
+      wb,
+      `historial_anterior_${nombreArchivo || "profesor"}.xlsx`
+    );
+  };
+
+  const exportarHistorialAnteriorProfesorPdf = () => {
+    if (!Array.isArray(historialAnteriorProfesor) || historialAnteriorProfesor.length === 0) {
+      alert("No hay historial anterior para exportar.");
+      return;
+    }
+
+    const nombreProfesor =
+      `${profesorDetalle?.nombres || ""} ${profesorDetalle?.apellidos || ""}`.trim() ||
+      "Profesor";
+    const institucion =
+      institucionActiva?.nombre || "Institución";
+
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4",
+    });
+
+    doc.setFont(undefined, "bold");
+    doc.setFontSize(16);
+    doc.text("POS NUBE - HISTORIAL ANTERIOR COMO ALUMNO", 14, 16);
+
+    doc.setFont(undefined, "normal");
+    doc.setFontSize(10);
+    doc.text(`Profesor actual: ${nombreProfesor}`, 14, 23);
+    doc.text(`Institución: ${institucion}`, 14, 29);
+    doc.text(
+      `Cédula/Código actual: ${profesorDetalle?.cedula || profesorDetalle?.codigo || "-"}`,
+      14,
+      35
+    );
+
+    const totalHistorico = historialAnteriorProfesor.reduce(
+      (total, venta) => total + Number(venta.total || 0),
+      0
+    );
+
+    doc.text(
+      `Registros anteriores: ${historialAnteriorProfesor.length}   Total histórico: ${formatearMoneda(totalHistorico)}`,
+      14,
+      41
+    );
+
+    const body = historialAnteriorProfesor.map((venta) => [
+      `#${venta.id || ""}`,
+      venta.created_at
+        ? new Date(venta.created_at).toLocaleString("es-EC", {
+            timeZone: "America/Guayaquil",
+          })
+        : "-",
+      `${venta.alumno_nombres || ""} ${venta.alumno_apellidos || ""}`.trim() ||
+        "Alumno anterior",
+      Array.isArray(venta.items) && venta.items.length > 0
+        ? venta.items
+            .map((item) => {
+              const nombre =
+                item.producto_nombre ||
+                item.nombre ||
+                item.descripcion ||
+                (item.producto_id ? `Producto #${item.producto_id}` : "Producto");
+              return `${Number(item.cantidad || 1)} x ${nombre}`;
+            })
+            .join(", ")
+        : "Sin detalle",
+      formatearMoneda(venta.total || 0),
+      venta.metodo_pago || "-",
+      venta.ubicacion_visual || venta.ubicacion || "-",
+    ]);
+
+    autoTable(doc, {
+      startY: 47,
+      head: [[
+        "Orden",
+        "Fecha",
+        "Registrado como",
+        "Detalles",
+        "Total",
+        "Forma de pago",
+        "Punto",
+      ]],
+      body,
+      styles: {
+        fontSize: 8,
+        cellPadding: 2,
+        overflow: "linebreak",
+      },
+      headStyles: {
+        fontStyle: "bold",
+      },
+      columnStyles: {
+        0: { cellWidth: 17 },
+        1: { cellWidth: 34 },
+        2: { cellWidth: 48 },
+        3: { cellWidth: 80 },
+        4: { cellWidth: 22 },
+        5: { cellWidth: 30 },
+        6: { cellWidth: 30 },
+      },
+      margin: { left: 10, right: 10 },
+    });
+
+    const nombreArchivo = nombreProfesor
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Za-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+
+    doc.save(`historial_anterior_${nombreArchivo || "profesor"}.pdf`);
+  };
+
   const guardarProfesor = async (e) => {
     e.preventDefault();
 
@@ -21049,18 +21239,50 @@ onClick={guardarEgreso}
                       </p>
                     </div>
 
-                    <button
-                      type="button"
-                      style={styles.secondaryButton}
-                      onClick={() =>
-                        cargarHistorialAnteriorProfesor(profesorDetalle)
-                      }
-                      disabled={cargandoHistorialAnteriorProfesor}
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 10,
+                        flexWrap: "wrap",
+                      }}
                     >
-                      {cargandoHistorialAnteriorProfesor
-                        ? "Consultando..."
-                        : "Actualizar"}
-                    </button>
+                      <button
+                        type="button"
+                        style={styles.secondaryButton}
+                        onClick={() =>
+                          cargarHistorialAnteriorProfesor(profesorDetalle)
+                        }
+                        disabled={cargandoHistorialAnteriorProfesor}
+                      >
+                        {cargandoHistorialAnteriorProfesor
+                          ? "Consultando..."
+                          : "Actualizar"}
+                      </button>
+
+                      <button
+                        type="button"
+                        style={styles.secondaryButton}
+                        onClick={exportarHistorialAnteriorProfesorExcel}
+                        disabled={
+                          cargandoHistorialAnteriorProfesor ||
+                          historialAnteriorProfesor.length === 0
+                        }
+                      >
+                        Descargar Excel
+                      </button>
+
+                      <button
+                        type="button"
+                        style={styles.outlineButton}
+                        onClick={exportarHistorialAnteriorProfesorPdf}
+                        disabled={
+                          cargandoHistorialAnteriorProfesor ||
+                          historialAnteriorProfesor.length === 0
+                        }
+                      >
+                        Descargar PDF
+                      </button>
+                    </div>
                   </div>
 
                   <div
