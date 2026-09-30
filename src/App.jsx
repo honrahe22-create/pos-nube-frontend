@@ -21298,8 +21298,12 @@ onClick={guardarEgreso}
                           type="button"
                           style={{
                             ...styles.deleteIconButton,
-                            padding: "9px 14px",
-                            minWidth: 150,
+                            padding: "8px 10px",
+                            minWidth: 48,
+                            width: "auto",
+                            fontSize: 16,
+                            lineHeight: 1,
+                            whiteSpace: "nowrap",
                           }}
                           disabled={
                             eliminandoPruebas ||
@@ -21307,10 +21311,11 @@ onClick={guardarEgreso}
                           }
                           onClick={eliminarOrdenesProfesorSeleccionadas}
                           title={`Eliminar ${ordenesProfesorSeleccionadasBorrar.length} orden(es) seleccionada(s)`}
+                          aria-label={`Eliminar ${ordenesProfesorSeleccionadasBorrar.length} orden(es) seleccionada(s)`}
                         >
                           {eliminandoPruebas
-                            ? "Procesando..."
-                            : `🗑️ Eliminar seleccionadas (${ordenesProfesorSeleccionadasBorrar.length})`}
+                            ? "…"
+                            : `🗑️ ${ordenesProfesorSeleccionadasBorrar.length}`}
                         </button>
                       </div>
                     )}
