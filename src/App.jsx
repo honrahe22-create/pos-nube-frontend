@@ -1076,6 +1076,7 @@ const [cuentasBancarias, setCuentasBancarias] = useState([]);
 // Selección manual de registros de prueba. Solo se muestran controles de borrado
 // a ADMIN / SUPER_ADMIN; el backend vuelve a validar el rol.
 const [ventasSeleccionadasBorrar, setVentasSeleccionadasBorrar] = useState([]);
+const [ordenesProfesorSeleccionadasBorrar, setOrdenesProfesorSeleccionadasBorrar] = useState([]);
 const [recargasSeleccionadasBorrar, setRecargasSeleccionadasBorrar] = useState([]);
 const [anulandoRecargas, setAnulandoRecargas] = useState(false);
 const [corrigiendoMontoRecarga, setCorrigiendoMontoRecarga] = useState(false);
@@ -14416,6 +14417,131 @@ const verCierreConsolidado = async () => {
     }
   };
 
+  const eliminarOrdenesProfesorSeleccionadas = async () => {
+    const ids = [
+      ...new Set(
+        (ordenesProfesorSeleccionadasBorrar || [])
+          .map(Number)
+          .filter((id) => Number.isInteger(id) && id > 0)
+      ),
+    ];
+
+    if (!["SUPER_ADMIN", "ADMIN"].includes(rolActual)) {
+      alert("Solo ADMIN o SUPER_ADMIN puede eliminar órdenes.");
+      return;
+    }
+
+    if (!ids.length) {
+      alert("Selecciona al menos una orden del profesor.");
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `¿Eliminar ${ids.length} orden(es) seleccionada(s) de este profesor?\n\n` +
+          "El sistema usará la eliminación segura existente: revertirá stock y " +
+          "ajustará saldo/cuenta por pagar cuando corresponda. Las órdenes que no " +
+          "puedan eliminarse se conservarán y se informarán al final."
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setEliminandoPruebas(true);
+
+      const token = localStorage.getItem("token");
+      const institucionId = obtenerInstitucionActivaId();
+
+      if (!token || !institucionId) {
+        throw new Error("Sesión o institución no válida.");
+      }
+
+      const eliminadas = [];
+      const bloqueadas = [];
+
+      for (const id of ids) {
+        try {
+          const respuesta = await fetch(
+            `${API_URL}/api/ventas/eliminar-seleccionadas`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                institucion_id: Number(institucionId),
+                ids: [Number(id)],
+              }),
+            }
+          );
+
+          const data = await respuesta.json().catch(() => ({}));
+
+          if (!respuesta.ok) {
+            bloqueadas.push({
+              id: Number(id),
+              motivo:
+                data.message ||
+                data.error ||
+                "No se pudo eliminar esta orden.",
+            });
+            continue;
+          }
+
+          eliminadas.push(Number(id));
+        } catch (errorOrden) {
+          bloqueadas.push({
+            id: Number(id),
+            motivo:
+              errorOrden.message ||
+              "No se pudo eliminar esta orden.",
+          });
+        }
+      }
+
+      setOrdenesProfesorSeleccionadasBorrar(
+        bloqueadas.map((item) => Number(item.id))
+      );
+
+      await Promise.all([
+        cargarVentas(),
+        cargarProductos(),
+        cargarAlumnos(),
+        cargarProfesores(),
+      ]);
+
+      let mensaje =
+        `Proceso terminado.\n\n` +
+        `Órdenes eliminadas: ${eliminadas.length}\n` +
+        `Órdenes pendientes: ${bloqueadas.length}`;
+
+      if (bloqueadas.length) {
+        mensaje +=
+          `\n\nPendientes:\n` +
+          bloqueadas
+            .slice(0, 10)
+            .map((item) => `#${item.id}: ${item.motivo}`)
+            .join("\n");
+
+        if (bloqueadas.length > 10) {
+          mensaje += `\n... y ${bloqueadas.length - 10} más.`;
+        }
+      }
+
+      alert(mensaje);
+    } catch (error) {
+      console.error("Error eliminando órdenes del profesor:", error);
+      alert(
+        error.message ||
+          "No se pudieron procesar las órdenes seleccionadas."
+      );
+    } finally {
+      setEliminandoPruebas(false);
+    }
+  };
+
   const eliminarRecargasSeleccionadas = async () => {
     const ids = [...new Set(
       (recargasSeleccionadasBorrar || [])
@@ -20541,6 +20667,7 @@ onClick={guardarEgreso}
                                 onClick={() => {
                                   setProfesorDetalle(p);
                                   setVistaProfesorDetalle("ordenes");
+                                  setOrdenesProfesorSeleccionadasBorrar([]);
                                   setHistorialAnteriorProfesor([]);
                                   setMensajeHistorialAnteriorProfesor("");
                                 }}
@@ -21100,7 +21227,7 @@ onClick={guardarEgreso}
                       flexWrap: "wrap",
                     }}
                   >
-                    <div style={{ display: "flex", gap: 14 }}>
+                    <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                       <div
                         style={{
                           padding: "16px 24px",
@@ -21128,12 +21255,74 @@ onClick={guardarEgreso}
                         </strong>
                       </div>
                     </div>
+
+                    {["SUPER_ADMIN", "ADMIN"].includes(rolActual) && (
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 10,
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          style={styles.outlineButton}
+                          disabled={eliminandoPruebas || ordenesProfesor.length === 0}
+                          onClick={() => {
+                            const idsProfesor = ordenesProfesor.map((venta) =>
+                              Number(venta.id)
+                            );
+                            const todasSeleccionadas =
+                              idsProfesor.length > 0 &&
+                              idsProfesor.every((id) =>
+                                ordenesProfesorSeleccionadasBorrar.includes(id)
+                              );
+
+                            setOrdenesProfesorSeleccionadasBorrar(
+                              todasSeleccionadas ? [] : idsProfesor
+                            );
+                          }}
+                        >
+                          {ordenesProfesor.length > 0 &&
+                          ordenesProfesor.every((venta) =>
+                            ordenesProfesorSeleccionadasBorrar.includes(
+                              Number(venta.id)
+                            )
+                          )
+                            ? "Quitar selección"
+                            : "Seleccionar todo"}
+                        </button>
+
+                        <button
+                          type="button"
+                          style={{
+                            ...styles.deleteIconButton,
+                            padding: "9px 14px",
+                            minWidth: 150,
+                          }}
+                          disabled={
+                            eliminandoPruebas ||
+                            ordenesProfesorSeleccionadasBorrar.length === 0
+                          }
+                          onClick={eliminarOrdenesProfesorSeleccionadas}
+                          title={`Eliminar ${ordenesProfesorSeleccionadasBorrar.length} orden(es) seleccionada(s)`}
+                        >
+                          {eliminandoPruebas
+                            ? "Procesando..."
+                            : `🗑️ Eliminar seleccionadas (${ordenesProfesorSeleccionadasBorrar.length})`}
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ ...styles.tableWrap, marginTop: 24 }}>
                     <table style={styles.table}>
                       <thead>
                         <tr>
+                          {["SUPER_ADMIN", "ADMIN"].includes(rolActual) && (
+                            <th style={styles.th}>Seleccionar</th>
+                          )}
                           <th style={styles.th}>Orden</th>
                           <th style={styles.th}>Nombre</th>
                           <th style={styles.th}>Apellido</th>
@@ -21148,13 +21337,38 @@ onClick={guardarEgreso}
                       <tbody>
                         {ordenesProfesor.length === 0 ? (
                           <tr>
-                            <td style={styles.td} colSpan={9}>
+                            <td
+                              style={styles.td}
+                              colSpan={
+                                ["SUPER_ADMIN", "ADMIN"].includes(rolActual)
+                                  ? 10
+                                  : 9
+                              }
+                            >
                               No hay datos disponibles
                             </td>
                           </tr>
                         ) : (
                           ordenesProfesor.map((venta) => (
                             <tr key={venta.id}>
+                              {["SUPER_ADMIN", "ADMIN"].includes(rolActual) && (
+                                <td style={styles.td}>
+                                  <input
+                                    type="checkbox"
+                                    checked={ordenesProfesorSeleccionadasBorrar.includes(
+                                      Number(venta.id)
+                                    )}
+                                    onChange={(e) =>
+                                      alternarSeleccionId(
+                                        setOrdenesProfesorSeleccionadasBorrar,
+                                        venta.id,
+                                        e.target.checked
+                                      )
+                                    }
+                                    aria-label={`Seleccionar orden ${venta.id}`}
+                                  />
+                                </td>
+                              )}
                               <td style={styles.td}>#{venta.id}</td>
                               <td style={styles.td}>
                                 {profesorDetalle.nombres || "-"}
