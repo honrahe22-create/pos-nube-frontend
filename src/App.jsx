@@ -340,6 +340,15 @@ const normalizarUbicacionFrontend = (valor, institucionId = null) => {
     return "BAR PRINCIPAL";
   }
 
+  // FEUE (institución 3): existe un solo punto operativo = BAR.
+  // PRINCIPAL / BAR PRINCIPAL / KIOSKO son aliases históricos del mismo BAR.
+  if (
+    Number(institucionId || 0) === 3 &&
+    ["PRINCIPAL", "BAR", "BAR PRINCIPAL", "KIOSKO"].includes(texto)
+  ) {
+    return "BAR";
+  }
+
   // En otras instituciones conservamos los nombres reales.
   if (texto === "BAR") return "BAR";
   if (texto === "BAR PRINCIPAL") return "BAR PRINCIPAL";
@@ -3413,6 +3422,9 @@ const cargarExistenciasInventario = async ({
     if (institucionId === 1) {
       // MARISTA: el único punto operativo de inventario/venta es BAR.
       puntosRecibidos.splice(0, puntosRecibidos.length, "BAR");
+    } else if (institucionId === 3) {
+      // FEUE: el único punto operativo de inventario/venta es BAR.
+      puntosRecibidos.splice(0, puntosRecibidos.length, "BAR");
     } else if (!puntosRecibidos.includes("PRINCIPAL")) {
       puntosRecibidos.unshift("PRINCIPAL");
     }
@@ -3437,6 +3449,8 @@ const cargarExistenciasInventario = async ({
               ? "BAR"
               : institucionId === 2
               ? "BAR PRINCIPAL"
+              : institucionId === 3
+              ? "BAR"
               : (puntosUnicos[0] || "PRINCIPAL")
           );
     });
