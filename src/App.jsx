@@ -7607,6 +7607,36 @@ if (institucionIdLogin) {
       }
     }
 
+    if (recargaProfesorForm.metodo_pago === "ROL_DE_PAGOS") {
+      if (!["ADMIN", "SUPER_ADMIN"].includes(rolActual)) {
+        alert("Solo ADMIN puede registrar cruces por rol de pagos.");
+        return;
+      }
+
+      const deudaActualProfesor = Math.max(
+        0,
+        Number(
+          profesorDetalle?.cuentas_por_pagar ??
+            profesorDetalle?.credito_utilizado ??
+            0
+        )
+      );
+
+      if (deudaActualProfesor <= 0) {
+        alert("Este profesor/empleado no tiene cuentas por pagar pendientes.");
+        return;
+      }
+
+      if (monto > deudaActualProfesor + 0.000001) {
+        alert(
+          `El valor por rol de pagos no puede superar la cuenta pendiente de ${formatearMoneda(
+            deudaActualProfesor
+          )}.`
+        );
+        return;
+      }
+    }
+
     try {
       setGuardandoRecargaProfesor(true);
 
@@ -7625,10 +7655,12 @@ if (institucionIdLogin) {
       const urlRecargaProfesor =
         `${API_URL}/api/profesores/${profesorDetalle.id}/recargas`;
 
+      const metodoPagoProfesor = recargaProfesorForm.metodo_pago;
+
       const payloadRecargaProfesor = {
         institucion_id: Number(institucionId),
         monto,
-        metodo_pago: recargaProfesorForm.metodo_pago,
+        metodo_pago: metodoPagoProfesor,
         numero_comprobante:
           recargaProfesorForm.metodo_pago === "TRANSFERENCIA"
             ? String(
@@ -7644,7 +7676,9 @@ if (institucionIdLogin) {
           recargaProfesorForm.observacion ||
           (recargaProfesorForm.metodo_pago === "EFECTIVO"
             ? "Recarga en efectivo"
-            : "Recarga por transferencia"),
+            : recargaProfesorForm.metodo_pago === "TRANSFERENCIA"
+            ? "Recarga por transferencia"
+            : "Cruce de cuenta por pagar mediante rol de pagos"),
       };
 
       const res = await fetch(urlRecargaProfesor, {
@@ -7679,17 +7713,26 @@ if (institucionIdLogin) {
         monto: "",
         metodo_pago: "EFECTIVO",
         numero_comprobante: "",
-                        observacion: "",
+      fecha_transferencia: "",
+      observacion: "",
       });
 
       await cargarCreditosProfesores(profesorDetalle.id);
       await cargarProfesores();
       setMostrarModalRecargaProfesor(false);
 
-      const aplicadoCredito = Number(data.aplicado_credito || 0);
+      const aplicadoCredito = Number(
+        data.aplicado_credito || data.aplicado_cuentas_por_pagar || 0
+      );
       const excedenteSaldo = Number(data.excedente_saldo || 0);
 
-      if (aplicadoCredito > 0) {
+      if (metodoPagoProfesor === "ROL_DE_PAGOS") {
+        alert(
+          `Cruce por rol de pagos registrado correctamente.\n` +
+            `Aplicado a cuenta por pagar: ${formatearMoneda(aplicadoCredito)}\n` +
+            `Saldo pendiente: ${formatearMoneda(data.cuentas_por_pagar || 0)}`
+        );
+      } else if (aplicadoCredito > 0) {
         alert(
           `Pago registrado correctamente.\n` +
             `Aplicado a deuda de crédito: ${formatearMoneda(aplicadoCredito)}\n` +
@@ -20288,36 +20331,59 @@ onClick={guardarEgreso}
 
             <label
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 20,
-                marginTop: 24,
+                display: "block",
                 fontWeight: 800,
                 color: "#475569",
                 fontSize: 18,
-                cursor: "pointer",
+                marginTop: 24,
+                marginBottom: 8,
               }}
             >
-              <span>¿Es transferencia?</span>
-              <input
-                type="checkbox"
-                checked={
-                  recargaProfesorForm.metodo_pago === "TRANSFERENCIA"
-                }
-                onChange={(e) =>
-                  setRecargaProfesorForm((prev) => ({
-                    ...prev,
-                    metodo_pago: e.target.checked
-                      ? "TRANSFERENCIA"
-                      : "EFECTIVO",
-                    fecha_transferencia: "",
-                    numero_comprobante: "",
-                  }))
-                }
-                style={{ width: 20, height: 20 }}
-              />
+              Forma de pago / conciliación
             </label>
+            <select
+              value={recargaProfesorForm.metodo_pago}
+              onChange={(e) =>
+                setRecargaProfesorForm((prev) => ({
+                  ...prev,
+                  metodo_pago: e.target.value,
+                  fecha_transferencia: "",
+                  numero_comprobante: "",
+                }))
+              }
+              style={{
+                width: "100%",
+                height: 54,
+                border: "1px solid #cbd5e1",
+                borderRadius: 10,
+                padding: "0 14px",
+                fontSize: 16,
+                background: "#ffffff",
+                boxSizing: "border-box",
+              }}
+            >
+              <option value="EFECTIVO">Efectivo</option>
+              <option value="TRANSFERENCIA">Transferencia</option>
+              {["ADMIN", "SUPER_ADMIN"].includes(rolActual) && (
+                <option value="ROL_DE_PAGOS">Rol de pagos</option>
+              )}
+            </select>
+
+            {recargaProfesorForm.metodo_pago === "ROL_DE_PAGOS" && (
+              <div
+                style={{
+                  marginTop: 14,
+                  padding: 12,
+                  borderRadius: 10,
+                  background: "#fff7ed",
+                  color: "#9a3412",
+                  fontWeight: 700,
+                }}
+              >
+                Se aplicará únicamente a la cuenta por pagar. No genera saldo a
+                favor, no crea otra venta y no modifica Stock.
+              </div>
+            )}
 
             {recargaProfesorForm.metodo_pago === "TRANSFERENCIA" && (
               <>                <label
@@ -20444,7 +20510,9 @@ onClick={guardarEgreso}
               >
                 {guardandoRecargaProfesor
                   ? "Procesando..."
-                  : "Realizar recarga"}
+                  : recargaProfesorForm.metodo_pago === "ROL_DE_PAGOS"
+                  ? "Cruzar por rol de pagos"
+                  : "Realizar recarga / pago"}
               </button>
             </div>
 
@@ -20455,7 +20523,7 @@ onClick={guardarEgreso}
                 color: "#64748b",
               }}
             >
-              Si existe una cuenta por pagar, se descontará automáticamente primero; cualquier excedente quedará como saldo a favor..
+              En efectivo o transferencia, cualquier excedente queda como saldo a favor. En rol de pagos, solo se cruza la cuenta pendiente y no se genera excedente.
             </p>
           </form>
         </div>
@@ -21820,6 +21888,9 @@ onClick={guardarEgreso}
                       >
                         <option value="EFECTIVO">Efectivo</option>
                         <option value="TRANSFERENCIA">Transferencia</option>
+                        {["ADMIN", "SUPER_ADMIN"].includes(rolActual) && (
+                          <option value="ROL_DE_PAGOS">Rol de pagos</option>
+                        )}
                       </select>
                     </div>
 
@@ -21890,7 +21961,9 @@ onClick={guardarEgreso}
                           ? "Registrando..."
                           : recargaProfesorForm.metodo_pago === "EFECTIVO"
                           ? "Recargar / pagar en efectivo"
-                          : "Recargar / pagar por transferencia"}
+                          : recargaProfesorForm.metodo_pago === "TRANSFERENCIA"
+                          ? "Recargar / pagar por transferencia"
+                          : "Cruzar por rol de pagos"}
                       </button>
                     </div>
                   </form>
