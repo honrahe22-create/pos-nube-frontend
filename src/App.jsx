@@ -1363,6 +1363,7 @@ const [topPanelPagoNuevaOrden, setTopPanelPagoNuevaOrden] = useState(176);
 const ventaRapidaBloqueadaRef = useRef(false);
 // Protección contra doble/triple envío accidental de la misma venta.
 const ventaEnvioEnCursoRef = useRef(false);
+const refrescoPostVentaTimerRef = useRef(null);
 const ventaRapidaCooldownHastaRef = useRef(0);
 
 useEffect(() => {
@@ -11891,20 +11892,95 @@ Disponible: ${formatearMoneda(
     // La impresión se intenta siempre después de que el backend confirmó la venta.
     imprimirTicketVenta(ticketVenta);
 
-    // BOOSTER DE VENTAS:
-    // La venta YA fue confirmada por el backend. No bloqueamos la caja esperando
-    // recargas completas de ventas/productos/stock/alumnos/profesores/resumen.
-    // Las refrescamos en segundo plano para dejar Nueva Orden disponible de inmediato.
-    void Promise.allSettled([
-      cargarVentas(),
-      cargarProductos(),
-      cargarExistenciasInventario(),
-      cargarAlumnos(),
-      cargarProfesores(),
-      cargarResumen(),
-    ]).catch((errorRefresco) => {
-      console.error("Venta guardada; error refrescando datos en segundo plano:", errorRefresco);
-    });
+    // ============================================================
+    // BOOSTER DE VENTAS - ALTA CONCURRENCIA
+    // ============================================================
+    // La venta YA fue confirmada por PostgreSQL. Actualizamos localmente
+    // lo necesario para que la siguiente venta no dependa de nuevas consultas.
+    //
+    // IMPORTANTE:
+    // Antes se lanzaban 6 solicitudes al backend inmediatamente después
+    // de CADA venta. En horas pico esas solicitudes se acumulaban y competían
+    // con el siguiente POST /api/ventas. Ahora se agrupan: solo se hace una
+    // sincronización completa cuando pasan 1.8 s sin una nueva venta.
+    // ============================================================
+
+    const detalleConfirmado = Array.isArray(data?.detalle) ? data.detalle : [];
+
+    if (detalleConfirmado.length > 0) {
+      setExistenciasInventario((prev) =>
+        (Array.isArray(prev) ? prev : []).map((existencia) => {
+          const item = detalleConfirmado.find(
+            (detalle) =>
+              Number(detalle?.producto_id) === Number(existencia?.producto_id) &&
+              normalizarUbicacionFrontend(
+                detalle?.ubicacion_stock || detalle?.ubicacion || "",
+                institucionId
+              ) ===
+                normalizarUbicacionFrontend(
+                  existencia?.ubicacion || "",
+                  institucionId
+                )
+          );
+
+          if (!item || item.stock_nuevo === undefined || item.stock_nuevo === null) {
+            return existencia;
+          }
+
+          return {
+            ...existencia,
+            stock: Number(item.stock_nuevo || 0),
+          };
+        })
+      );
+    }
+
+    if (alumnoVentaSeleccionado && requiereAlumno) {
+      const alumnoIdActual = Number(alumnoVentaSeleccionado.id);
+
+      setAlumnos((prev) =>
+        (Array.isArray(prev) ? prev : []).map((alumnoItem) => {
+          if (Number(alumnoItem?.id) !== alumnoIdActual) return alumnoItem;
+
+          return {
+            ...alumnoItem,
+            saldo: pagaConSaldo
+              ? Math.max(
+                  0,
+                  Number(alumnoItem?.saldo || 0) -
+                    Number(totalVentaCalculado || 0)
+                )
+              : Number(alumnoItem?.saldo || 0),
+            credito_utilizado: pagaConCredito
+              ? Number(alumnoItem?.credito_utilizado || 0) +
+                Number(totalVentaCalculado || 0)
+              : Number(alumnoItem?.credito_utilizado || 0),
+          };
+        })
+      );
+    }
+
+    if (refrescoPostVentaTimerRef.current) {
+      window.clearTimeout(refrescoPostVentaTimerRef.current);
+    }
+
+    refrescoPostVentaTimerRef.current = window.setTimeout(() => {
+      refrescoPostVentaTimerRef.current = null;
+
+      void Promise.allSettled([
+        cargarVentas(),
+        cargarProductos(),
+        cargarExistenciasInventario(),
+        cargarAlumnos(),
+        cargarProfesores(),
+        cargarResumen(),
+      ]).catch((errorRefresco) => {
+        console.error(
+          "Venta guardada; error sincronizando datos después del flujo rápido:",
+          errorRefresco
+        );
+      });
+    }, 1800);
 
     // Si la venta fue iniciada desde la ficha del alumno,
     // NO regresamos a la ficha. Dejamos al mismo alumno seleccionado
