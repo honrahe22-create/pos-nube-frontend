@@ -12010,6 +12010,10 @@ Disponible: ${formatearMoneda(
     refrescoPostVentaTimerRef.current = window.setTimeout(() => {
       refrescoPostVentaTimerRef.current = null;
 
+      // Sincronización de respaldo cuando ya pasó el pico inmediato de caja.
+      // Stock y saldo del alumno ya fueron actualizados localmente arriba.
+      // Evitamos que una descarga completa de alumnos compita con el siguiente
+      // POST /api/ventas durante la fila de atención.
       void Promise.allSettled([
         cargarVentas(),
         cargarProductos(),
@@ -12023,7 +12027,7 @@ Disponible: ${formatearMoneda(
           errorRefresco
         );
       });
-    }, 1800);
+    }, 6000);
 
     // Si la venta fue iniciada desde la ficha del alumno,
     // NO regresamos a la ficha. Dejamos al mismo alumno seleccionado
