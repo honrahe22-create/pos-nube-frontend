@@ -13527,8 +13527,21 @@ const verCierreConsolidado = async () => {
       recargasEfectivo + recargasTransferencia
     );
 
+    // Fuente de verdad del reporte:
+    // cuando existe detalle real de egresos, TOTAL EGRESOS debe ser exactamente
+    // la suma de las filas que el usuario ve en pantalla/PDF/Excel.
+    // Solo cierres históricos sin detalle usan el total guardado.
+    const egresosDetalleCierre = Array.isArray(cierre?.egresos_detalle)
+      ? cierre.egresos_detalle
+      : [];
+
     const egresos = redondearValorCierre(
-      cierre?.egresos_total ?? cierre?.subtotal_egresos
+      egresosDetalleCierre.length
+        ? egresosDetalleCierre.reduce(
+            (total, egreso) => total + Number(egreso?.total || 0),
+            0
+          )
+        : cierre?.egresos_total ?? cierre?.subtotal_egresos
     );
 
     const efectivoEsperado = redondearValorCierre(
