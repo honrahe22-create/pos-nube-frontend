@@ -1363,6 +1363,13 @@ const [topPanelPagoNuevaOrden, setTopPanelPagoNuevaOrden] = useState(176);
 const ventaRapidaBloqueadaRef = useRef(false);
 // Protección contra doble/triple envío accidental de la misma venta.
 const ventaEnvioEnCursoRef = useRef(false);
+// Clave estable de la orden mientras no exista confirmación definitiva del backend.
+// Si la red corta la respuesta pero PostgreSQL alcanzó a guardar la venta,
+// el reintento usa la MISMA clave y el backend devuelve la venta original.
+const ventaRequestIdRef = useRef(null);
+const [ventaProcesando, setVentaProcesando] = useState(false);
+const [mensajeVentaRapida, setMensajeVentaRapida] = useState("");
+const mensajeVentaRapidaTimerRef = useRef(null);
 const refrescoPostVentaTimerRef = useRef(null);
 const ventaRapidaCooldownHastaRef = useRef(0);
 
@@ -11800,6 +11807,22 @@ Disponible: ${formatearMoneda(
       jornada_id:null,
     };
 
+    // ============================================================
+    // PROTECCIÓN REAL CONTRA DOBLE VENTA
+    // ============================================================
+    if (!ventaRequestIdRef.current) {
+      ventaRequestIdRef.current =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `VENTA-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+    }
+
+    const requestIdVenta = ventaRequestIdRef.current;
+    payload.request_id = requestIdVenta;
+
+    setVentaProcesando(true);
+    setMensajeVentaRapida("Procesando venta... no vuelva a pulsar.");
+
     const res = await fetch(`${API_URL}/api/ventas`, {
       method: "POST",
       headers: {
@@ -11812,6 +11835,14 @@ Disponible: ${formatearMoneda(
     const data = await res.json();
 
     if (!res.ok) {
+      // En 4xx el backend rechazó la orden de forma definitiva y puede
+      // generarse una nueva clave al corregirla. En 5xx conservamos la misma
+      // clave porque la respuesta puede ser ambigua; reintentar seguirá siendo
+      // idempotente y nunca debe crear una segunda venta.
+      if (Number(res.status || 0) < 500) {
+        ventaRequestIdRef.current = null;
+      }
+      setMensajeVentaRapida("");
       alert(
         data.error ||
           data.message ||
@@ -11819,6 +11850,9 @@ Disponible: ${formatearMoneda(
       );
       return;
     }
+
+    // Confirmación definitiva: la siguiente orden usa una nueva clave.
+    ventaRequestIdRef.current = null;
 
     // ============================================================
     // IMPRESIÓN AUTOMÁTICA DESPUÉS DE CONFIRMAR LA VENTA
@@ -12098,17 +12132,41 @@ Disponible: ${formatearMoneda(
     }
 
     setEfectivoRecibidoNuevaOrden("");
-    alert("Venta registrada correctamente. Nueva orden lista.");
+
+    const ventaConfirmadaId =
+      data?.venta?.id || data?.id || data?.venta_id || data?.ventaId || "";
+    const mensajeExito = ventaConfirmadaId
+      ? `✓ Venta #${ventaConfirmadaId} registrada. Nueva orden lista.`
+      : "✓ Venta registrada. Nueva orden lista.";
+
+    setMensajeVentaRapida(mensajeExito);
+
+    if (mensajeVentaRapidaTimerRef.current) {
+      window.clearTimeout(mensajeVentaRapidaTimerRef.current);
+    }
+
+    mensajeVentaRapidaTimerRef.current = window.setTimeout(() => {
+      setMensajeVentaRapida((actual) =>
+        actual === mensajeExito ? "" : actual
+      );
+      mensajeVentaRapidaTimerRef.current = null;
+    }, 1800);
   } catch (error) {
     console.error("Error creando venta:", error);
-    alert("No se pudo registrar la venta");
+    setMensajeVentaRapida(
+      "No se recibió confirmación. Revise antes de volver a intentar."
+    );
+    alert(
+      "No se recibió confirmación de la venta. Si fue un corte de red, vuelva a intentar una sola vez: el sistema evitará duplicarla."
+    );
   } finally {
-    // Algunos WebView/pantallas táctiles pueden disparar eventos extra
-    // del mismo gesto. Dejamos un pequeño bloqueo adicional.
+    // Con idempotencia en backend basta un margen corto contra eventos
+    // táctiles residuales del mismo gesto.
     window.setTimeout(() => {
       ventaEnvioEnCursoRef.current = false;
       ventaRapidaBloqueadaRef.current = false;
-    }, 1500);
+      setVentaProcesando(false);
+    }, 300);
   }
 };
 
@@ -26685,6 +26743,7 @@ onClick={guardarEgreso}
               <button
                 type="submit"
                 disabled={
+                  ventaProcesando ||
                   (Array.isArray(ventaItemsCalculados)
                     ? ventaItemsCalculados
                     : []
@@ -26714,6 +26773,7 @@ onClick={guardarEgreso}
                   borderRadius: 9,
                   padding: "13px 12px",
                   background:
+                    ventaProcesando ||
                     (Array.isArray(ventaItemsCalculados)
                       ? ventaItemsCalculados
                       : []
@@ -26731,6 +26791,7 @@ onClick={guardarEgreso}
                   color: "#ffffff",
                   fontWeight: 900,
                   cursor:
+                    ventaProcesando ||
                     (Array.isArray(ventaItemsCalculados)
                       ? ventaItemsCalculados
                       : []
@@ -26747,8 +26808,35 @@ onClick={guardarEgreso}
                       : "pointer",
                 }}
               >
-                Crear orden
+                {ventaProcesando ? "Procesando venta..." : "Crear orden"}
               </button>
+
+              {mensajeVentaRapida ? (
+                <div
+                  style={{
+                    marginTop: 9,
+                    padding: "9px 10px",
+                    borderRadius: 8,
+                    textAlign: "center",
+                    fontSize: 13,
+                    fontWeight: 900,
+                    background: mensajeVentaRapida.startsWith("✓")
+                      ? "#dcfce7"
+                      : "#fff7ed",
+                    color: mensajeVentaRapida.startsWith("✓")
+                      ? "#166534"
+                      : "#9a3412",
+                    border: `1px solid ${
+                      mensajeVentaRapida.startsWith("✓")
+                        ? "#86efac"
+                        : "#fed7aa"
+                    }`,
+                  }}
+                >
+                  {mensajeVentaRapida}
+                </div>
+              ) : null}
+
               <button
                 type="button"
                 onClick={() => {
