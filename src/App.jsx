@@ -1339,6 +1339,8 @@ const productosOperacionStock = useMemo(() => {
 
 const [stockEditado, setStockEditado] = useState({});
 const inputImportarStockRef = useRef(null);
+const inputImportarMenuRef = useRef(null);
+const [importandoMenu, setImportandoMenu] = useState(false);
 const inputImportarAlumnosRef = useRef(null);
 const inputImportarProfesoresRef = useRef(null);
 
@@ -9605,6 +9607,90 @@ if (institucionIdLogin) {
       if(!res.ok){alert(data.message||data.error||"No se pudo eliminar");return;}
       await cargarGaleriaProductos();
     } catch(error){console.error(error);alert("No se pudo eliminar la foto");}
+  };
+
+
+  // Importación global de Menú Cafetería.
+  // Respeta la institución activa y no altera existencias de productos existentes.
+  const importarArchivoMenu = async (event) => {
+    const archivo = event?.target?.files?.[0] || null;
+    if (event?.target) event.target.value = "";
+    if (!archivo) return;
+
+    const institucionId = Number(obtenerInstitucionActivaId() || 0);
+    const rol = normalizarRol(usuario?.rol || rolActual);
+    if (!institucionId) return alert("No hay una institución activa para realizar la importación.");
+    if (!["SUPER_ADMIN","ADMIN","ENCARGADO_LOCAL","CAJERO"].includes(rol)) {
+      return alert("Tu usuario no tiene permisos para importar productos.");
+    }
+
+    const extension = String(archivo.name || "").split(".").pop()?.toLowerCase();
+    if (!["xlsx","xls","xlsb","csv","txt"].includes(extension)) {
+      return alert("Formato no soportado. Usa XLSX, XLS, XLSB, CSV o TXT.");
+    }
+
+    const normalizarEncabezado=(valor)=>String(valor??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"");
+    const normalizarComparacion=(valor)=>String(valor??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().toUpperCase().replace(/\s+/g," ");
+    const numeroFlexibleMenu=(valor,fallback=0)=>{
+      if(valor===null||valor===undefined||String(valor).trim()==="")return fallback;
+      if(typeof valor==="number")return Number.isFinite(valor)?valor:fallback;
+      let texto=String(valor).trim().replace(/\s/g,"").replace(/\$/g,"").replace(/%/g,"");
+      const ultimaComa=texto.lastIndexOf(","),ultimoPunto=texto.lastIndexOf(".");
+      if(ultimaComa>ultimoPunto)texto=texto.replace(/\./g,"").replace(",",".");
+      else if(ultimoPunto>ultimaComa&&ultimaComa>=0)texto=texto.replace(/,/g,"");
+      else texto=texto.replace(",",".");
+      texto=texto.replace(/[^0-9.-]/g,"");
+      const numero=Number(texto);return Number.isFinite(numero)?numero:fallback;
+    };
+
+    try {
+      setImportandoMenu(true);
+      const token=localStorage.getItem("token");
+      if(!token)throw new Error("La sesión no es válida.");
+      const buffer=await archivo.arrayBuffer();
+      const workbook=XLSX.read(buffer,{type:"array"});
+      const primeraHoja=workbook.SheetNames?.[0];
+      if(!primeraHoja)throw new Error("El archivo no contiene hojas.");
+      const filasCrudas=XLSX.utils.sheet_to_json(workbook.Sheets[primeraHoja],{defval:"",raw:false});
+      if(!filasCrudas.length)throw new Error("El archivo no contiene productos.");
+
+      const filas=filasCrudas.map((fila,indice)=>{
+        const n={};Object.entries(fila||{}).forEach(([clave,valor])=>{n[normalizarEncabezado(clave)]=valor;});
+        return {
+          fila:indice+2,
+          nombre:String(n.nombre??n.producto??n.alimento??n.articulo??"").trim(),
+          codigo:String(n.codigo??n.codigo_producto??n.sku??n.referencia??"").trim(),
+          categoria:String(n.categoria??n.familia??n.grupo??n.tipo??"").trim(),
+          descripcion:String(n.descripcion??n.detalle??n.observacion??"").trim(),
+          precio:numeroFlexibleMenu(n.precio??n.precio_venta??n.pvp??n.valor_venta??0,0),
+          impuesto:numeroFlexibleMenu(n.iva??n.impuesto??n.porcentaje_iva??n.porcentaje_impuesto??0,0),
+          costo:numeroFlexibleMenu(n.costo??n.costo_unitario??n.precio_costo??0,0),
+        };
+      }).filter((fila)=>fila.nombre);
+      if(!filas.length)throw new Error('No se encontró una columna "Nombre" o "Producto" con datos.');
+
+      const actuales=Array.isArray(productos)?[...productos]:[];
+      const procesadosArchivo=new Set();let nuevos=0,actualizados=0,omitidos=0;const errores=[];
+      for(const fila of filas){
+        const claveArchivo=fila.codigo?`C:${normalizarComparacion(fila.codigo)}`:`N:${normalizarComparacion(fila.nombre)}`;
+        if(procesadosArchivo.has(claveArchivo)){omitidos+=1;continue;}procesadosArchivo.add(claveArchivo);
+        const existente=actuales.find((p)=>{
+          const porCodigo=fila.codigo&&normalizarComparacion(p?.codigo)===normalizarComparacion(fila.codigo);
+          const porNombre=normalizarComparacion(p?.nombre)===normalizarComparacion(fila.nombre);
+          return porCodigo||porNombre;
+        });
+        const comun={institucion_id:institucionId,nombre:fila.nombre,codigo:fila.codigo||existente?.codigo||null,descripcion:fila.descripcion||existente?.descripcion||null,precio:Number(fila.precio||0),categoria:fila.categoria||existente?.categoria||null,impuesto:Number(fila.impuesto||0),costo:Number(fila.costo||0),activo:existente?existente.activo!==false:true};
+        const payload=existente?comun:{...comun,stock:0,stock_minimo:0,concepto_inicial:"COMPRA",observacion_inicial:"Producto creado mediante importación de Menú Cafetería"};
+        try{
+          const res=await fetch(existente?`${API_URL}/api/productos/${existente.id}`:`${API_URL}/api/productos`,{method:existente?"PUT":"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify(payload)});
+          const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data?.message||data?.error||"No se pudo guardar el producto");
+          if(existente){const pos=actuales.findIndex((p)=>Number(p.id)===Number(existente.id));if(pos>=0)actuales[pos]={...actuales[pos],...data};actualizados+=1;}else{actuales.push(data);nuevos+=1;}
+        }catch(errorFila){errores.push(`Fila ${fila.fila} - ${fila.nombre}: ${errorFila.message}`);}
+      }
+      await Promise.all([cargarProductos(),cargarExistenciasInventario()]);
+      alert(`Importación finalizada para ${institucionActiva?.nombre||"la institución activa"}.\n\nNuevos: ${nuevos}\nActualizados: ${actualizados}\nDuplicados del archivo omitidos: ${omitidos}\nErrores: ${errores.length}`+(errores.length?`\n\nPrimeros errores:\n${errores.slice(0,8).join("\n")}`:""));
+    } catch(error){console.error("Error importando Menú Cafetería:",error);alert(error?.message||"No se pudo importar el archivo.");}
+    finally{setImportandoMenu(false);}
   };
 
     const crearProducto = async (e) => {
@@ -19523,6 +19609,15 @@ onClick={guardarEgreso}
       </div>
 
       <div style={styles.headerActions}>
+        {["SUPER_ADMIN","ADMIN","ENCARGADO_LOCAL","CAJERO"].includes(rolActual) && (
+          <>
+            <button type="button" style={styles.button} disabled={importandoMenu} onClick={()=>inputImportarMenuRef.current?.click()} title="Importar productos desde Excel/CSV">
+              {importandoMenu ? "Importando..." : "Importar archivo"}
+            </button>
+            <input ref={inputImportarMenuRef} type="file" accept=".xlsx,.xls,.xlsb,.csv,.txt" onChange={importarArchivoMenu} style={{display:"none"}} />
+          </>
+        )}
+
         <button
           type="button"
           style={styles.secondaryButton}
