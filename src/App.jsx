@@ -11693,18 +11693,38 @@ if (institucionIdLogin) {
       ) || null;
 
     // Para CAJERO / ENCARGADO_LOCAL el punto elegido al iniciar sesión manda.
-    // ADMIN/SUPER_ADMIN conservan el flujo actual y pueden resolver el punto
-    // por el nombre visible de Nueva Orden.
-    const puntoVentaId =
-      puntoAccesoId ||
-      Number(puntoVentaPorNombre?.id || 0) ||
-      null;
+    // Si la institución tiene UN SOLO punto operativo real (por ejemplo FEUE -> BAR),
+    // recuperamos ese punto automáticamente cuando una sesión antigua no conserva
+    // punto_id. No hacemos esta recuperación en instituciones con varios puntos,
+    // para no mezclar BAR PRINCIPAL / KIOSKO u otras ubicaciones.
+    const puntosOperacionVentaValidos =
+      (Array.isArray(puntosOperacion) ? puntosOperacion : [])
+        .filter(
+          (punto) =>
+            Number(punto?.id || 0) > 0 &&
+            String(punto?.nombre || "").trim()
+        );
+
+    const puntoUnicoOperativo =
+      !puntoAccesoId && puntosOperacionVentaValidos.length === 1
+        ? puntosOperacionVentaValidos[0]
+        : null;
 
     const rolVentaActual = normalizarRol(usuario?.rol);
 
+    const puntoVentaId =
+      puntoAccesoId ||
+      Number(puntoUnicoOperativo?.id || 0) ||
+      (
+        ["ADMIN", "SUPER_ADMIN"].includes(rolVentaActual)
+          ? Number(puntoVentaPorNombre?.id || 0)
+          : 0
+      ) ||
+      null;
+
     if (
       ["CAJERO", "ENCARGADO_LOCAL"].includes(rolVentaActual) &&
-      !puntoAccesoId
+      !puntoVentaId
     ) {
       alert(
         "La sesión operativa no tiene una ubicación válida. Cierra sesión y vuelve a ingresar seleccionando el local/punto."
