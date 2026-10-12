@@ -1298,10 +1298,10 @@ const productosOperacionStock = useMemo(() => {
     .filter(Boolean);
 
   return productos
-    // En Stock también se muestran productos históricos/inactivos.
-    // El backend /api/inventario/estado ya los devuelve y el reporte histórico
-    // los conserva; no debemos ocultarlos aquí solo por activo=false.
-    // Esto NO reactiva el producto ni lo habilita para Ventas.
+    // Stock operativo debe mostrar los mismos productos activos que Menú Cafetería.
+    // Los productos históricos/inactivos permanecen en la base y en reportes,
+    // pero no se muestran para nuevas operaciones de stock.
+    .filter((p) => p?.activo !== false)
     .filter((p) => {
       if (familia === "TODAS") return true;
       return String(p?.categoria || "").trim() === familia;
