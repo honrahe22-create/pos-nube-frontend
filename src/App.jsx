@@ -1433,6 +1433,7 @@ const [profesorForm, setProfesorForm] = useState({
 const [editandoProfesorId, setEditandoProfesorId] = useState(null);
 const [profesorDetalle, setProfesorDetalle] = useState(null);
 const [vistaProfesorDetalle, setVistaProfesorDetalle] = useState("ordenes");
+const [modoCuentasProfesor, setModoCuentasProfesor] = useState("pendientes");
 const [historialAnteriorProfesor, setHistorialAnteriorProfesor] = useState([]);
 const [cargandoHistorialAnteriorProfesor, setCargandoHistorialAnteriorProfesor] = useState(false);
 const [mensajeHistorialAnteriorProfesor, setMensajeHistorialAnteriorProfesor] = useState("");
@@ -2370,6 +2371,41 @@ const totalRecargasVista = useMemo(() => {
       );
     });
   }, [creditosProfesores, creditosProfesoresFiltros.texto]);
+
+  // Seguimiento de cobro de profesores: lectura solamente.
+  // No usar saldo_nuevo: es un saldo de movimiento, NO lo que resta de cada compra.
+  const consumosProfesorPendientes = useMemo(() => {
+    const profesorId = Number(profesorDetalle?.id || 0);
+    const institucionId = Number(profesorDetalle?.institucion_id || 0);
+    if (!profesorId || !institucionId) return [];
+
+    const idsVistos = new Set();
+    return creditosProfesoresFiltrados
+      .filter((movimiento) => {
+        const id = Number(movimiento.id || 0);
+        if (!id || idsVistos.has(id)) return false;
+        if (Number(movimiento.profesor_id) !== profesorId) return false;
+        if (Number(movimiento.institucion_id) !== institucionId) return false;
+        if (String(movimiento.tipo || "").trim().toUpperCase() !== "CONSUMO") return false;
+        if (String(movimiento.estado || "ACTIVO").trim().toUpperCase() === "ANULADO") return false;
+        const pendiente = Number(movimiento.saldo_pendiente);
+        if (!Number.isFinite(pendiente) || pendiente <= 0.005) return false;
+        idsVistos.add(id);
+        return true;
+      })
+      .sort((a, b) => {
+        const fechaA = new Date(a.created_at || 0).getTime() || 0;
+        const fechaB = new Date(b.created_at || 0).getTime() || 0;
+        return fechaA - fechaB || Number(a.id || 0) - Number(b.id || 0);
+      });
+  }, [creditosProfesoresFiltrados, profesorDetalle?.id, profesorDetalle?.institucion_id]);
+
+  const totalConsumosProfesorPendientes = useMemo(
+    () => consumosProfesorPendientes.reduce(
+      (total, m) => total + Math.round(Number(m.saldo_pendiente || 0) * 100), 0
+    ) / 100,
+    [consumosProfesorPendientes]
+  );
 
   const obtenerEstadoStock = (producto) => {
     const stock = Number(producto.stock || 0);
@@ -21334,6 +21370,7 @@ onClick={guardarEgreso}
               style={{ ...styles.outlineButton, background: "#ffffff", color: "#2435bd" }}
               onClick={async () => {
                 setVistaProfesorDetalle("creditos");
+                setModoCuentasProfesor("pendientes");
                 await cargarCreditosProfesores(profesorDetalle.id);
               }}
             >
@@ -22446,6 +22483,84 @@ onClick={guardarEgreso}
                     </div>
                   </div>
 
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
+                    <button
+                      type="button"
+                      style={modoCuentasProfesor === "pendientes" ? styles.secondaryButton : styles.outlineButton}
+                      onClick={() => setModoCuentasProfesor("pendientes")}
+                    >
+                      Solo pendientes de cobro
+                    </button>
+                    <button
+                      type="button"
+                      style={modoCuentasProfesor === "historial" ? styles.secondaryButton : styles.outlineButton}
+                      onClick={() => setModoCuentasProfesor("historial")}
+                    >
+                      Historial completo
+                    </button>
+                  </div>
+
+                  {modoCuentasProfesor === "pendientes" && (
+                    <div>
+                      <div style={{ ...styles.box, marginBottom: 14, padding: 14 }}>
+                        <strong>Seguimiento de cobro</strong>
+                        <p style={{ margin: "6px 0" }}>
+                          Consumos pendientes: <strong>{consumosProfesorPendientes.length}</strong>
+                          {" · "}Total identificado: <strong>{formatearMoneda(totalConsumosProfesorPendientes)}</strong>
+                          {" · "}Deuda registrada: <strong>{formatearMoneda(profesorDetalle.cuentas_por_pagar ?? profesorDetalle.credito_utilizado ?? 0)}</strong>
+                        </p>
+                        {Math.abs(totalConsumosProfesorPendientes - Number(profesorDetalle.cuentas_por_pagar ?? profesorDetalle.credito_utilizado ?? 0)) > 0.009 && !cargandoCreditosProfesores && (
+                          <p style={{ color: "#b45309", fontWeight: 700, margin: "8px 0 0" }}>
+                            Atención: el detalle pendiente no coincide con la deuda del resumen.
+                            No se modificaron registros ni saldos. Revisar conciliación antes de cobrar por concepto.
+                          </p>
+                        )}
+                        <p style={{ color: "#64748b", margin: "6px 0 0", fontSize: 13 }}>
+                          Se muestran únicamente consumos activos con saldo pendiente mayor a cero, por ID único,
+                          ordenados del más antiguo al más reciente. Los abonos se aplican por el flujo existente.
+                        </p>
+                      </div>
+                      <div style={styles.tableWrap}>
+                        <table style={styles.table}>
+                          <thead>
+                            <tr>
+                              <th style={styles.th}>Fecha</th>
+                              <th style={styles.th}>Orden ID</th>
+                              <th style={styles.th}>Comercio</th>
+                              <th style={styles.th}>Operador</th>
+                              <th style={styles.th}>Consumo</th>
+                              <th style={styles.th}>Abonado</th>
+                              <th style={styles.th}>Pendiente</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {cargandoCreditosProfesores ? (
+                              <tr><td style={styles.td} colSpan={7}>Cargando pendientes...</td></tr>
+                            ) : consumosProfesorPendientes.length === 0 ? (
+                              <tr><td style={styles.td} colSpan={7}>No hay consumos individuales pendientes identificados.</td></tr>
+                            ) : consumosProfesorPendientes.map((movimiento) => {
+                              const monto = Number(movimiento.monto || 0);
+                              const pendiente = Number(movimiento.saldo_pendiente || 0);
+                              const abonado = Math.max(0, monto - pendiente);
+                              return (
+                                <tr key={`pendiente-profesor-${movimiento.id}`}>
+                                  <td style={styles.td}>{formatearFechaHora(movimiento.created_at)}</td>
+                                  <td style={styles.td}>{movimiento.venta_id || "Sin orden asociada"}</td>
+                                  <td style={styles.td}>{movimiento.comercio || "POS NUBE"}</td>
+                                  <td style={styles.td}>{movimiento.usuario_nombre || movimiento.usuario_correo || "Sistema"}</td>
+                                  <td style={styles.td}>{formatearMoneda(monto)}</td>
+                                  <td style={styles.td}>{formatearMoneda(abonado)}</td>
+                                  <td style={{ ...styles.td, fontWeight: 700, color: "#b45309" }}>{formatearMoneda(pendiente)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {modoCuentasProfesor === "historial" && (
                   <div style={styles.tableWrap}>
                     <table style={styles.table}>
                       <thead>
@@ -22456,7 +22571,7 @@ onClick={guardarEgreso}
                           </th>
                           <th style={styles.th}>Tipo</th>
                           <th style={styles.th}>Monto</th>
-                          <th style={styles.th}>Cuenta pendiente</th>
+                          <th style={styles.th}>Saldo del movimiento (histórico)</th>
                           <th style={styles.th}>Fecha</th>
                           <th style={styles.th}>Estado</th>
                           <th style={styles.th}>Acciones</th>
@@ -22543,6 +22658,7 @@ onClick={guardarEgreso}
                       </tbody>
                     </table>
                   </div>
+                  )}
                 </div>
               )}
             </div>
