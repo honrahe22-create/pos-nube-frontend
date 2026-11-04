@@ -979,6 +979,8 @@ const [cargandoCrearCuenta, setCargandoCrearCuenta] = useState(false);
 
 
   const rolActual = normalizarRol(usuario?.rol);
+  // Solo administradores pueden acceder al seguimiento contable de profesores.
+  const esAdminCuentasProfesores = ["ADMIN", "SUPER_ADMIN"].includes(rolActual);
   const esRolPortal = ["PADRE", "ESTUDIANTE"].includes(rolActual);
 
   const puede = (permiso) => puedeRol(rolActual, permiso);
@@ -7412,6 +7414,12 @@ if (institucionIdLogin) {
   };
 
   const cargarCreditosProfesores = async (profesorId = "") => {
+    // Mantener operativas las recargas de cajeros/encargados, sin descargar
+    // ni exponer el historial contable, reservado a administradores.
+    if (!esAdminCuentasProfesores) {
+      setCreditosProfesores([]);
+      return;
+    }
     try {
       setCargandoCreditosProfesores(true);
 
@@ -20793,7 +20801,7 @@ onClick={guardarEgreso}
               Profesores
             </button>
 
-            <button
+            {esAdminCuentasProfesores && <button
               type="button"
               style={
                 vistaProfesoresInterna === "creditos"
@@ -20806,7 +20814,7 @@ onClick={guardarEgreso}
               }}
             >
               Cuentas por pagar
-            </button>
+            </button>}
           </>
         )}
       </div>
@@ -21247,7 +21255,7 @@ onClick={guardarEgreso}
                 >
                   {profesorDetalle.activo !== false ? "Activo" : "Inactivo"}
                 </span>
-                {["ADMIN","SUPER_ADMIN","ENCARGADO_LOCAL"].includes(rolActual) && (() => {
+                {esAdminCuentasProfesores && (() => {
                   const comprasPorPagarActivas =
                     profesorDetalle.registrar_compras_por_pagar === true ||
                     profesorDetalle.compras_por_pagar_habilitadas === true;
@@ -21365,7 +21373,7 @@ onClick={guardarEgreso}
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button
+            {esAdminCuentasProfesores && <button
               type="button"
               style={{ ...styles.outlineButton, background: "#ffffff", color: "#2435bd" }}
               onClick={async () => {
@@ -21375,7 +21383,7 @@ onClick={guardarEgreso}
               }}
             >
               Historial cuentas por pagar
-            </button>
+            </button>}
             <button
               type="button"
               style={{ ...styles.outlineButton, background: "#ffffff", color: "#2435bd" }}
@@ -21487,9 +21495,15 @@ onClick={guardarEgreso}
                 }}
               >
                 <div style={{ fontSize: 17 }}>Cuentas por pagar:</div>
-                <div style={{ fontSize: 34, marginTop: 4 }}>
-                  {formatearMoneda(profesorDetalle.cuentas_por_pagar ?? profesorDetalle.credito_utilizado ?? 0)}
-                </div>
+                {esAdminCuentasProfesores ? (
+                  <div style={{ fontSize: 34, marginTop: 4 }}>
+                    {formatearMoneda(profesorDetalle.cuentas_por_pagar ?? profesorDetalle.credito_utilizado ?? 0)}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 13, marginTop: 8 }}>
+                    Detalle disponible para administración
+                  </div>
+                )}
               </div>
               <button
                 type="button"
@@ -21553,7 +21567,7 @@ onClick={guardarEgreso}
                 ["historial_anterior", "Historial anterior"],
                 ["recargas", "Recargas"],
                 ["dispositivos", "Dispositivos"],
-                ["creditos", "Cuentas por pagar"],
+                ...(esAdminCuentasProfesores ? [["creditos", "Cuentas por pagar"]] : []),
               ].map(([clave, texto]) => (
                 <button
                   key={clave}
@@ -22275,7 +22289,7 @@ onClick={guardarEgreso}
                 </div>
               )}
 
-              {vistaProfesorDetalle === "creditos" && (
+              {esAdminCuentasProfesores && vistaProfesorDetalle === "creditos" && (
                 <div>
                   <div
                     style={{
@@ -22732,7 +22746,7 @@ onClick={guardarEgreso}
       );
     })()}
 
-    {vistaProfesoresInterna === "creditos" && (
+    {esAdminCuentasProfesores && vistaProfesoresInterna === "creditos" && (
       <div style={styles.box}>
         <div style={styles.pageHeaderSmall}>
           <h3 style={{ margin: 0 }}>
