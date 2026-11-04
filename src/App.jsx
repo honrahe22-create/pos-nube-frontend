@@ -22493,6 +22493,13 @@ onClick={guardarEgreso}
                     </button>
                     <button
                       type="button"
+                      style={modoCuentasProfesor === "ordenes_pagadas" ? styles.secondaryButton : styles.outlineButton}
+                      onClick={() => setModoCuentasProfesor("ordenes_pagadas")}
+                    >
+                      Órdenes pagadas
+                    </button>
+                    <button
+                      type="button"
                       style={modoCuentasProfesor === "historial" ? styles.secondaryButton : styles.outlineButton}
                       onClick={() => setModoCuentasProfesor("historial")}
                     >
@@ -22554,6 +22561,63 @@ onClick={guardarEgreso}
                                 </tr>
                               );
                             })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {modoCuentasProfesor === "ordenes_pagadas" && (
+                    <div>
+                      <div style={{ ...styles.box, marginBottom: 14, padding: 14 }}>
+                        <strong>Detalle de órdenes contabilizadas como pagadas</strong>
+                        <p style={{ margin: "6px 0" }}>
+                          Órdenes: <strong>{ordenesProfesor.filter((venta) => String(venta.estado || "PAGADA").toUpperCase() !== "PENDIENTE").length}</strong>
+                          {" · "}Total mostrado en Órdenes: <strong>{formatearMoneda(totalPagadasProfesor)}</strong>
+                        </p>
+                        <p style={{ color: "#64748b", margin: "6px 0 0", fontSize: 13 }}>
+                          Esta vista reproduce exactamente el criterio de “Total pagadas” de la pestaña Órdenes.
+                          Una orden no marcada como PENDIENTE no demuestra por sí sola que se haya cobrado
+                          una deuda de crédito. Para verificar abonos, conserva el Historial completo de cuentas por pagar.
+                        </p>
+                      </div>
+                      <div style={styles.tableWrap}>
+                        <table style={styles.table}>
+                          <thead>
+                            <tr>
+                              <th style={styles.th}>Orden ID</th>
+                              <th style={styles.th}>Fecha</th>
+                              <th style={styles.th}>Productos</th>
+                              <th style={styles.th}>Forma de pago</th>
+                              <th style={styles.th}>Estado de orden</th>
+                              <th style={styles.th}>Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {ordenesProfesor.filter((venta) => String(venta.estado || "PAGADA").toUpperCase() !== "PENDIENTE").length === 0 ? (
+                              <tr><td style={styles.td} colSpan={6}>No hay órdenes contabilizadas como pagadas.</td></tr>
+                            ) : (
+                              ordenesProfesor
+                                .filter((venta) => String(venta.estado || "PAGADA").toUpperCase() !== "PENDIENTE")
+                                .map((venta) => (
+                                  <tr key={`pagada-profesor-${venta.id}`}>
+                                    <td style={styles.td}>#{venta.id}</td>
+                                    <td style={styles.td}>{formatearFechaHora(venta.created_at)}</td>
+                                    <td style={styles.td}>
+                                      {Array.isArray(venta.items) && venta.items.length > 0
+                                        ? venta.items.map((item) => {
+                                            const nombre = item.producto_nombre || item.nombre || item.descripcion ||
+                                              (item.producto_id ? `Producto #${item.producto_id}` : "Producto");
+                                            return `${Number(item.cantidad || 1)} x ${nombre}`;
+                                          }).join(", ")
+                                        : "Ver orden en la pestaña Órdenes"}
+                                    </td>
+                                    <td style={styles.td}>{venta.metodo_visual || venta.metodo_pago || "-"}</td>
+                                    <td style={styles.td}>{venta.estado || "PAGADA"}</td>
+                                    <td style={styles.td}>{formatearMoneda(venta.total || 0)}</td>
+                                  </tr>
+                                ))
+                            )}
                           </tbody>
                         </table>
                       </div>
