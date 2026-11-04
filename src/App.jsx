@@ -979,8 +979,10 @@ const [cargandoCrearCuenta, setCargandoCrearCuenta] = useState(false);
 
 
   const rolActual = normalizarRol(usuario?.rol);
-  // Solo administradores pueden acceder al seguimiento contable de profesores.
+  // Autorizaciones y cambios sensibles: solo administradores.
   const esAdminCuentasProfesores = ["ADMIN", "SUPER_ADMIN"].includes(rolActual);
+  // Consulta del seguimiento: también encargados de local de su institución.
+  const puedeConsultarCuentasProfesores = ["ADMIN", "SUPER_ADMIN", "ENCARGADO_LOCAL"].includes(rolActual);
   const esRolPortal = ["PADRE", "ESTUDIANTE"].includes(rolActual);
 
   const puede = (permiso) => puedeRol(rolActual, permiso);
@@ -7414,9 +7416,9 @@ if (institucionIdLogin) {
   };
 
   const cargarCreditosProfesores = async (profesorId = "") => {
-    // Mantener operativas las recargas de cajeros/encargados, sin descargar
-    // ni exponer el historial contable, reservado a administradores.
-    if (!esAdminCuentasProfesores) {
+    // Los cajeros conservan recargas operativas sin acceso al historial contable.
+    // Administradores y encargados pueden consultar el seguimiento.
+    if (!puedeConsultarCuentasProfesores) {
       setCreditosProfesores([]);
       return;
     }
@@ -7985,6 +7987,13 @@ if (institucionIdLogin) {
      * porque esa ruta ya revierte stock, saldo a favor y cuenta por pagar
      * dentro de una sola transacción. Así evitamos dejar movimientos huérfanos.
      */
+    // La consulta se habilita para ENCARGADO_LOCAL, pero la anulación
+    // de ventas desde el historial contable sigue reservada a administradores.
+    if (!esAdminCuentasProfesores) {
+      alert("Solo ADMIN o SUPER_ADMIN pueden anular órdenes desde cuentas por pagar.");
+      return;
+    }
+
     if (tipo !== "CONSUMO" || !ventaId) {
       alert(
         "Este movimiento no corresponde a una orden de venta identificable. " +
@@ -20801,7 +20810,7 @@ onClick={guardarEgreso}
               Profesores
             </button>
 
-            {esAdminCuentasProfesores && <button
+            {puedeConsultarCuentasProfesores && <button
               type="button"
               style={
                 vistaProfesoresInterna === "creditos"
@@ -21373,7 +21382,7 @@ onClick={guardarEgreso}
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {esAdminCuentasProfesores && <button
+            {puedeConsultarCuentasProfesores && <button
               type="button"
               style={{ ...styles.outlineButton, background: "#ffffff", color: "#2435bd" }}
               onClick={async () => {
@@ -21495,7 +21504,7 @@ onClick={guardarEgreso}
                 }}
               >
                 <div style={{ fontSize: 17 }}>Cuentas por pagar:</div>
-                {esAdminCuentasProfesores ? (
+                {puedeConsultarCuentasProfesores ? (
                   <div style={{ fontSize: 34, marginTop: 4 }}>
                     {formatearMoneda(profesorDetalle.cuentas_por_pagar ?? profesorDetalle.credito_utilizado ?? 0)}
                   </div>
@@ -21567,7 +21576,7 @@ onClick={guardarEgreso}
                 ["historial_anterior", "Historial anterior"],
                 ["recargas", "Recargas"],
                 ["dispositivos", "Dispositivos"],
-                ...(esAdminCuentasProfesores ? [["creditos", "Cuentas por pagar"]] : []),
+                ...(puedeConsultarCuentasProfesores ? [["creditos", "Cuentas por pagar"]] : []),
               ].map(([clave, texto]) => (
                 <button
                   key={clave}
@@ -22289,7 +22298,7 @@ onClick={guardarEgreso}
                 </div>
               )}
 
-              {esAdminCuentasProfesores && vistaProfesorDetalle === "creditos" && (
+              {puedeConsultarCuentasProfesores && vistaProfesorDetalle === "creditos" && (
                 <div>
                   <div
                     style={{
@@ -22712,7 +22721,7 @@ onClick={guardarEgreso}
                                   {movimiento.estado || "ACTIVO"}
                                 </td>
                                 <td style={styles.td}>
-                                  {movimiento.estado !== "ANULADO" &&
+                                  {esAdminCuentasProfesores && movimiento.estado !== "ANULADO" &&
                                   String(movimiento.tipo || "").trim().toUpperCase() === "CONSUMO" &&
                                   Number(movimiento.venta_id || 0) > 0 ? (
                                     <button
@@ -22746,7 +22755,7 @@ onClick={guardarEgreso}
       );
     })()}
 
-    {esAdminCuentasProfesores && vistaProfesoresInterna === "creditos" && (
+    {puedeConsultarCuentasProfesores && vistaProfesoresInterna === "creditos" && (
       <div style={styles.box}>
         <div style={styles.pageHeaderSmall}>
           <h3 style={{ margin: 0 }}>
@@ -22921,7 +22930,7 @@ onClick={guardarEgreso}
                           {movimiento.estado || "ACTIVO"}
                         </td>
                         <td style={styles.td}>
-                          {movimiento.estado !== "ANULADO" ? (
+                          {esAdminCuentasProfesores && movimiento.estado !== "ANULADO" ? (
                             <button
                               type="button"
                               style={styles.smallDangerButton}
