@@ -8130,6 +8130,147 @@ if (institucionIdLogin) {
     window.URL.revokeObjectURL(url);
   };
 
+  // EXPORTACIONES SOLO LECTURA - CUENTAS POR PAGAR DE PROFESORES.
+  // Se genera exactamente el contenido de la vista elegida, sin modificar
+  // saldos, ventas, cobros ni el historial de otras instituciones.
+  const exportarVistaCuentasProfesor = (formato, ordenesDeEsteProfesor = []) => {
+    if (!puedeConsultarCuentasProfesores || !profesorDetalle?.id) {
+      alert("No tienes autorización para exportar este seguimiento.");
+      return;
+    }
+
+    const institucionId = Number(obtenerInstitucionActivaId() || 0);
+    const profesorId = Number(profesorDetalle.id || 0);
+    if (!institucionId || Number(profesorDetalle.institucion_id) !== institucionId) {
+      alert("La institución del profesor no coincide con la sesión actual.");
+      return;
+    }
+
+    if (cargandoCreditosProfesores && modoCuentasProfesor !== "ordenes_pagadas") {
+      alert("Espera a que termine de cargar el historial antes de exportar.");
+      return;
+    }
+
+    const tipo = modoCuentasProfesor;
+    const nombreProfesor = `${profesorDetalle.nombres || ""} ${profesorDetalle.apellidos || ""}`.trim();
+    const institucionNombre = INSTITUCIONES.find((i) => Number(i.id) === institucionId)?.nombre || `Institución ${institucionId}`;
+    const monedaNumero = (valor) => Number((Number(valor || 0)).toFixed(2));
+    const totalDeuda = monedaNumero(profesorDetalle.cuentas_por_pagar ?? profesorDetalle.credito_utilizado ?? 0);
+    const pendientesProfesor = consumosProfesorPendientes.filter(
+      (m) => Number(m.profesor_id) === profesorId && Number(m.institucion_id) === institucionId
+    );
+    const historialProfesor = creditosProfesoresFiltrados.filter(
+      (m) => Number(m.profesor_id) === profesorId && Number(m.institucion_id) === institucionId
+    );
+    const ordenesPagadasProfesor = (Array.isArray(ordenesDeEsteProfesor) ? ordenesDeEsteProfesor : [])
+      .filter((v) => Number(v.profesor_id) === profesorId &&
+        Number(v.institucion_id) === institucionId &&
+        String(v.estado || "PAGADA").toUpperCase() !== "PENDIENTE");
+
+    let titulo;
+    let encabezados;
+    let filas;
+    let total = null;
+    let nota = "";
+    if (tipo === "pendientes") {
+      titulo = "Solo pendientes de cobro";
+      encabezados = ["Fecha", "Orden ID", "Comercio", "Operador", "Consumo", "Abonado", "Pendiente"];
+      filas = pendientesProfesor.map((m) => {
+        const monto = monedaNumero(m.monto);
+        const pendiente = monedaNumero(m.saldo_pendiente);
+        return [formatearFechaHora(m.created_at), m.venta_id || "Sin orden asociada",
+          m.comercio || "POS NUBE", m.usuario_nombre || m.usuario_correo || "Sistema",
+          monto, monedaNumero(Math.max(0, monto - pendiente)), pendiente];
+      });
+      total = monedaNumero(totalConsumosProfesorPendientes);
+      nota = `Deuda registrada en el perfil: ${formatearMoneda(totalDeuda)}. El total identificado debe coincidir con esa deuda.`;
+    } else if (tipo === "ordenes_pagadas") {
+      titulo = "Órdenes pagadas";
+      encabezados = ["Orden ID", "Fecha", "Productos", "Forma de pago", "Estado de orden", "Total"];
+      filas = ordenesPagadasProfesor.map((v) => [
+        v.id ? `#${v.id}` : "-", formatearFechaHora(v.created_at),
+        Array.isArray(v.items) && v.items.length
+          ? v.items.map((item) => {
+              const nombre = item.producto_nombre || item.nombre || item.descripcion ||
+                (item.producto_id ? `Producto #${item.producto_id}` : "Producto");
+              return `${Number(item.cantidad || 1)} x ${nombre}`;
+            }).join(", ")
+          : "Ver orden en la pestaña Órdenes",
+        v.metodo_visual || v.metodo_pago || "-", v.estado || "PAGADA", monedaNumero(v.total)
+      ]);
+      total = monedaNumero(ordenesPagadasProfesor.reduce((n,v) => n + Number(v.total || 0),0));
+      nota = "Se usa el mismo criterio de 'Total pagadas' de Órdenes: estado distinto de PENDIENTE. No equivale necesariamente a créditos cobrados.";
+    } else if (tipo === "historial") {
+      titulo = "Historial completo";
+      encabezados = ["Comercio", "Usuario que hizo el pago", "Tipo", "Monto", "Saldo del movimiento (histórico)", "Fecha", "Estado"];
+      filas = historialProfesor.map((m) => [
+        m.comercio || "POS NUBE", m.usuario_nombre || m.usuario_correo || "Sistema",
+        m.tipo || "-", monedaNumero(m.monto), monedaNumero(m.saldo_nuevo),
+        formatearFechaHora(m.created_at), m.estado || "ACTIVO"
+      ]);
+      nota = "Historial de movimientos; incluye consumos, pagos, anulaciones y saldos históricos. No sumar los movimientos como deuda actual.";
+    } else {
+      alert("Selecciona una vista antes de exportar.");
+      return;
+    }
+
+    if (!filas.length) {
+      alert(`No hay registros en "${titulo}" para exportar.`);
+      return;
+    }
+    const fechaArchivo = obtenerFechaEcuadorISO();
+    const nombreArchivo = `profesores_${tipo}_inst${institucionId}_prof${profesorId}_${fechaArchivo}`;
+    const encabezadoReporte = [
+      ["POS NUBE - CUENTAS POR PAGAR DE PROFESORES"],
+      ["Vista", titulo], ["Institución", institucionNombre], ["Profesor", nombreProfesor],
+      ["ID profesor", profesorId], ["Fecha de exportación", new Date().toLocaleString("es-EC", {timeZone:"America/Guayaquil"})],
+      ["Registros", filas.length],
+      ...(total !== null ? [["Total de la vista (USD)", total]] : []),
+      ["Nota", nota], []
+    ];
+
+    try {
+      if (formato === "excel") {
+        const hoja = XLSX.utils.aoa_to_sheet([...encabezadoReporte, encabezados, ...filas]);
+        hoja["!cols"] = encabezados.map((h, i) => ({ wch: Math.min(60, Math.max(17, h.length + 3, ...filas.map((f) => Math.min(55, String(f[i] ?? "").length + 2)))) }));
+        // La metadata anterior ocupa dos columnas y se preserva como lectura.
+        const libro = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(libro, hoja, "Reporte");
+        XLSX.writeFile(libro, `${nombreArchivo}.xlsx`);
+      } else if (formato === "pdf") {
+        const ancho = encabezados.length >= 7 ? "landscape" : "landscape";
+        const documento = new jsPDF({orientation: ancho, unit: "mm", format: "a4"});
+        documento.setFontSize(13);
+        documento.text("POS NUBE - Cuentas por pagar de profesores", 12, 14);
+        documento.setFontSize(9);
+        documento.text(`Vista: ${titulo}`, 12, 21);
+        documento.text(`Institución: ${institucionNombre}`, 12, 27);
+        documento.text(`Profesor: ${nombreProfesor} (ID ${profesorId})`, 12, 33);
+        documento.text(`Registros: ${filas.length}${total === null ? "" : `  |  Total vista: ${formatearMoneda(total)}`}`, 12, 39);
+        const notasPdf = documento.splitTextToSize(nota, 270);
+        documento.setFontSize(8);
+        documento.text(notasPdf, 12, 45);
+        autoTable(documento, {
+          head: [encabezados],
+          body: filas.map((fila) => fila.map((celda) => typeof celda === "number" ? celda.toFixed(2) : String(celda ?? ""))),
+          startY: 48 + notasPdf.length * 3.5,
+          margin: {left: 10, right: 10, bottom: 13},
+          styles: {fontSize: 7, cellPadding: 2, overflow: "linebreak", valign:"top"},
+          headStyles: {fillColor: [28, 53, 123]},
+          theme: "striped",
+          didDrawPage: (data) => {
+            documento.setFontSize(8);
+            documento.text(`Página ${data.pageNumber}`, documento.internal.pageSize.getWidth() - 30, documento.internal.pageSize.getHeight() - 6);
+          }
+        });
+        documento.save(`${nombreArchivo}.pdf`);
+      }
+    } catch (error) {
+      console.error("Error exportando vista de cuentas por pagar:", error);
+      alert("No se pudo generar el archivo. Verifica los datos e inténtalo nuevamente.");
+    }
+  };
+
   const cargarProfesores = async () => {
     try {
       const token = localStorage.getItem("token");
@@ -22527,6 +22668,24 @@ onClick={guardarEgreso}
                       onClick={() => setModoCuentasProfesor("historial")}
                     >
                       Historial completo
+                    </button>
+                    <button
+                      type="button"
+                      style={styles.outlineButton}
+                      onClick={() => exportarVistaCuentasProfesor("excel", ordenesProfesor)}
+                      disabled={cargandoCreditosProfesores && modoCuentasProfesor !== "ordenes_pagadas"}
+                      title="Exportar solo la vista seleccionada a Excel"
+                    >
+                      Exportar Excel
+                    </button>
+                    <button
+                      type="button"
+                      style={styles.outlineButton}
+                      onClick={() => exportarVistaCuentasProfesor("pdf", ordenesProfesor)}
+                      disabled={cargandoCreditosProfesores && modoCuentasProfesor !== "ordenes_pagadas"}
+                      title="Exportar solo la vista seleccionada a PDF"
+                    >
+                      Exportar PDF
                     </button>
                   </div>
 
