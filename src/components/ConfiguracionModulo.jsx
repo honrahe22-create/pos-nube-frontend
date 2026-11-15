@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import ConciliacionCierresModulo from "./ConciliacionCierresModulo.jsx";
 
 const formatearFechaHora = (valor) => {
   if (!valor) return "-";
@@ -900,6 +901,7 @@ export default function ConfiguracionModulo({
           ["usuarios", "Usuarios y roles"],
           ["respaldos", "Copias de seguridad"],
           ["auditoria", "Auditoría"],
+          ["conciliacion_cierres", "Conciliación de caja"],
           ["restricciones", "Restricciones de consumo"],
           ["impresoras", "Impresoras"],
           ["bancos", "Bancos"],
@@ -1752,6 +1754,10 @@ export default function ConfiguracionModulo({
             </table>
           </div>
         </div>
+      )}
+
+      {vistaInterna === "conciliacion_cierres" && (
+        <ConciliacionCierresModulo API_URL={API_URL} institucionId={institucionId} />
       )}
 
       {vistaInterna === "auditoria" && (
