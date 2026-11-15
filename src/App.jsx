@@ -10647,7 +10647,11 @@ if (institucionIdLogin) {
           cierre.institucion_nombre ||
           "POS NUBE",
         negocio: cierre.negocio || "POS NUBE",
-        fecha: cierre.fecha || obtenerFechaEcuadorISO(),
+        // La APK puede interpretar las fechas DATE del backend como medianoche UTC
+        // y retroceder un día al mostrarlas en Ecuador. Enviamos el mismo día
+        // operativo a mediodía UTC, que sigue siendo el mismo día en Ecuador.
+        // Solo afecta el payload nativo de impresión; no modifica el cierre.
+        fecha: `${normalizarFechaISO(cierre.fecha || obtenerFechaEcuadorISO())}T12:00:00.000Z`,
         fecha_operativa: fechaOperativaTicket,
         fecha_cierre: fechaCierreTicket,
         hora_cierre: horaCierreTicket,
