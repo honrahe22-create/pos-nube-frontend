@@ -5666,6 +5666,9 @@ const exportarVentasExcel = () => {
 
   const datos = ventasFiltradas.map((v) => ({
     "Orden No": `#${v.id}`,
+    "Productos vendidos": Array.isArray(v.items)
+      ? v.items.map((item) => `${Number(item.cantidad || 0)} x ${item.producto_nombre || item.nombre || "Producto"}`).join("; ")
+      : "",
     Cliente: v.alumno_nombre || "",
     Operador: v.operador_visual || v.operador_nombre || v.operador_correo || "Sistema",
     "Ubicación": normalizarUbicacionFrontend(
@@ -5685,6 +5688,7 @@ const exportarVentasExcel = () => {
   const worksheet = XLSX.utils.json_to_sheet(datos);
   worksheet["!cols"] = [
     { wch: 12 },
+    { wch: 65 },
     { wch: 30 },
     { wch: 20 },
     { wch: 18 },
@@ -27604,6 +27608,7 @@ onClick={guardarEgreso}
                               <th style={styles.th}>Seleccionar</th>
                             )}
                             <th style={styles.th}>Orden No</th>
+                            <th style={styles.th}>Productos vendidos</th>
                             <th style={styles.th}>Cliente</th>
                             <th style={styles.th}>Operador</th>
                             <th style={styles.th}>Ubicación</th>
@@ -27634,6 +27639,15 @@ onClick={guardarEgreso}
                                 </td>
                               )}
                               <td style={styles.td}>#{v.id}</td>
+                              <td style={{...styles.td, minWidth: 210, maxWidth: 320, whiteSpace: "normal"}}>
+                                {Array.isArray(v.items) && v.items.length > 0
+                                  ? v.items.map((item, index) => (
+                                      <div key={`${v.id}-producto-${item.id || item.producto_id || index}`}>
+                                        {Number(item.cantidad || 0)} × {item.producto_nombre || item.nombre || "Producto"}
+                                      </div>
+                                    ))
+                                  : "Sin detalle registrado"}
+                              </td>
                               <td style={styles.td}>{v.alumno_nombre}</td>
                               <td style={styles.td}>
                                 {v.operador_visual ||
