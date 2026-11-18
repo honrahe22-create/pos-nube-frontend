@@ -1141,6 +1141,8 @@ const [bajaStock, setBajaStock] = useState(null);
 const [existenciasInventario, setExistenciasInventario] = useState([]);
 const [puntosInventario, setPuntosInventario] = useState(["PRINCIPAL"]);
 const [puntoInventarioSeleccionado, setPuntoInventarioSeleccionado] = useState("PRINCIPAL");
+// Vista administrativa de existencias: independiente del punto de ventas.
+const [stockUbicacionConsulta, setStockUbicacionConsulta] = useState("KIOSKO");
 const [puntosOperacion,setPuntosOperacion]=useState([]);
 const [jornadaActiva,setJornadaActiva]=useState(() => {
   // Recuperación inmediata tras un refresh/WebView:
@@ -3475,6 +3477,16 @@ const cargarExistenciasInventario = async ({
     } else if (institucionId === 3) {
       // FEUE: el único punto operativo de inventario/venta es BAR.
       puntosRecibidos.splice(0, puntosRecibidos.length, "BAR");
+    } else if (institucionId === 2) {
+      // Pensionado: nunca introducir la ubicación virtual PRINCIPAL.
+      const operativos = [...new Set(puntosRecibidos.filter((p) =>
+        ["BAR PRINCIPAL", "KIOSKO"].includes(p)
+      ))];
+      puntosRecibidos.splice(0, puntosRecibidos.length,
+        "BAR PRINCIPAL", "KIOSKO");
+      setStockUbicacionConsulta((actual) =>
+        operativos.includes(actual) ? actual : "KIOSKO"
+      );
     } else if (!puntosRecibidos.includes("PRINCIPAL")) {
       puntosRecibidos.unshift("PRINCIPAL");
     }
@@ -23545,7 +23557,11 @@ onClick={guardarEgreso}
         </form>
 
         <div style={{display:"grid",gap:10,marginTop:18}}>
-          {puntosOperacion.map((punto)=>(
+          {puntosOperacion
+            .filter((punto)=>Number(obtenerInstitucionActivaId())!==2 ||
+              normalizarUbicacionFrontend(punto.nombre,2)!=="BAR PRINCIPAL" ||
+              String(punto.nombre||"").trim().toUpperCase()!=="PRINCIPAL")
+            .map((punto)=>(
             <div
               key={punto.id}
               style={{
@@ -25028,7 +25044,8 @@ onClick={guardarEgreso}
           </p>
         </div>
 
-        {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (() => {
+        {["SUPER_ADMIN","ADMIN"].includes(rolActual) &&
+          Number(obtenerInstitucionActivaId())!==2 && (() => {
           const textoBusquedaStock=String(busquedaInventario||"")
             .trim()
             .toLowerCase()
@@ -25159,11 +25176,33 @@ onClick={guardarEgreso}
         )}
       </div>
 
+      {Number(obtenerInstitucionActivaId()) === 2 && (
+        <div style={{display:"flex",flexWrap:"wrap",gap:12,alignItems:"center",padding:12,
+          border:"1px solid #bfdbfe",borderRadius:10,background:"#eff6ff",marginTop:12}}>
+          <label htmlFor="pensionado-punto-consulta-stock" style={{fontWeight:800}}>
+            Consultar existencias del punto:
+          </label>
+          <select id="pensionado-punto-consulta-stock" style={styles.input}
+            value={stockUbicacionConsulta}
+            onChange={(e)=>{
+              setStockUbicacionConsulta(e.target.value);
+              setProductosStockSeleccionadosBorrar([]);
+            }}>
+            <option value="BAR PRINCIPAL">BAR PRINCIPAL</option>
+            <option value="KIOSKO">KIOSKO</option>
+          </select>
+          <span style={{fontSize:12,color:"#1e40af"}}>
+            Consulta por punto. No cambia el punto de venta ni modifica cantidades.
+            El encerado masivo actual no está habilitado aquí porque afecta todos los puntos.
+          </span>
+        </div>
+      )}
       <div style={{...styles.tableWrap,marginTop:16}}>
         <table style={styles.table}>
           <thead>
             <tr>
-              {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+              {["SUPER_ADMIN","ADMIN"].includes(rolActual) &&
+                Number(obtenerInstitucionActivaId())!==2 && (
                 <th style={styles.th}>Seleccionar</th>
               )}
               <th style={styles.th}>Producto</th>
@@ -25171,7 +25210,8 @@ onClick={guardarEgreso}
               <th style={styles.th}>Familia</th>
               <th style={styles.th}>Stock por puntos</th>
               <th style={styles.th}>Total</th>
-              {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+              {["SUPER_ADMIN","ADMIN"].includes(rolActual) &&
+                Number(obtenerInstitucionActivaId())!==2 && (
                 <th style={styles.th}>Acción</th>
               )}
             </tr>
@@ -25179,6 +25219,11 @@ onClick={guardarEgreso}
           <tbody>
             {productos
               .filter((p)=>p?.activo!==false)
+              .filter((p)=>Number(obtenerInstitucionActivaId())!==2 ||
+                existenciasInventario.some((e)=>
+                  Number(e.producto_id)===Number(p.id) &&
+                  normalizarUbicacionFrontend(e.ubicacion,2)===stockUbicacionConsulta
+                ))
               .filter((p)=>{
                 const texto=String(busquedaInventario||"")
                   .trim()
@@ -25201,7 +25246,9 @@ onClick={guardarEgreso}
               })
               .map((producto)=>{
                 const existencias=existenciasInventario.filter(
-                  (e)=>Number(e.producto_id)===Number(producto.id)
+                  (e)=>Number(e.producto_id)===Number(producto.id) &&
+                    (Number(obtenerInstitucionActivaId())!==2 ||
+                      normalizarUbicacionFrontend(e.ubicacion,2)===stockUbicacionConsulta)
                 );
                 const total=existencias.reduce(
                   (s,e)=>s+Number(e.stock||0),
@@ -25210,7 +25257,8 @@ onClick={guardarEgreso}
 
                 return (
                   <tr key={producto.id}>
-                    {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+                    {["SUPER_ADMIN","ADMIN"].includes(rolActual) &&
+                Number(obtenerInstitucionActivaId())!==2 && (
                       <td style={styles.td}>
                         <input
                           type="checkbox"
@@ -25245,7 +25293,8 @@ onClick={guardarEgreso}
                     <td style={{...styles.td,fontWeight:900}}>
                       {total}
                     </td>
-                    {["SUPER_ADMIN","ADMIN"].includes(rolActual) && (
+                    {["SUPER_ADMIN","ADMIN"].includes(rolActual) &&
+                Number(obtenerInstitucionActivaId())!==2 && (
                       <td style={styles.td}>
                         <button
                           type="button"
