@@ -1143,6 +1143,7 @@ const [puntosInventario, setPuntosInventario] = useState(["PRINCIPAL"]);
 const [puntoInventarioSeleccionado, setPuntoInventarioSeleccionado] = useState("PRINCIPAL");
 // Vista administrativa de existencias: independiente del punto de ventas.
 const [stockUbicacionConsulta, setStockUbicacionConsulta] = useState("KIOSKO");
+const [encerandoPuntoSeguro, setEncerandoPuntoSeguro] = useState(false);
 const [puntosOperacion,setPuntosOperacion]=useState([]);
 const [jornadaActiva,setJornadaActiva]=useState(() => {
   // Recuperación inmediata tras un refresh/WebView:
@@ -3747,6 +3748,39 @@ const guardarStockProducto = async (producto) => {
   }
 };
 
+
+
+// Encerado restringido a KIOSKO de Pensionado. No usa endpoints globales.
+const encerarKioskoSeguro = async ({ todos = false, ids = [] } = {}) => {
+  if (!['ADMIN','SUPER_ADMIN'].includes(rolActual) ||
+      Number(obtenerInstitucionActivaId()) !== 2 ||
+      stockUbicacionConsulta !== 'KIOSKO' || encerandoPuntoSeguro) return;
+  const lista = [...new Set(ids.map(Number))].filter(id => Number.isInteger(id) && id > 0);
+  if (!todos && !lista.length) return alert('Selecciona productos del KIOSKO.');
+  const cantidad = todos ? 'TODOS los productos con existencias en KIOSKO' : `${lista.length} producto(s) seleccionado(s)`;
+  if (!window.confirm(`¿ENCERAR ${cantidad}?\n\nBAR PRINCIPAL no debe cambiar. Se registrará cada ajuste en Kardex.`)) return;
+  const confirmacion = window.prompt('Escribe exactamente ENCERAR KIOSKO para confirmar:');
+  if (confirmacion !== 'ENCERAR KIOSKO') return;
+  const observacion = window.prompt('Motivo obligatorio para auditoría (mínimo 10 caracteres):',
+    'Conteo físico e inicio de inventario del KIOSKO');
+  if (!observacion || observacion.trim().length < 10) return alert('Operación cancelada: falta motivo.');
+  setEncerandoPuntoSeguro(true);
+  try {
+    const res = await fetch(`${API_URL}/api/inventario/encerar-punto-seguro`, {
+      method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${localStorage.getItem('token') || ''}`},
+      body:JSON.stringify({institucion_id:2,ubicacion:'KIOSKO',todos,...(todos?{}:{ids:lista}),
+        confirmacion,observacion:observacion.trim()})
+    });
+    const resultado = await res.json().catch(()=>({}));
+    if (!res.ok || resultado.verificado !== true) throw new Error(resultado.message || 'No se pudo verificar el ajuste.');
+    setProductosStockSeleccionadosBorrar([]);
+    await Promise.all([cargarProductos(),cargarExistenciasInventario()]);
+    alert(`KIOSKO verificado. ${resultado.movimientos_registrados} movimiento(s) auditado(s).\n` +
+      `BAR PRINCIPAL no fue incluido. Referencia: ${resultado.referencia}`);
+  } catch(e) {
+    alert(e.message || 'Error en la operación. Revisa Kardex antes de volver a intentarlo.');
+  } finally { setEncerandoPuntoSeguro(false); }
+};
 
 const encerarStockProductoAdmin = async (producto) => {
   if (!["ADMIN","SUPER_ADMIN"].includes(rolActual)) {
@@ -25044,6 +25078,37 @@ onClick={guardarEgreso}
           </p>
         </div>
 
+        {Number(obtenerInstitucionActivaId()) === 2 &&
+          stockUbicacionConsulta === "KIOSKO" &&
+          ["SUPER_ADMIN","ADMIN"].includes(rolActual) && (() => {
+          const visibles = productos.filter(p=>p?.activo!==false)
+            .filter(p=>existenciasInventario.some(e=>
+              Number(e.producto_id)===Number(p.id) &&
+              normalizarUbicacionFrontend(e.ubicacion,2)==="KIOSKO"))
+            .filter(p=>{
+              const buscar=normalizarTexto(busquedaInventario).toLowerCase();
+              return !buscar || normalizarTexto([p.nombre,p.codigo,p.categoria,p.familia].join(' ')).toLowerCase().includes(buscar);
+            }).map(p=>Number(p.id));
+          const marcados=visibles.length>0 && visibles.every(id=>productosStockSeleccionadosBorrar.includes(id));
+          return <div style={styles.headerActions}>
+            <button type="button" style={styles.outlineButton} disabled={encerandoPuntoSeguro||visibles.length===0}
+              onClick={()=>setProductosStockSeleccionadosBorrar(prev=>{
+                const set=new Set(prev.map(Number));
+                visibles.forEach(id=>marcados?set.delete(id):set.add(id));
+                return Array.from(set);
+              })}>{marcados?'Quitar selección':'Seleccionar todo (visible)'}</button>
+            <button type="button" style={styles.outlineButton}
+              disabled={encerandoPuntoSeguro||productosStockSeleccionadosBorrar.length===0}
+              onClick={()=>encerarKioskoSeguro({ids:productosStockSeleccionadosBorrar})}>
+              Encerar seleccionados ({productosStockSeleccionadosBorrar.length})
+            </button>
+            <button type="button" style={{...styles.outlineButton,borderColor:'#dc2626',color:'#991b1b'}}
+              disabled={encerandoPuntoSeguro}
+              onClick={()=>encerarKioskoSeguro({todos:true})}>
+              {encerandoPuntoSeguro?'Procesando...':'Encerar TODO KIOSKO'}
+            </button>
+          </div>;
+        })()}
         {["SUPER_ADMIN","ADMIN"].includes(rolActual) &&
           Number(obtenerInstitucionActivaId())!==2 && (() => {
           const textoBusquedaStock=String(busquedaInventario||"")
@@ -25202,7 +25267,7 @@ onClick={guardarEgreso}
           <thead>
             <tr>
               {["SUPER_ADMIN","ADMIN"].includes(rolActual) &&
-                Number(obtenerInstitucionActivaId())!==2 && (
+                (Number(obtenerInstitucionActivaId())!==2 || stockUbicacionConsulta==="KIOSKO") && (
                 <th style={styles.th}>Seleccionar</th>
               )}
               <th style={styles.th}>Producto</th>
@@ -25211,7 +25276,7 @@ onClick={guardarEgreso}
               <th style={styles.th}>Stock por puntos</th>
               <th style={styles.th}>Total</th>
               {["SUPER_ADMIN","ADMIN"].includes(rolActual) &&
-                Number(obtenerInstitucionActivaId())!==2 && (
+                (Number(obtenerInstitucionActivaId())!==2 || stockUbicacionConsulta==="KIOSKO") && (
                 <th style={styles.th}>Acción</th>
               )}
             </tr>
@@ -25258,7 +25323,7 @@ onClick={guardarEgreso}
                 return (
                   <tr key={producto.id}>
                     {["SUPER_ADMIN","ADMIN"].includes(rolActual) &&
-                Number(obtenerInstitucionActivaId())!==2 && (
+                (Number(obtenerInstitucionActivaId())!==2 || stockUbicacionConsulta==="KIOSKO") && (
                       <td style={styles.td}>
                         <input
                           type="checkbox"
@@ -25294,11 +25359,11 @@ onClick={guardarEgreso}
                       {total}
                     </td>
                     {["SUPER_ADMIN","ADMIN"].includes(rolActual) &&
-                Number(obtenerInstitucionActivaId())!==2 && (
+                (Number(obtenerInstitucionActivaId())!==2 || stockUbicacionConsulta==="KIOSKO") && (
                       <td style={styles.td}>
                         <button
                           type="button"
-                          onClick={() => encerarStockProductoAdmin(producto)}
+                          onClick={() => Number(obtenerInstitucionActivaId()) === 2 ? encerarKioskoSeguro({ids:[Number(producto.id)]}) : encerarStockProductoAdmin(producto)}
                           disabled={total === 0}
                           style={{
                             ...styles.outlineButton,
@@ -25310,7 +25375,7 @@ onClick={guardarEgreso}
                           title={
                             total === 0
                               ? "El producto ya está en cero"
-                              : `Editar stock de ${producto.nombre} y encerar a 0`
+                              : `Encerar ${producto.nombre} únicamente en ${Number(obtenerInstitucionActivaId())===2?"KIOSKO":"todos los puntos"}`
                           }
                         >
                           ✏️ Encerar
