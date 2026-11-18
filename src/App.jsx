@@ -2414,6 +2414,33 @@ const totalRecargasVista = useMemo(() => {
     [consumosProfesorPendientes]
   );
 
+  // Descripción únicamente informativa. Nunca altera la deuda ni los movimientos.
+  // Usa detalles adjuntos al consumo o de una venta ya cargada; no consulta
+  // masivamente /api/ventas, para evitar bloqueos de PostgreSQL.
+  const describirProductosConsumoProfesor = (movimiento, ordenesDisponibles = ventasEnriquecidas) => {
+    const idVenta = Number(movimiento?.venta_id || 0);
+    const idProfesor = Number(movimiento?.profesor_id || 0);
+    const idInstitucion = Number(movimiento?.institucion_id || 0);
+    const venta = idVenta && Array.isArray(ordenesDisponibles)
+      ? ordenesDisponibles.find((v) =>
+          Number(v.id) === idVenta &&
+          Number(v.profesor_id) === idProfesor &&
+          Number(v.institucion_id) === idInstitucion
+        )
+      : null;
+    const detalles = [
+      movimiento?.items, movimiento?.detalles, movimiento?.productos_detalle,
+      venta?.items, venta?.detalles
+    ].find((lista) => Array.isArray(lista) && lista.length > 0);
+    if (!detalles) return "Detalle no disponible";
+    return detalles.map((item) => {
+      const nombre = String(item?.producto_nombre || item?.nombre || item?.descripcion ||
+        (item?.producto_id ? `Producto #${item.producto_id}` : "Producto sin nombre"));
+      const cantidad = Number(item?.cantidad);
+      return `${Number.isFinite(cantidad) && cantidad > 0 ? cantidad : 1} x ${nombre}`;
+    }).join(", ");
+  };
+
   const obtenerEstadoStock = (producto) => {
     const stock = Number(producto.stock || 0);
     const stockMinimo = Number(producto.stock_minimo || 0);
@@ -8224,11 +8251,12 @@ if (institucionIdLogin) {
     let nota = "";
     if (tipo === "pendientes") {
       titulo = "Solo pendientes de cobro";
-      encabezados = ["Fecha", "Orden ID", "Comercio", "Operador", "Consumo", "Abonado", "Pendiente"];
+      encabezados = ["Fecha", "Orden ID", "Productos vendidos", "Comercio", "Operador", "Consumo", "Abonado", "Pendiente"];
       filas = pendientesProfesor.map((m) => {
         const monto = monedaNumero(m.monto);
         const pendiente = monedaNumero(m.saldo_pendiente);
         return [formatearFechaHora(m.created_at), m.venta_id || "Sin orden asociada",
+          describirProductosConsumoProfesor(m, ordenesDeEsteProfesor),
           m.comercio || "POS NUBE", m.usuario_nombre || m.usuario_correo || "Sistema",
           monto, monedaNumero(Math.max(0, monto - pendiente)), pendiente];
       });
@@ -22769,6 +22797,7 @@ onClick={guardarEgreso}
                             <tr>
                               <th style={styles.th}>Fecha</th>
                               <th style={styles.th}>Orden ID</th>
+                              <th style={styles.th}>Productos vendidos</th>
                               <th style={styles.th}>Comercio</th>
                               <th style={styles.th}>Operador</th>
                               <th style={styles.th}>Consumo</th>
@@ -22778,9 +22807,9 @@ onClick={guardarEgreso}
                           </thead>
                           <tbody>
                             {cargandoCreditosProfesores ? (
-                              <tr><td style={styles.td} colSpan={7}>Cargando pendientes...</td></tr>
+                              <tr><td style={styles.td} colSpan={8}>Cargando pendientes...</td></tr>
                             ) : consumosProfesorPendientes.length === 0 ? (
-                              <tr><td style={styles.td} colSpan={7}>No hay consumos individuales pendientes identificados.</td></tr>
+                              <tr><td style={styles.td} colSpan={8}>No hay consumos individuales pendientes identificados.</td></tr>
                             ) : consumosProfesorPendientes.map((movimiento) => {
                               const monto = Number(movimiento.monto || 0);
                               const pendiente = Number(movimiento.saldo_pendiente || 0);
@@ -22789,6 +22818,7 @@ onClick={guardarEgreso}
                                 <tr key={`pendiente-profesor-${movimiento.id}`}>
                                   <td style={styles.td}>{formatearFechaHora(movimiento.created_at)}</td>
                                   <td style={styles.td}>{movimiento.venta_id || "Sin orden asociada"}</td>
+                                  <td style={{ ...styles.td, minWidth: 180 }}>{describirProductosConsumoProfesor(movimiento, ordenesProfesor)}</td>
                                   <td style={styles.td}>{movimiento.comercio || "POS NUBE"}</td>
                                   <td style={styles.td}>{movimiento.usuario_nombre || movimiento.usuario_correo || "Sistema"}</td>
                                   <td style={styles.td}>{formatearMoneda(monto)}</td>
