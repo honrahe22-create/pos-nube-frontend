@@ -1475,6 +1475,16 @@ const [recargaProfesorForm, setRecargaProfesorForm] = useState({
 });
 const [guardandoRecargaProfesor, setGuardandoRecargaProfesor] = useState(false);
 const [mostrarModalRecargaProfesor, setMostrarModalRecargaProfesor] = useState(false);
+const [mostrarCruceRol, setMostrarCruceRol] = useState(false);
+const [fechaCorteCruceRol, setFechaCorteCruceRol] = useState("");
+const [referenciaCruceRol, setReferenciaCruceRol] = useState("");
+const [observacionCruceRol, setObservacionCruceRol] = useState("");
+const [consumosCruceRol, setConsumosCruceRol] = useState([]);
+const [seleccionCruceRol, setSeleccionCruceRol] = useState([]);
+const [cargandoCruceRol, setCargandoCruceRol] = useState(false);
+const [guardandoCruceRol, setGuardandoCruceRol] = useState(false);
+const [solicitudCruceRol, setSolicitudCruceRol] = useState("");
+
 const [creditosProfesoresFiltros, setCreditosProfesoresFiltros] = useState({
   fecha_inicio: "",
   fecha_fin: "",
@@ -7566,6 +7576,77 @@ if (institucionIdLogin) {
     }
   };
 
+
+  const crearIdCruceRol = () =>
+    `rol_${Date.now()}_${Math.random().toString(36).slice(2, 14)}`;
+
+  const abrirCruceRol = () => {
+    if (!["ADMIN", "SUPER_ADMIN"].includes(rolActual) || !profesorDetalle?.id) return;
+    setMostrarCruceRol(true);
+    setFechaCorteCruceRol("");
+    setReferenciaCruceRol("");
+    setObservacionCruceRol("");
+    setConsumosCruceRol([]);
+    setSeleccionCruceRol([]);
+    setSolicitudCruceRol(crearIdCruceRol());
+  };
+
+  const consultarCruceRol = async () => {
+    if (!profesorDetalle?.id || !fechaCorteCruceRol) {
+      alert("Selecciona primero la fecha de corte del rol de pagos.");
+      return;
+    }
+    try {
+      setCargandoCruceRol(true);
+      setSeleccionCruceRol([]);
+      setConsumosCruceRol([]);
+      const params = new URLSearchParams({
+        institucion_id: String(obtenerInstitucionActivaId()),
+        fecha_corte: fechaCorteCruceRol,
+      });
+      const resp = await fetch(`${API_URL}/api/profesores/${profesorDetalle.id}/cruce-rol/preview?${params}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.message || "No se pudo consultar el rol.");
+      setConsumosCruceRol(Array.isArray(data.consumos) ? data.consumos : []);
+    } catch (e) { alert(e.message); }
+    finally {setCargandoCruceRol(false);}
+  };
+
+  const confirmarCruceRol = async () => {
+    if (guardandoCruceRol) return;
+    if (!seleccionCruceRol.length || !referenciaCruceRol.trim()) {
+      alert("Selecciona las órdenes y escribe una referencia de nómina.");
+      return;
+    }
+    const elegidos=consumosCruceRol.filter(x=>seleccionCruceRol.includes(Number(x.id)));
+    const total=elegidos.reduce((s,x)=>s+Math.round(Number(x.saldo_pendiente||0)*100),0)/100;
+    if (!window.confirm(`¿Confirmas que estas ${elegidos.length} órdenes YA fueron descontadas en el rol?\nTotal: ${formatearMoneda(total)}\nEsta conciliación no recibe dinero ni cambia cierres.`)) return;
+    try {
+      setGuardandoCruceRol(true);
+      const resp=await fetch(`${API_URL}/api/profesores/${profesorDetalle.id}/cruce-rol`,{
+        method:"POST",
+        headers:{"Content-Type":"application/json",Authorization:`Bearer ${localStorage.getItem("token")}`},
+        body:JSON.stringify({institucion_id:obtenerInstitucionActivaId(),
+          fecha_corte:fechaCorteCruceRol, consumo_ids:seleccionCruceRol,
+          referencia_rol:referenciaCruceRol.trim(),observacion:observacionCruceRol.trim(),
+          request_id:solicitudCruceRol}),
+      });
+      const data=await resp.json();
+      if(!resp.ok) throw new Error(data.message || "No se pudo confirmar el cruce.");
+      if(data.profesor) setProfesorDetalle(data.profesor);
+      await cargarCreditosProfesores(profesorDetalle.id);
+      await cargarProfesores();
+      setMostrarCruceRol(false);
+      setConsumosCruceRol([]);
+      setSeleccionCruceRol([]);
+      alert(`Cruce #${data.cruce_id} registrado por ${formatearMoneda(data.monto)}. Deuda restante: ${formatearMoneda(data.cuentas_por_pagar)}.`);
+    } catch(e) {
+      alert(e.message || "El cruce no fue confirmado.");
+      // Conservar request_id para impedir duplicación si hubo error de red.
+    } finally {setGuardandoCruceRol(false);}
+  };
 
   const abrirModalRecargaProfesor = () => {
     if (!profesorDetalle?.id) {
@@ -20691,6 +20772,68 @@ onClick={guardarEgreso}
 
 {vista === "profesores" && (
   <>
+    {mostrarCruceRol && profesorDetalle && ["ADMIN","SUPER_ADMIN"].includes(rolActual) && (
+      <div style={{position:"fixed",inset:0,zIndex:100001,background:"rgba(15,23,42,.70)",display:"flex",justifyContent:"center",alignItems:"center",padding:12}}>
+        <div style={{background:"white",borderRadius:14,padding:22,width:"min(900px,98vw)",maxHeight:"94vh",overflowY:"auto"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:14}}>
+            <h3 style={{margin:0}}>Cruce con rol de pagos — {profesorDetalle.nombres} {profesorDetalle.apellidos}</h3>
+            <button type="button" style={styles.outlineButton} disabled={guardandoCruceRol}
+              onClick={()=>setMostrarCruceRol(false)}>Cerrar</button>
+          </div>
+          <p style={{color:"#475569"}}>Solo registra descuentos de nómina que YA se realizaron. No crea ventas, no recibe efectivo ni altera saldos a favor.</p>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:12}}>
+            <label>Fecha de corte (inclusive)
+              <input type="date" style={styles.input} value={fechaCorteCruceRol}
+                onChange={e=>{setFechaCorteCruceRol(e.target.value);setConsumosCruceRol([]);setSeleccionCruceRol([]);}}/>
+            </label>
+            <label>Forma de conciliación
+              <select style={styles.input} value="ROL_DE_PAGOS" disabled>
+                <option value="ROL_DE_PAGOS">Descuento en rol de pagos</option>
+              </select>
+            </label>
+            <label>Referencia del rol o comprobante *
+              <input style={styles.input} maxLength={100} value={referenciaCruceRol}
+                onChange={e=>setReferenciaCruceRol(e.target.value)} placeholder="Ej. NOMINA-OCT-2026"/>
+            </label>
+          </div>
+          <label style={{display:"block",marginTop:12}}>Observación administrativa
+            <input style={styles.input} maxLength={500} value={observacionCruceRol}
+              onChange={e=>setObservacionCruceRol(e.target.value)} placeholder="Descuento ya realizado en nómina"/>
+          </label>
+          <button type="button" style={{...styles.secondaryButton,marginTop:12}}
+            disabled={cargandoCruceRol||guardandoCruceRol} onClick={consultarCruceRol}>
+            {cargandoCruceRol?"Consultando...":"Buscar consumos pendientes hasta la fecha"}
+          </button>
+          <div style={{maxHeight:320,overflowY:"auto",marginTop:14}}>
+            <table style={styles.table}>
+              <thead><tr>
+                <th style={styles.th}><input type="checkbox" aria-label="Seleccionar todas las órdenes mostradas"
+                  checked={consumosCruceRol.length>0 && seleccionCruceRol.length===consumosCruceRol.length}
+                  onChange={e=>setSeleccionCruceRol(e.target.checked?consumosCruceRol.map(x=>Number(x.id)):[])}/></th>
+                <th style={styles.th}>Fecha de compra</th><th style={styles.th}>Orden</th>
+                <th style={styles.th}>Comercio</th><th style={styles.th}>Pendiente</th>
+              </tr></thead>
+              <tbody>{consumosCruceRol.map(x=>(
+                <tr key={x.id}>
+                  <td style={styles.td}><input type="checkbox" checked={seleccionCruceRol.includes(Number(x.id))}
+                    onChange={e=>setSeleccionCruceRol(prev=>e.target.checked?[...prev,Number(x.id)]:prev.filter(y=>y!==Number(x.id)))}/></td>
+                  <td style={styles.td}>{String(x.fecha_ecuador||"").slice(0,10)}</td>
+                  <td style={styles.td}>{x.venta_id?`#${x.venta_id}`:`Movimiento #${x.id}`}</td>
+                  <td style={styles.td}>{x.comercio||"-"}</td>
+                  <td style={styles.td}>{formatearMoneda(x.saldo_pendiente)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+            {!consumosCruceRol.length && <p style={{color:"#64748b"}}>Selecciona una fecha y consulta. Solo aparecerán consumos con saldo pendiente.</p>}
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginTop:18,alignItems:"center"}}>
+            <strong>Total seleccionado: {formatearMoneda(consumosCruceRol.filter(x=>seleccionCruceRol.includes(Number(x.id))).reduce((s,x)=>s+Number(x.saldo_pendiente||0),0))}</strong>
+            <button type="button" style={styles.button} disabled={guardandoCruceRol||!seleccionCruceRol.length||!referenciaCruceRol.trim()}
+              onClick={confirmarCruceRol}>{guardandoCruceRol?"Registrando...":"Confirmar cruce de órdenes seleccionadas"}</button>
+          </div>
+        </div>
+      </div>
+    )}
     {mostrarModalRecargaProfesor && profesorDetalle && (
       <div
         style={{
@@ -21745,6 +21888,12 @@ onClick={guardarEgreso}
               >
                 Recargar / Registrar pago
               </button>
+              {["ADMIN", "SUPER_ADMIN"].includes(rolActual) && (
+                <button type="button" style={{...styles.outlineButton,width:"100%",marginTop:9}}
+                  onClick={abrirCruceRol}>
+                  Cruce con rol de pagos
+                </button>
+              )}
             </div>
 
             <div
@@ -23173,7 +23322,7 @@ onClick={guardarEgreso}
                           {movimiento.estado || "ACTIVO"}
                         </td>
                         <td style={styles.td}>
-                          {esAdminCuentasProfesores && movimiento.estado !== "ANULADO" ? (
+                          {esAdminCuentasProfesores && movimiento.estado !== "ANULADO" && String(movimiento.tipo || "").toUpperCase() !== "CRUCE_ROL" ? (
                             <button
                               type="button"
                               style={styles.smallDangerButton}
