@@ -35,8 +35,10 @@ export default function PadresModulo({
 
   const [solicitudesRecarga, setSolicitudesRecarga] = useState([]);
   const [cargandoSolicitudes, setCargandoSolicitudes] = useState(false);
-  const [procesandoSolicitudId, setProcesandoSolicitudId] = useState(null);
-  const [filtroSolicitudes, setFiltroSolicitudes] = useState("PENDIENTE");
+  // Historial administrativo: solo consulta, sin acciones de aprobar/rechazar.
+  const [filtroFechaRecarga, setFiltroFechaRecarga] = useState("");
+  const [filtroAlumnoRecarga, setFiltroAlumnoRecarga] = useState("");
+  const [filtroComprobanteRecarga, setFiltroComprobanteRecarga] = useState("");
   const inputImportarPadresRef = useRef(null);
   const [importandoPadres, setImportandoPadres] = useState(false);
 
@@ -85,30 +87,22 @@ export default function PadresModulo({
     }
   };
 
-  const cargarSolicitudesRecarga = async (estado = filtroSolicitudes) => {
+  const cargarSolicitudesRecarga = async () => {
     if (!token || !institucionId) return;
-
     try {
       setCargandoSolicitudes(true);
-      const queryEstado =
-        estado && estado !== "TODOS"
-          ? `&estado=${encodeURIComponent(estado)}`
-          : "";
-
+      // Sin filtro de estado: se consultan pendientes, aprobadas y rechazadas.
+      // El backend mantiene su limite actual de 300 registros.
       const res = await fetch(
         `${API_URL}/api/portal/solicitudes-recarga-admin?institucion_id=${encodeURIComponent(
           institucionId
-        )}${queryEstado}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+        )}`,
+        { headers: { Authorization: `Bearer ${token}` } }
       );
-
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.message || "No se pudieron cargar las solicitudes.");
       }
-
       setSolicitudesRecarga(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error(error);
@@ -118,57 +112,40 @@ export default function PadresModulo({
     }
   };
 
-  const procesarSolicitudRecarga = async (solicitud, estado) => {
-    const accion = estado === "APROBADA" ? "aprobar" : "rechazar";
-    if (!window.confirm(`¿Seguro que deseas ${accion} esta solicitud de $${Number(
-      solicitud.monto || 0
-    ).toFixed(2)}?`)) {
-      return;
-    }
-
-    let motivo = "";
-    if (estado === "RECHAZADA") {
-      motivo = window.prompt("Motivo del rechazo (opcional):", "") ?? "";
-    }
-
-    try {
-      setProcesandoSolicitudId(solicitud.id);
-
-      const res = await fetch(
-        `${API_URL}/api/portal/solicitudes-recarga/${solicitud.id}/estado`,
-        {
-          method: "PATCH",
-          headers,
-          body: JSON.stringify({ estado, motivo }),
-        }
-      );
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || "No se pudo procesar la solicitud.");
-      }
-
-      alert(data.message || "Solicitud procesada correctamente.");
-      await cargarSolicitudesRecarga(filtroSolicitudes);
-      if (typeof cargarAlumnos === "function") {
-        await cargarAlumnos();
-      }
-    } catch (error) {
-      console.error(error);
-      alert(error.message || "No se pudo procesar la solicitud.");
-    } finally {
-      setProcesandoSolicitudId(null);
-    }
-  };
   useEffect(() => {
     cargarPadres();
-    cargarSolicitudesRecarga(filtroSolicitudes);
+    cargarSolicitudesRecarga();
     setPadreDetalle(null);
   }, [token, institucionId]);
 
-  useEffect(() => {
-    cargarSolicitudesRecarga(filtroSolicitudes);
-  }, [filtroSolicitudes]);
+  // Filtros solo en memoria: no modifican ningun registro ni envian PATCH.
+  const solicitudesFiltradas = useMemo(() => {
+    const alumno = filtroAlumnoRecarga.trim().toLocaleLowerCase("es");
+    const comprobante = filtroComprobanteRecarga.trim().toLocaleLowerCase("es");
+    return solicitudesRecarga.filter((x) => {
+      if (filtroFechaRecarga) {
+        const fechaLocal = x.created_at ? new Date(x.created_at) : null;
+        const fechaCreacion = fechaLocal && !Number.isNaN(fechaLocal.getTime())
+          ? `${fechaLocal.getFullYear()}-${String(fechaLocal.getMonth() + 1).padStart(2, "0")}-${String(fechaLocal.getDate()).padStart(2, "0")}`
+          : "";
+        const fechaTransferencia = String(x.fecha_transferencia || "").slice(0, 10);
+        if (fechaCreacion !== filtroFechaRecarga && fechaTransferencia !== filtroFechaRecarga) {
+          return false;
+        }
+      }
+      if (alumno) {
+        const nombre = `${x.alumno_nombres || ""} ${x.alumno_apellidos || ""} ${x.alumno_codigo || ""}`
+          .toLocaleLowerCase("es");
+        if (!nombre.includes(alumno)) return false;
+      }
+      if (comprobante) {
+        const referencias = `${x.numero_comprobante || ""} ${x.banco || ""}`
+          .toLocaleLowerCase("es");
+        if (!referencias.includes(comprobante)) return false;
+      }
+      return true;
+    });
+  }, [solicitudesRecarga, filtroFechaRecarga, filtroAlumnoRecarga, filtroComprobanteRecarga]);
 
   const padresFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -620,30 +597,52 @@ export default function PadresModulo({
       <div style={s.card}>
         <div style={s.sectionHeader}>
           <div>
-            <h2 style={s.sectionTitle}>Solicitudes de recarga del Portal Padres</h2>
+            <h2 style={s.sectionTitle}>Historial de recargas del Portal Padres</h2>
             <p style={s.subtitle}>
-              Revisa las transferencias enviadas por padres o estudiantes.
-              Al aprobar una solicitud, el sistema registra la recarga y actualiza
-              el saldo/crédito del alumno automáticamente.
+              Consulta solicitudes y transferencias registradas. Esta pantalla es de solo lectura:
+              no aprueba, rechaza ni modifica recargas.
             </p>
           </div>
-
-          <select
-            style={{ ...s.input, width: "auto", minWidth: 180 }}
-            value={filtroSolicitudes}
-            onChange={(e) => setFiltroSolicitudes(e.target.value)}
-          >
-            <option value="PENDIENTE">Pendientes</option>
-            <option value="APROBADA">Aprobadas</option>
-            <option value="RECHAZADA">Rechazadas</option>
-            <option value="TODOS">Todas</option>
-          </select>
+          <button type="button" style={s.smallButton} onClick={cargarSolicitudesRecarga}
+            disabled={cargandoSolicitudes}>
+            {cargandoSolicitudes ? "Actualizando..." : "Actualizar historial"}
+          </button>
         </div>
+        <div style={{ ...s.toolbar, marginBottom: 14 }}>
+          <label style={{ display: "grid", gap: 5, flex: "1 1 170px" }}>
+            <span style={s.label}>Fecha de solicitud o transferencia</span>
+            <input type="date" style={s.input} value={filtroFechaRecarga}
+              onChange={(e) => setFiltroFechaRecarga(e.target.value)} />
+          </label>
+          <label style={{ display: "grid", gap: 5, flex: "2 1 220px" }}>
+            <span style={s.label}>Alumno</span>
+            <input style={s.input} value={filtroAlumnoRecarga}
+              onChange={(e) => setFiltroAlumnoRecarga(e.target.value)}
+              placeholder="Nombre, apellido o código" />
+          </label>
+          <label style={{ display: "grid", gap: 5, flex: "2 1 260px" }}>
+            <span style={s.label}>Número de transferencia o comprobante</span>
+            <input style={s.input} value={filtroComprobanteRecarga}
+              onChange={(e) => setFiltroComprobanteRecarga(e.target.value)}
+              placeholder="Buscar comprobante o referencia" />
+          </label>
+          <button type="button" style={s.smallButton} onClick={() => {
+            setFiltroFechaRecarga("");
+            setFiltroAlumnoRecarga("");
+            setFiltroComprobanteRecarga("");
+          }}>Borrar filtros</button>
+        </div>
+        <p style={{ ...s.muted, marginBottom: 12 }}>
+          Mostrando {solicitudesFiltradas.length} de {solicitudesRecarga.length} solicitudes cargadas.
+          {solicitudesRecarga.length >= 300
+            ? " El servidor entrega como máximo 300 registros; para consultar anteriores hará falta ampliar la búsqueda del backend."
+            : ""}
+        </p>
 
         {cargandoSolicitudes ? (
           <div style={s.emptySmall}>Cargando solicitudes...</div>
-        ) : solicitudesRecarga.length === 0 ? (
-          <div style={s.emptySmall}>No existen solicitudes en este estado.</div>
+        ) : solicitudesFiltradas.length === 0 ? (
+          <div style={s.emptySmall}>No se encontraron solicitudes con los filtros seleccionados.</div>
         ) : (
           <div style={s.tableWrap}>
             <table style={{ ...s.table, minWidth: 1050 }}>
@@ -655,11 +654,10 @@ export default function PadresModulo({
                   <th style={s.th}>Monto</th>
                   <th style={s.th}>Transferencia</th>
                   <th style={s.th}>Estado</th>
-                  <th style={s.th}>Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {solicitudesRecarga.map((x) => (
+                {solicitudesFiltradas.map((x) => (
                   <tr key={x.id}>
                     <td style={s.td}>
                       {x.created_at
@@ -699,37 +697,7 @@ export default function PadresModulo({
                         {x.estado || "PENDIENTE"}
                       </span>
                     </td>
-                    <td style={s.td}>
-                      {x.estado === "PENDIENTE" ? (
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          <button
-                            style={s.approveButton}
-                            disabled={procesandoSolicitudId === x.id}
-                            onClick={() =>
-                              procesarSolicitudRecarga(x, "APROBADA")
-                            }
-                          >
-                            Aprobar
-                          </button>
-                          <button
-                            style={s.dangerOutline}
-                            disabled={procesandoSolicitudId === x.id}
-                            onClick={() =>
-                              procesarSolicitudRecarga(x, "RECHAZADA")
-                            }
-                          >
-                            Rechazar
-                          </button>
-                        </div>
-                      ) : (
-                        <div style={s.muted}>
-                          {x.procesado_nombre || "Procesada"}
-                          {x.motivo_rechazo
-                            ? ` · ${x.motivo_rechazo}`
-                            : ""}
-                        </div>
-                      )}
-                    </td>
+
                   </tr>
                 ))}
               </tbody>
