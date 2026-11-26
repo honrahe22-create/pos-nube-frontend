@@ -653,7 +653,6 @@ export default function PadresModulo({
                   <th style={s.th}>Solicitante</th>
                   <th style={s.th}>Monto</th>
                   <th style={s.th}>Transferencia</th>
-                  <th style={s.th}>Estado</th>
                 </tr>
               </thead>
               <tbody>
@@ -683,19 +682,6 @@ export default function PadresModulo({
                       <div style={s.muted}>
                         Comp.: {x.numero_comprobante || "-"}
                       </div>
-                    </td>
-                    <td style={s.td}>
-                      <span
-                        style={
-                          x.estado === "APROBADA"
-                            ? s.estadoAprobado
-                            : x.estado === "RECHAZADA"
-                            ? s.estadoRechazado
-                            : s.estadoPendiente
-                        }
-                      >
-                        {x.estado || "PENDIENTE"}
-                      </span>
                     </td>
 
                   </tr>
